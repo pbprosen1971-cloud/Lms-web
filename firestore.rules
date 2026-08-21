@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Exams Collection
+    match /exams/{examId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Questions Collection
+    match /questions/{questionId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Results Collection
+    match /results/{resultId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isAuthenticated();
+    }
+
+    // Payments Collection
+    match /payments/{paymentId} {
+      allow read, create, update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Ministry Question Banks Collection
+    match /ministryQuestionBanks/{bankId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+  }
+}
+
+
+

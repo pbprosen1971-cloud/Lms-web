@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. Global Safety Net: Default Deny All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (request.auth.token.email == 'medha@admin.com' || request.auth.token.email == 'admin@medha.com' || request.auth.token.email == 'pbprosen1971@gmail.com');
+    }
+
+    // Profile schema validation helper
+    function isValidUserProfile(data) {
+      return data.id is string && data.id.size() <= 128
+          && data.name is string && data.name.size() <= 100
+          && data.email is string && data.email.size() <= 100
+          && data.role is string && (data.role == 'student' || data.role == 'admin')
+          && (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 500))
+          && (!('institution' in data) || (data.institution is string && data.institution.size() <= 200))
+          && (!('phone' in data) || (data.phone is string && data.phone.size() <= 30))
+          && (!('joinedDate' in data) || (data.joinedDate is string && data.joinedDate.size() <= 50))
+          && (!('isPremium' in data) || (data.isPremium is bool));
+    }
+
+    // 2. Users Collection Rules
+    match /users/{userId} {
+      // Allow reading profiles
+      allow get, list: if true;
+
+      // Validate on create
+      allow create: if true;
+
+      // Allow updating profiles
+      allow update: if true;
+
+      // Allow deleting student accounts
+      allow delete: if true;
+    }
+
+    // 3. Results Collection Rules
+    match /results/{resultId} {
+      allow get: if isSignedIn() && (resource.data.studentId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.studentId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() || request.auth == null;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

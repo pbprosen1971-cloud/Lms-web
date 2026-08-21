@@ -1,0 +1,6 @@
+{
+  "name": "Student Exam Portal",
+  "description": "A professional and student-friendly exam preparation platform featuring live exams, student dashboards, leaderboards, and a comprehensive admin panel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "users": {
+      "title": "users",
+      "description": "User profile collection",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "institution": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "admin"] },
+        "accountStatus": { "type": "string", "enum": ["active", "blocked"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLogin": { "type": "string", "format": "date-time" },
+        "isPremium": { "type": "boolean" },
+        "inPremiumDate": { "type": "string" },
+        "inPremiumExpiryDate": { "type": "string" }
+      },
+      "required": ["uid", "email", "role", "accountStatus"]
+    },
+    "exams": {
+      "title": "exams",
+      "description": "Exams collection",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "duration": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "totalMarks": { "type": "number" },
+        "status": { "type": "string" },
+        "isPublished": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "duration", "isPublished"]
+    },
+    "questions": {
+      "title": "questions",
+      "description": "Exam questions collection associated with examId",
+      "type": "object",
+      "properties": {
+        "examId": { "type": "string" },
+        "questionText": { "type": "string" },
+        "optionA": { "type": "string" },
+        "optionB": { "type": "string" },
+        "optionC": { "type": "string" },
+        "optionD": { "type": "string" },
+        "correctAnswer": { "type": "string" },
+        "explanation": { "type": "string" },
+        "questionNumber": { "type": "number" }
+      },
+      "required": ["examId", "questionText", "optionA", "optionB", "optionC", "optionD", "correctAnswer"]
+    },
+    "results": {
+      "title": "results",
+      "description": "Exam performance records",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "examId": { "type": "string" },
+        "examTitle": { "type": "string" },
+        "score": { "type": "number" },
+        "totalMarks": { "type": "number" },
+        "percentage": { "type": "number" },
+        "correctAnswers": { "type": "number" },
+        "wrongAnswers": { "type": "number" },
+        "skippedAnswers": { "type": "number" },
+        "submittedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "examTitle", "score", "totalMarks"]
+    },
+    "payments": {
+      "title": "payments",
+      "description": "Transaction and subscription payments",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "gateway": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentStatus": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "gateway", "transactionId", "amount", "paymentStatus"]
+    }
+  }
+}
