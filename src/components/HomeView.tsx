@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   BookOpen,
   Languages,
@@ -14,6 +14,7 @@ import {
   Search,
   ArrowRight,
   Clock,
+  Calendar,
   Star,
   Flame,
   Trophy,
@@ -38,10 +39,11 @@ import {
   BookMarked,
   Layers,
 } from 'lucide-react';
-import { Exam, LeaderboardUser, MinistryQuestionBank, Question, Review, SubjectStats, UserProfile } from '../types';
+import { Exam, LeaderboardUser, MinistryQuestionBank, Question, Review, SubjectStats, UserProfile, UpcomingExamSettings } from '../types';
 import { SUBJECTS, MOCK_REVIEWS, MOCK_LEADERBOARD, INITIAL_STATS, INITIAL_MINISTRY_BANKS } from '../data';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { subscribeToUpcomingExamSettings } from '../services/firestoreService';
 import heroExamPrepBg from '../assets/images/hero_exam_prep_1786609165056.jpg';
 
 const FALLBACK_SUBJECT_QUESTIONS: Record<string, Question[]> = {
@@ -364,6 +366,7 @@ interface HomeViewProps {
   user: UserProfile | null;
   onUpdateUser?: (updated: UserProfile) => void;
   ministryBanks?: MinistryQuestionBank[];
+  upcomingExamSettings?: UpcomingExamSettings | null;
 }
 
 export default function HomeView({
@@ -373,9 +376,30 @@ export default function HomeView({
   user,
   onUpdateUser,
   ministryBanks = [],
+  upcomingExamSettings: propUpcomingSettings,
 }: HomeViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+
+  // Firestore upcoming exam settings real-time state with fallback
+  const [localUpcomingSettings, setLocalUpcomingSettings] = useState<UpcomingExamSettings | null>(propUpcomingSettings || null);
+
+  // Sync prop changes or subscribe if prop is not passed
+  useEffect(() => {
+    if (propUpcomingSettings !== undefined) {
+      setLocalUpcomingSettings(propUpcomingSettings);
+    }
+  }, [propUpcomingSettings]);
+
+  useEffect(() => {
+    // If not passed from parent, listen directly
+    const unsubscribe = subscribeToUpcomingExamSettings((settings) => {
+      setLocalUpcomingSettings(settings);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const activeUpcomingSetting = propUpcomingSettings || localUpcomingSettings;
 
   // Ministry Question Bank Practice Modal State
   const [activeMinistryBank, setActiveMinistryBank] = useState<MinistryQuestionBank | null>(null);
@@ -852,14 +876,17 @@ export default function HomeView({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             <div className="lg:col-span-8 space-y-6 text-left">
               
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 backdrop-blur-md text-xs font-semibold border border-emerald-500/30 shadow-inner">
-                <Trophy className="h-4 w-4 text-emerald-400" />
-                <span>১০০% প্রফেশনাল এক্সাম প্ল্যাটফর্ম</span>
+              <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-emerald-950/80 text-emerald-300 backdrop-blur-md text-xs sm:text-sm font-bold border border-emerald-400/40 shadow-lg shadow-emerald-950/50">
+                <Trophy className="h-4 w-4 text-emerald-400 shrink-0" />
+                <span className="flex items-center gap-1.5 font-bold tracking-normal">
+                  <span className="font-extrabold text-white bg-emerald-600/80 px-2 py-0.5 rounded-md text-xs tracking-wider shadow-sm">১০০%</span>
+                  <span className="text-emerald-200 font-semibold">প্রফেশনাল এক্সাম প্ল্যাটফর্ম</span>
+                </span>
               </div>
               
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
                 {getGreetingText()}! <br />
-                ঘরে বসেই নিন <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-300">সেরা পরীক্ষার</span> প্রস্তুতি!
+                ঘরে বসেই নিন <span className="animated-gradient-text font-black drop-shadow-sm">সেরা পরীক্ষার</span> প্রস্তুতি!
               </h1>
               
               <p className="text-base sm:text-lg text-slate-200/90 max-w-2xl font-normal leading-relaxed drop-shadow-sm">
@@ -875,20 +902,13 @@ export default function HomeView({
                   <span>এক্সাম শুরু করুন</span>
                   <Play className="h-5 w-5 fill-current transition-transform duration-300 group-hover:scale-125 group-hover:translate-x-0.5 text-white" />
                 </a>
-                <button
-                  onClick={() => setView(user ? 'dashboard' : 'login')}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3.5 text-base font-semibold text-slate-100 bg-white/10 hover:bg-gradient-to-r hover:from-emerald-500/20 hover:to-teal-500/20 hover:border-emerald-400/60 hover:text-white hover:shadow-lg hover:shadow-emerald-500/20 backdrop-blur-md border border-white/20 rounded-xl shadow-md transform hover:-translate-y-0.5 hover:scale-[1.02] active:scale-95 transition-all duration-300 ease-out group"
-                >
-                  <span>ড্যাশবোর্ড দেখুন</span>
-                  <ArrowRight className="h-5 w-5 text-emerald-400 transition-transform duration-300 group-hover:translate-x-1.5 group-hover:text-emerald-300" />
-                </button>
               </div>
 
             </div>
 
             {/* Hero Feature Card Showcase - Interactive Bangla Question Widget */}
             <div className="hidden lg:block lg:col-span-4">
-              <div className="relative rounded-2xl border border-emerald-500/40 p-5 bg-gradient-to-br from-slate-900/95 via-emerald-950/80 to-slate-900/95 backdrop-blur-xl shadow-2xl space-y-4">
+              <div className="animated-mixing-border rounded-2xl p-5 shadow-2xl space-y-4">
                 
                 {/* Badge Header */}
                 <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3">
@@ -1286,43 +1306,140 @@ export default function HomeView({
 
           {/* Right Column: Dedicated Upcoming Exams Sidebar */}
           <div className="lg:col-span-4">
-            <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-6 shadow-sm sticky top-24">
-              <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2 pb-4 border-b border-slate-100 dark:border-slate-700">
-                <Clock className="h-5 w-5 text-amber-500 animate-pulse" />
-                আসন্ন পরীক্ষা সমূহ (Upcoming)
+            <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-6 shadow-sm sticky top-24 space-y-4">
+              <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+                <span className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-amber-500 animate-pulse" />
+                  <span>আসন্ন পরীক্ষা সমূহ (Upcoming)</span>
+                </span>
+                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-400 px-2 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-900/40">
+                  শিডিউল লাইভ
+                </span>
               </h3>
 
-              {upcomingExams.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 dark:text-slate-500 space-y-2">
-                  <p className="text-xs font-medium text-slate-600 dark:text-slate-300">খুব শীঘ্রই নতুন পরীক্ষা যুক্ত হবে, আমাদের সাথে থাকুন।</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-700/60 space-y-4 pt-4">
-                  {upcomingExams.map((exam) => (
-                    <div key={exam.id} className="pt-4 first:pt-0 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                          {exam.subject}
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50">
-                          আসন্ন লাইভ
+              {/* 1. Firestore Site Settings Featured Upcoming Exam Title */}
+              {activeUpcomingSetting && activeUpcomingSetting.title && activeUpcomingSetting.isPublished !== false && (
+                <div className="p-4 bg-gradient-to-br from-amber-500/10 via-amber-50/50 to-transparent dark:from-amber-950/30 dark:via-slate-800/80 dark:to-transparent border border-amber-500/30 rounded-2xl space-y-3 relative overflow-hidden">
+                  <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-extrabold text-amber-800 dark:text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-500/30">
+                      {activeUpcomingSetting.subject || 'BCS'}
+                    </span>
+                    {activeUpcomingSetting.isPremium ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md dark:bg-amber-950/40 dark:text-amber-400">
+                        <Lock className="h-2.5 w-2.5" />
+                        Premium
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md dark:bg-emerald-950/40 dark:text-emerald-300">
+                        ফ্রি এক্সেস (Free)
+                      </span>
+                    )}
+                  </div>
+
+                  <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white leading-snug">
+                    {activeUpcomingSetting.title}
+                  </h4>
+
+                  {activeUpcomingSetting.description && (
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
+                      {activeUpcomingSetting.description}
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                    {(activeUpcomingSetting.duration || activeUpcomingSetting.durationMinutes) && (
+                      <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                        <Clock className="h-3 w-3 text-slate-400 shrink-0" />
+                        <span>সময়: <strong>{activeUpcomingSetting.duration || activeUpcomingSetting.durationMinutes} মি.</strong></span>
+                      </div>
+                    )}
+                    {(activeUpcomingSetting.startTime || activeUpcomingSetting.examDate) && (
+                      <div className="flex items-center gap-1 text-amber-700 dark:text-amber-400 font-semibold col-span-2">
+                        <Calendar className="h-3 w-3 shrink-0" />
+                        <span>
+                          শুরু: <strong>
+                            {activeUpcomingSetting.startTime 
+                              ? formatBanglaDateTime(activeUpcomingSetting.startTime) 
+                              : activeUpcomingSetting.examDate}
+                          </strong>
                         </span>
                       </div>
+                    )}
+                  </div>
 
-                      <h4 className="font-bold text-sm text-slate-800 dark:text-white leading-snug">
-                        {exam.title}
-                      </h4>
-
-                      {exam.startTime && (
-                        <div className="p-2.5 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl text-[10px] text-amber-700 dark:text-amber-400 flex items-center gap-1.5 font-medium leading-relaxed">
-                          <Clock className="h-3.5 w-3.5 shrink-0" />
-                          <span>শুরু হবে: <strong className="font-extrabold">{formatBanglaDateTime(exam.startTime)}</strong></span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {activeUpcomingSetting.examId && exams.find(e => e.id === activeUpcomingSetting.examId) && (
+                    <button
+                      onClick={() => {
+                        const target = exams.find(e => e.id === activeUpcomingSetting.examId);
+                        if (target) {
+                          if ((target.status as string) === 'live' || (target.status as string) === 'completed' || (target.status as string) === 'archived') {
+                            handleStartExam(target);
+                          } else {
+                            setSelectedExam(target);
+                            setView('exam');
+                          }
+                        }
+                      }}
+                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 mt-2"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>প্রস্তুতি ও সিলেবাস দেখুন</span>
+                    </button>
+                  )}
                 </div>
               )}
+
+              {/* 2. List of Other Scheduled Upcoming Exams */}
+              {(() => {
+                const otherUpcoming = upcomingExams.filter(exam => {
+                  if (!activeUpcomingSetting || !activeUpcomingSetting.title) return true;
+                  return exam.title !== activeUpcomingSetting.title && exam.id !== activeUpcomingSetting.examId;
+                });
+
+                const hasFeatured = activeUpcomingSetting && activeUpcomingSetting.title && activeUpcomingSetting.isPublished !== false;
+
+                if (!hasFeatured && otherUpcoming.length === 0) {
+                  return (
+                    <div className="text-center py-12 text-slate-400 dark:text-slate-500 space-y-2">
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                        খুব শীঘ্রই নতুন পরীক্ষা যুক্ত হবে, আমাদের সাথে থাকুন।
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (otherUpcoming.length > 0) {
+                  return (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700/60 space-y-4 pt-2">
+                      {otherUpcoming.map((exam) => (
+                        <div key={exam.id} className="pt-4 first:pt-0 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                              {exam.subject}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50">
+                              আসন্ন লাইভ
+                            </span>
+                          </div>
+
+                          <h4 className="font-bold text-sm text-slate-800 dark:text-white leading-snug">
+                            {exam.title}
+                          </h4>
+
+                          {exam.startTime && (
+                            <div className="p-2.5 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl text-[10px] text-amber-700 dark:text-amber-400 flex items-center gap-1.5 font-medium leading-relaxed">
+                              <Clock className="h-3.5 w-3.5 shrink-0" />
+                              <span>শুরু হবে: <strong className="font-extrabold">{formatBanglaDateTime(exam.startTime)}</strong></span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
             </div>
           </div>
         </div>
@@ -1594,14 +1711,14 @@ export default function HomeView({
             {PREMIUM_PLANS.map((plan) => (
               <div
                 key={plan.id}
-                className={`bg-white dark:bg-slate-800 rounded-2xl p-6 border-2 transition-all duration-300 flex flex-col justify-between relative shadow-md hover:shadow-xl ${
+                className={`rounded-2xl p-6 transition-all duration-300 flex flex-col justify-between relative shadow-md hover:shadow-xl ${
                   plan.popular
-                    ? 'border-amber-500 ring-2 ring-amber-500/20 dark:border-amber-500'
-                    : 'border-slate-200/80 dark:border-slate-700 hover:border-amber-500/50'
+                    ? 'animated-mixing-border shadow-amber-500/10'
+                    : 'bg-white dark:bg-slate-800 border-2 border-slate-200/80 dark:border-slate-700 hover:border-amber-500/50'
                 }`}
               >
                 {plan.badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-extrabold text-[10px] rounded-full shadow-sm uppercase tracking-wider">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-extrabold text-[10px] rounded-full shadow-sm uppercase tracking-wider z-10">
                     {plan.badge}
                   </div>
                 )}

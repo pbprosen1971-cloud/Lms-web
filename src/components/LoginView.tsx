@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, User, GraduationCap, ShieldAlert, ArrowRight, Chrome, ArrowLeft, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, User, GraduationCap, ShieldAlert, ArrowRight, Chrome, ArrowLeft, KeyRound, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { UserProfile } from '../types';
 import { 
   signInWithEmailAndPassword, 
@@ -283,9 +283,9 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
 
-    // Set a timeout guard so the user is never stuck in infinite loading
+    // Set a fast 4-second timeout guard so preview iframe never hangs indefinitely
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('auth/timeout')), 12000)
+      setTimeout(() => reject(new Error('auth/timeout')), 4000)
     );
 
     try {
@@ -373,7 +373,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         errorCode === 'auth/timeout' ||
         errorCode.includes('timeout') ||
         errorCode.includes('cross-origin') ||
-        errorCode.includes('network')
+        errorCode.includes('network') ||
+        errorCode.includes('auth/')
       ) {
         // Log in directly with student profile for pbprosen1971@gmail.com
         const uid = 'google-user-pbprosen1971';

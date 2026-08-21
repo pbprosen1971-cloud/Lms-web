@@ -14,10 +14,11 @@ import {
   where,
   onSnapshot,
   orderBy,
+  serverTimestamp,
   Unsubscribe
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { Exam, Question, ExamResult, UserProfile } from '../types';
+import { Exam, Question, ExamResult, UserProfile, UpcomingExamSettings } from '../types';
 
 export interface FirestoreQuestion {
   id: string;
@@ -276,5 +277,100 @@ export async function saveResultToFirestore(result: ExamResult): Promise<void> {
     await setDoc(resultRef, payload, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `results/${result.id}`);
+  }
+}
+
+// Subscribe to Upcoming Exam settings document in Firestore (siteSettings/upcomingExam)
+export function subscribeToUpcomingExamSettings(callback: (settings: UpcomingExamSettings | null) => void): Unsubscribe {
+  const docRef = doc(db, 'siteSettings', 'upcomingExam');
+  return onSnapshot(docRef, (docSnap) => {
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      callback({
+        id: docSnap.id,
+        title: data.title || '',
+        description: data.description || '',
+        examId: data.examId || '',
+        examDate: data.examDate || '',
+        startTime: data.startTime || '',
+        duration: Number(data.duration || data.durationMinutes || 15),
+        durationMinutes: Number(data.durationMinutes || data.duration || 15),
+        isPublished: data.isPublished !== false,
+        subject: data.subject || 'BCS',
+        totalQuestions: Number(data.totalQuestions || 0),
+        totalMarks: Number(data.totalMarks || 0),
+        isPremium: !!data.isPremium,
+        updatedBy: data.updatedBy || '',
+        updatedAt: data.updatedAt || data.lastUpdated || '',
+        lastUpdated: data.lastUpdated || '',
+      });
+    } else {
+      callback(null);
+    }
+  }, (err) => {
+    console.warn("Firestore error listening to siteSettings/upcomingExam:", err);
+  });
+}
+
+// Get single Upcoming Exam settings snapshot from Firestore
+export async function getUpcomingExamSettings(): Promise<UpcomingExamSettings | null> {
+  try {
+    const docRef = doc(db, 'siteSettings', 'upcomingExam');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        title: data.title || '',
+        description: data.description || '',
+        examId: data.examId || '',
+        examDate: data.examDate || '',
+        startTime: data.startTime || '',
+        duration: Number(data.duration || data.durationMinutes || 15),
+        durationMinutes: Number(data.durationMinutes || data.duration || 15),
+        isPublished: data.isPublished !== false,
+        subject: data.subject || 'BCS',
+        totalQuestions: Number(data.totalQuestions || 0),
+        totalMarks: Number(data.totalMarks || 0),
+        isPremium: !!data.isPremium,
+        updatedBy: data.updatedBy || '',
+        updatedAt: data.updatedAt || data.lastUpdated || '',
+        lastUpdated: data.lastUpdated || '',
+      };
+    }
+    return null;
+  } catch (err) {
+    console.warn("Error getting siteSettings/upcomingExam:", err);
+    return null;
+  }
+}
+
+// Save or Update Upcoming Exam settings in Firestore (siteSettings/upcomingExam)
+export async function saveUpcomingExamSettings(settings: UpcomingExamSettings, updatedByUid: string = 'admin'): Promise<void> {
+  const docRef = doc(db, 'siteSettings', 'upcomingExam');
+  const nowIso = new Date().toISOString();
+  
+  const payload = {
+    title: (settings.title || '').trim(),
+    description: (settings.description || '').trim(),
+    examId: settings.examId || '',
+    examDate: settings.examDate || '',
+    startTime: settings.startTime || '',
+    duration: Number(settings.duration || settings.durationMinutes || 15),
+    durationMinutes: Number(settings.durationMinutes || settings.duration || 15),
+    isPublished: settings.isPublished !== false,
+    subject: settings.subject || 'BCS',
+    totalQuestions: Number(settings.totalQuestions || 0),
+    totalMarks: Number(settings.totalMarks || 0),
+    isPremium: !!settings.isPremium,
+    updatedBy: settings.updatedBy || updatedByUid,
+    updatedAt: serverTimestamp(),
+    lastUpdated: nowIso,
+  };
+
+  try {
+    await setDoc(docRef, payload, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'siteSettings/upcomingExam');
   }
 }

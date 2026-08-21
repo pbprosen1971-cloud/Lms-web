@@ -145,3 +145,22 @@ export interface LeaderboardUser {
   examsTaken: number;
   streak: number;
 }
+
+export interface UpcomingExamSettings {
+  id?: string;
+  title: string;
+  description?: string;
+  examId?: string;
+  examDate?: string;
+  startTime?: string;
+  duration?: number;
+  durationMinutes?: number;
+  isPublished?: boolean;
+  subject?: string;
+  totalQuestions?: number;
+  totalMarks?: number;
+  isPremium?: boolean;
+  updatedBy?: string;
+  updatedAt?: string | any;
+  lastUpdated?: string;
+}

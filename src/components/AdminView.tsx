@@ -26,8 +26,10 @@ import {
   Sparkles,
   Crown,
   FileSpreadsheet,
+  CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
-import { Exam, ExamResult, MinistryBankQuestion, MinistryQuestionBank, Question, UserProfile } from '../types';
+import { Exam, ExamResult, MinistryBankQuestion, MinistryQuestionBank, Question, UserProfile, UpcomingExamSettings } from '../types';
 import { onSnapshot, collection, doc, deleteDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import SheetsSync from './SheetsSync';
@@ -37,7 +39,8 @@ import {
   deleteQuestionFromFirestore,
   saveExamToFirestore,
   deleteExamFromFirestore,
-  toggleExamPublishInFirestore
+  toggleExamPublishInFirestore,
+  saveUpcomingExamSettings
 } from '../services/firestoreService';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
@@ -70,6 +73,8 @@ interface AdminViewProps {
   setView: (view: string) => void;
   onUpdateUser?: (updated: UserProfile) => void;
   currentUser?: UserProfile | null;
+  upcomingExamSettings?: UpcomingExamSettings | null;
+  onSaveUpcomingExamSettings?: (settings: UpcomingExamSettings) => Promise<void> | void;
 }
 
 const SUBJECT_OPTIONS = ['বাংলা', 'ইংরেজি', 'গণিত', 'GK', 'ICT', 'বিজ্ঞান'];
@@ -87,6 +92,8 @@ export default function AdminView({
   setView,
   onUpdateUser,
   currentUser,
+  upcomingExamSettings,
+  onSaveUpcomingExamSettings,
 }: AdminViewProps) {
   const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'google_sheets'>('analytics');
 
@@ -370,6 +377,115 @@ export default function AdminView({
   const [upcomingArchiveTime, setUpcomingArchiveTime] = useState('');
   const [upcomingIsPremium, setUpcomingIsPremium] = useState<boolean>(false);
   const [selectedUpcomingExamForQuestions, setSelectedUpcomingExamForQuestions] = useState<Exam | null>(null);
+
+  // Dedicated Firestore siteSettings/upcomingExam persistent state
+  const [settingTitle, setSettingTitle] = useState<string>(upcomingExamSettings?.title || '');
+  const [settingDesc, setSettingDesc] = useState<string>(upcomingExamSettings?.description || '');
+  const [settingSubject, setSettingSubject] = useState<string>(upcomingExamSettings?.subject || 'BCS');
+  const [settingDuration, setSettingDuration] = useState<number>(upcomingExamSettings?.duration || upcomingExamSettings?.durationMinutes || 30);
+  const [settingStartTime, setSettingStartTime] = useState<string>(upcomingExamSettings?.startTime || '');
+  const [settingDate, setSettingDate] = useState<string>(upcomingExamSettings?.examDate || '');
+  const [settingIsPublished, setSettingIsPublished] = useState<boolean>(upcomingExamSettings?.isPublished !== false);
+  const [settingIsPremium, setSettingIsPremium] = useState<boolean>(upcomingExamSettings?.isPremium || false);
+  const [settingExamId, setSettingExamId] = useState<string>(upcomingExamSettings?.examId || '');
+  const [settingSaving, setSettingSaving] = useState<boolean>(false);
+  const [settingSuccessMsg, setSettingSuccessMsg] = useState<string>('');
+  const [settingErrorMsg, setSettingErrorMsg] = useState<string>('');
+
+  useEffect(() => {
+    if (upcomingExamSettings) {
+      if (upcomingExamSettings.title !== undefined) setSettingTitle(upcomingExamSettings.title);
+      if (upcomingExamSettings.description !== undefined) setSettingDesc(upcomingExamSettings.description || '');
+      if (upcomingExamSettings.subject !== undefined) setSettingSubject(upcomingExamSettings.subject || 'BCS');
+      if (upcomingExamSettings.duration !== undefined || upcomingExamSettings.durationMinutes !== undefined) {
+        setSettingDuration(upcomingExamSettings.duration || upcomingExamSettings.durationMinutes || 30);
+      }
+      if (upcomingExamSettings.startTime !== undefined) setSettingStartTime(upcomingExamSettings.startTime || '');
+      if (upcomingExamSettings.examDate !== undefined) setSettingDate(upcomingExamSettings.examDate || '');
+      if (upcomingExamSettings.isPublished !== undefined) setSettingIsPublished(upcomingExamSettings.isPublished);
+      if (upcomingExamSettings.isPremium !== undefined) setSettingIsPremium(!!upcomingExamSettings.isPremium);
+      if (upcomingExamSettings.examId !== undefined) setSettingExamId(upcomingExamSettings.examId || '');
+    }
+  }, [upcomingExamSettings]);
+
+  const handleSaveUpcomingSettingsForm = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSettingErrorMsg('');
+    setSettingSuccessMsg('');
+
+    if (!settingTitle.trim()) {
+      setSettingErrorMsg('দয়া করে আসন্ন পরীক্ষার শিরোনাম (Title) প্রদান করুন।');
+      return;
+    }
+
+    setSettingSaving(true);
+    try {
+      const payload: UpcomingExamSettings = {
+        title: settingTitle.trim(),
+        description: settingDesc.trim(),
+        subject: settingSubject,
+        duration: Number(settingDuration) || 30,
+        durationMinutes: Number(settingDuration) || 30,
+        startTime: settingStartTime,
+        examDate: settingDate || (settingStartTime ? settingStartTime.split('T')[0] : ''),
+        isPublished: settingIsPublished,
+        isPremium: settingIsPremium,
+        examId: settingExamId,
+        updatedBy: currentUser?.email || 'medha@admin.com',
+      };
+
+      await saveUpcomingExamSettings(payload, currentUser?.uid || 'admin');
+      if (onSaveUpcomingExamSettings) {
+        await onSaveUpcomingExamSettings(payload);
+      }
+      setSettingSuccessMsg('আসন্ন পরীক্ষার টাইটেল ও সেটিংস ফায়ারস্টোরে (siteSettings/upcomingExam) স্থায়ীভাবে সংরক্ষিত হয়েছে! পেজ রিফ্রেশ করলেও এটি থাকবে।');
+      setTimeout(() => setSettingSuccessMsg(''), 6000);
+    } catch (err: any) {
+      console.error('Failed to save upcoming exam settings:', err);
+      setSettingErrorMsg('ফায়ারস্টোরে সেভ করতে সমস্যা হয়েছে। দয়া করে ইন্টারনেট ও ফায়ারস্টোর সংযোগ পরীক্ষা করুন।');
+    } finally {
+      setSettingSaving(false);
+    }
+  };
+
+  const handleApplyExamToSiteSettings = async (exam: Exam) => {
+    setSettingTitle(exam.title);
+    setSettingSubject(exam.subject || 'BCS');
+    setSettingDuration(exam.durationMinutes || 30);
+    setSettingStartTime(exam.startTime || '');
+    setSettingDate(exam.dateCreated || '');
+    setSettingIsPremium(!!exam.isPremium);
+    setSettingExamId(exam.id);
+    setSettingIsPublished(true);
+
+    const payload: UpcomingExamSettings = {
+      title: exam.title,
+      description: (exam as any).description || `${exam.subject} স্পেশাল মডেল টেস্ট`,
+      subject: exam.subject || 'BCS',
+      duration: exam.durationMinutes || 30,
+      durationMinutes: exam.durationMinutes || 30,
+      startTime: exam.startTime || '',
+      examDate: exam.dateCreated || '',
+      isPublished: true,
+      isPremium: !!exam.isPremium,
+      examId: exam.id,
+      updatedBy: currentUser?.email || 'medha@admin.com',
+    };
+
+    setSettingSaving(true);
+    try {
+      await saveUpcomingExamSettings(payload, currentUser?.uid || 'admin');
+      if (onSaveUpcomingExamSettings) {
+        await onSaveUpcomingExamSettings(payload);
+      }
+      setSettingSuccessMsg(`"${exam.title}" পরীক্ষাটি সাইটের প্রধান আসন্ন পরীক্ষা হিসেবে ফায়ারস্টোরে সফলভাবে সেট করা হয়েছে!`);
+      setTimeout(() => setSettingSuccessMsg(''), 6000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSettingSaving(false);
+    }
+  };
 
   const [newQuestText, setNewQuestText] = useState('');
   const [newQuestOptions, setNewQuestOptions] = useState<string[]>(['', '', '', '']);
@@ -1701,8 +1817,13 @@ export default function AdminView({
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 dark:border-slate-700/50 pb-4 gap-2">
                 <div>
-                  <h3 className="font-bold text-lg text-slate-900 dark:text-white">আসন্ন পরীক্ষা ও শিডিউল সেটিংস</h3>
-                  <p className="text-xs text-slate-400 mt-1">এখানে নতুন আসন্ন পরীক্ষা তৈরি করুন এবং সেগুলোতে সরাসরি প্রশ্নাবলী যুক্ত করুন।</p>
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-amber-500" />
+                    <span>আসন্ন পরীক্ষা ও সাইট সেটিংস (Upcoming Exam & Site Settings)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    হোম পেজে প্রদর্শিত আসন্ন পরীক্ষার শিরোনাম (Title), সময়সূচি ও সেটিংস সরাসরি ফায়ারস্টোরে (Firestore) পার্মানেন্টলি সংরক্ষণ করুন।
+                  </p>
                 </div>
                 {selectedUpcomingExamForQuestions && (
                   <button
@@ -1720,6 +1841,222 @@ export default function AdminView({
                   <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <span>{createSuccessMsg}</span>
                 </div>
+              )}
+
+              {!selectedUpcomingExamForQuestions && (
+                <>
+                  {/* DEDICATED FIRESTORE SITE SETTINGS FOR UPCOMING EXAM TITLE */}
+                  <div className="bg-gradient-to-br from-amber-500/5 via-white to-amber-500/10 dark:from-slate-900 dark:via-slate-900/90 dark:to-amber-950/20 border-2 border-amber-500/30 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-amber-200/60 dark:border-slate-800">
+                      <div className="space-y-1">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20 rounded-full text-xs font-extrabold">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                          <span>ফায়ারস্টোর পার্মানেন্ট ডাটাবেজ সিঙ্ক (Firestore siteSettings/upcomingExam)</span>
+                        </div>
+                        <h4 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                          হোম পেজ আসন্ন পরীক্ষার শিরোনাম ও সেটিংস (Website Upcoming Exam Title)
+                        </h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          এখানে সেভ করা তথ্য সরাসরি Firebase Firestore এ জমা থাকবে এবং পেজ রিলোড বা রিফ্রেশ করার পরও অক্ষুণ্ণ থাকবে।
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1 text-xs font-bold rounded-xl border ${
+                          settingIsPublished
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300'
+                        }`}>
+                          {settingIsPublished ? '✅ হোম পেজে সক্রিয়' : '⏸️ সাময়িক বন্ধ'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {settingSuccessMsg && (
+                      <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 rounded-2xl text-xs sm:text-sm font-semibold flex items-center gap-2.5">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                        <span>{settingSuccessMsg}</span>
+                      </div>
+                    )}
+
+                    {settingErrorMsg && (
+                      <div className="p-4 bg-rose-500/10 border border-rose-500/30 text-rose-800 dark:text-rose-300 rounded-2xl text-xs sm:text-sm font-semibold flex items-center gap-2.5">
+                        <AlertCircle className="h-5 w-5 text-rose-600 shrink-0" />
+                        <span>{settingErrorMsg}</span>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleSaveUpcomingSettingsForm} className="space-y-5">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                        {/* Upcoming Title */}
+                        <div className="md:col-span-8 space-y-1.5">
+                          <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                            <span>আসন্ন পরীক্ষার মূল শিরোনাম (Upcoming Exam Title)</span>
+                            <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="যেমন: ৪৬তম বিসিএস প্রিলিমিনারি পূর্ণাঙ্গ মডেল টেস্ট"
+                            value={settingTitle}
+                            onChange={(e) => setSettingTitle(e.target.value)}
+                            className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-sm"
+                          />
+                        </div>
+
+                        {/* Subject / Category */}
+                        <div className="md:col-span-4 space-y-1.5">
+                          <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                            দপ্তর / বিষয় (Subject / Category)
+                          </label>
+                          <select
+                            value={settingSubject}
+                            onChange={(e) => setSettingSubject(e.target.value)}
+                            className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-sm"
+                          >
+                            <option value="BCS">BCS (বিসিএস)</option>
+                            <option value="Bank">Bank (ব্যাংক চাকরি)</option>
+                            <option value="11th - 20th Grade Job">11th - 20th Grade (১১তম-২০তম গ্রেড)</option>
+                            <option value="মন্ত্রণালয় প্রস্তুতি">মন্ত্রণালয় প্রস্তুতি</option>
+                            <option value="সাধারণ জ্ঞান">সাধারণ জ্ঞান</option>
+                            <option value="বাংলা">বাংলা</option>
+                            <option value="ইংরেজি">ইংরেজি</option>
+                            <option value="গণিত">গণিত</option>
+                          </select>
+                        </div>
+
+                        {/* Description */}
+                        <div className="md:col-span-12 space-y-1.5">
+                          <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                            সংক্ষিপ্ত বিবরণ ও নির্দেশনা (Description / Notes)
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder="যেমন: সকল নিবন্ধিত পরীক্ষার্থীদের জন্য উন্মুক্ত লাইভ পরীক্ষা। নির্ধারিত সময়ে লাইভ শুরু হবে।"
+                            value={settingDesc}
+                            onChange={(e) => setSettingDesc(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-sm"
+                          />
+                        </div>
+
+                        {/* Live Start Date & Time */}
+                        <div className="md:col-span-4 space-y-1.5">
+                          <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                              <Calendar className="h-3.5 w-3.5 text-amber-500" />
+                              <span>লাইভ শুরুর তারিখ ও সময়</span>
+                            </span>
+                            <span className="text-[10px] text-amber-600 font-bold">ক্যালেন্ডার</span>
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={settingStartTime}
+                            onClick={(e) => {
+                              try {
+                                e.currentTarget.showPicker();
+                              } catch (err) {}
+                            }}
+                            onChange={(e) => setSettingStartTime(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-sm cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-1 [&::-webkit-calendar-picker-indicator]:dark:invert"
+                          />
+                        </div>
+
+                        {/* Duration */}
+                        <div className="md:col-span-3 space-y-1.5">
+                          <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                            পরীক্ষার সময়সীমা (মিনিট)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={settingDuration}
+                            onChange={(e) => setSettingDuration(Number(e.target.value))}
+                            className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-sm"
+                          />
+                        </div>
+
+                        {/* Link to Existing Exam (Optional) */}
+                        <div className="md:col-span-5 space-y-1.5">
+                          <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                            বিদ্যমান কুইজ বা পরীক্ষার সাথে লিংক করুন (ঐচ্ছিক)
+                          </label>
+                          <select
+                            value={settingExamId}
+                            onChange={(e) => {
+                              const chosenId = e.target.value;
+                              setSettingExamId(chosenId);
+                              if (chosenId) {
+                                const matched = exams.find(ex => ex.id === chosenId);
+                                if (matched) {
+                                  if (!settingTitle) setSettingTitle(matched.title);
+                                  if (matched.subject) setSettingSubject(matched.subject);
+                                  if (matched.durationMinutes) setSettingDuration(matched.durationMinutes);
+                                  if (matched.startTime) setSettingStartTime(matched.startTime);
+                                }
+                              }
+                            }}
+                            className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-sm"
+                          >
+                            <option value="">-- স্বতন্ত্র টাইটেল / কোনো লিংক নয় --</option>
+                            {exams.map(ex => (
+                              <option key={ex.id} value={ex.id}>
+                                [{ex.status?.toUpperCase() || 'EXAM'}] {ex.title} ({ex.subject})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Toggles & Submit Button Row */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-amber-200/60 dark:border-slate-800">
+                        <div className="flex items-center gap-6 flex-wrap">
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={settingIsPublished}
+                              onChange={(e) => setSettingIsPublished(e.target.checked)}
+                              className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                              হোম পেজে আসন্ন পরীক্ষা প্রকাশ করুন (Publish in Home Page)
+                            </span>
+                          </label>
+
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={settingIsPremium}
+                              onChange={(e) => setSettingIsPremium(e.target.checked)}
+                              className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              <span>প্রিমিয়াম পরীক্ষা (Premium Badge)</span>
+                            </span>
+                          </label>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={settingSaving}
+                          className="px-6 py-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-extrabold rounded-xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                        >
+                          {settingSaving ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              <span>ফায়ারস্টোরে সেভ হচ্ছে...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Check className="h-4 w-4" />
+                              <span>ফায়ারস্টোরে সংরক্ষণ করুন (Save to Firestore)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </>
               )}
 
               {!selectedUpcomingExamForQuestions ? (
@@ -1904,7 +2241,16 @@ export default function AdminView({
                               <p className="text-[11px] text-slate-400">সময়সীমা: {exam.durationMinutes} মিনিট | প্রশ্নসংখ্যা: {exam.questions?.length || 0} টি</p>
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                            <div className="flex items-center gap-2 shrink-0 self-start sm:self-center flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => handleApplyExamToSiteSettings(exam)}
+                                className="px-3 py-2 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-sm"
+                                title="এই পরীক্ষার তথ্য দিয়ে সাইটের আসন্ন পরীক্ষার টাইটেল আপডেট করুন"
+                              >
+                                <Sparkles className="h-3.5 w-3.5 text-amber-600" />
+                                সাইট টাইটেল হিসেবে সেট করুন
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {

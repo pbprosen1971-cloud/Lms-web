@@ -3,7 +3,7 @@
 @variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Poppins", "Hind Siliguri", system-ui, sans-serif;
+  --font-sans: "Noto Sans Bengali", "Hind Siliguri", "Poppins", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --color-primary: #059669;
   --color-primary-dark: #047857;
   --color-secondary: #10b981;
@@ -131,3 +131,94 @@
 .theme-transition {
   transition: background-color 0.3s ease, border-color 0.3s ease, text-color 0.3s ease, shadow 0.3s ease;
 }
+
+/* Animated Gradient Color Text Animation */
+@keyframes textShimmerGradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animated-gradient-text {
+  background: linear-gradient(
+    -45deg,
+    #10b981,
+    #34d399,
+    #06b6d4,
+    #38bdf8,
+    #a7f3d0,
+    #10b981
+  );
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: textShimmerGradient 5s ease infinite;
+  display: inline-block;
+}
+
+/* Animated Border Stroke with Mixing Colors */
+@keyframes mixingBorderFlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animated-mixing-border {
+  position: relative;
+  background-clip: padding-box;
+}
+
+.animated-mixing-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: calc(1rem + 2px);
+  background: linear-gradient(
+    115deg,
+    #10b981,
+    #06b6d4,
+    #6366f1,
+    #ec4899,
+    #f59e0b,
+    #10b981,
+    #14b8a6,
+    #3b82f6
+  );
+  background-size: 300% 300%;
+  animation: mixingBorderFlow 5s ease infinite;
+  z-index: 0;
+  opacity: 0.9;
+}
+
+.animated-mixing-border::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 1rem;
+  background: #ffffff;
+  z-index: 1;
+}
+
+:is(.dark, .dark *) .animated-mixing-border::after {
+  background: #1e293b;
+}
+
+.animated-mixing-border > * {
+  position: relative;
+  z-index: 2;
+}
+

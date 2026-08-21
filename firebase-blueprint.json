@@ -86,6 +86,25 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "gateway", "transactionId", "amount", "paymentStatus"]
+    },
+    "siteSettings": {
+      "title": "siteSettings",
+      "description": "Website global configuration such as upcoming exam banner and metadata",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "examId": { "type": "string" },
+        "examDate": { "type": "string" },
+        "startTime": { "type": "string" },
+        "duration": { "type": "number" },
+        "isPublished": { "type": "boolean" },
+        "subject": { "type": "string" },
+        "totalQuestions": { "type": "number" },
+        "totalMarks": { "type": "number" },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
     }
   }
 }

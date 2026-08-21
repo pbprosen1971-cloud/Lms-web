@@ -14,13 +14,15 @@ import ResultView from './components/ResultView';
 import ProfileView from './components/ProfileView';
 import AdminView from './components/AdminView';
 
-import { Exam, ExamResult, MinistryQuestionBank, UserProfile } from './types';
+import { Exam, ExamResult, MinistryQuestionBank, UserProfile, UpcomingExamSettings } from './types';
 import { INITIAL_EXAMS, INITIAL_MINISTRY_BANKS } from './data';
 import {
   subscribeToExams,
   saveExamToFirestore,
   deleteExamFromFirestore,
-  saveResultToFirestore
+  saveResultToFirestore,
+  subscribeToUpcomingExamSettings,
+  saveUpcomingExamSettings
 } from './services/firestoreService';
 import { syncResultToGoogleSheets } from './services/googleSheetsService';
 
@@ -56,6 +58,7 @@ export default function App() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
   const [ministryBanks, setMinistryBanks] = useState<MinistryQuestionBank[]>([]);
+  const [upcomingExamSettings, setUpcomingExamSettings] = useState<UpcomingExamSettings | null>(null);
 
   // Selection states
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
@@ -310,6 +313,14 @@ export default function App() {
     });
 
     return () => unsubscribeExams();
+  }, []);
+
+  // 2.5 Real-time Subscription to Upcoming Exam Site Settings in Firestore (siteSettings/upcomingExam)
+  useEffect(() => {
+    const unsubscribeUpcoming = subscribeToUpcomingExamSettings((settings) => {
+      setUpcomingExamSettings(settings);
+    });
+    return () => unsubscribeUpcoming();
   }, []);
 
   useEffect(() => {
@@ -604,6 +615,15 @@ export default function App() {
     }
   };
 
+  const handleSaveUpcomingExamSettings = async (settings: UpcomingExamSettings) => {
+    setUpcomingExamSettings(settings);
+    try {
+      await saveUpcomingExamSettings(settings, user?.uid || user?.id || 'admin');
+    } catch (err) {
+      console.warn("Failed to save upcoming exam settings to Firestore:", err);
+    }
+  };
+
   // Render current view content
   const renderView = () => {
     switch (currentView) {
@@ -615,6 +635,8 @@ export default function App() {
             setSelectedExam={setSelectedExam}
             user={user}
             onUpdateUser={handleUpdateUser}
+            ministryBanks={ministryBanks}
+            upcomingExamSettings={upcomingExamSettings}
           />
         );
       case 'login':
@@ -648,13 +670,27 @@ export default function App() {
             setView={setView}
           />
         ) : (
-          <HomeView exams={exams} setView={setView} setSelectedExam={setSelectedExam} user={user} ministryBanks={ministryBanks} />
+          <HomeView
+            exams={exams}
+            setView={setView}
+            setSelectedExam={setSelectedExam}
+            user={user}
+            ministryBanks={ministryBanks}
+            upcomingExamSettings={upcomingExamSettings}
+          />
         );
       case 'result':
         return selectedResult ? (
           <ResultView result={selectedResult} setView={setView} user={user} />
         ) : (
-          <HomeView exams={exams} setView={setView} setSelectedExam={setSelectedExam} user={user} ministryBanks={ministryBanks} />
+          <HomeView
+            exams={exams}
+            setView={setView}
+            setSelectedExam={setSelectedExam}
+            user={user}
+            ministryBanks={ministryBanks}
+            upcomingExamSettings={upcomingExamSettings}
+          />
         );
       case 'profile':
         return user ? (
@@ -682,6 +718,8 @@ export default function App() {
             setView={setView}
             onUpdateUser={handleUpdateUser}
             currentUser={user}
+            upcomingExamSettings={upcomingExamSettings}
+            onSaveUpcomingExamSettings={handleSaveUpcomingExamSettings}
           />
         ) : (
           <HomeView
@@ -690,6 +728,7 @@ export default function App() {
             setSelectedExam={setSelectedExam}
             user={user}
             ministryBanks={ministryBanks}
+            upcomingExamSettings={upcomingExamSettings}
           />
         );
       default:
@@ -700,6 +739,7 @@ export default function App() {
             setSelectedExam={setSelectedExam}
             user={user}
             ministryBanks={ministryBanks}
+            upcomingExamSettings={upcomingExamSettings}
           />
         );
     }
