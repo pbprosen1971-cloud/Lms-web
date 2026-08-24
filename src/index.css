@@ -217,6 +217,12 @@
   background: #1e293b;
 }
 
+/* Dark variant for cards residing in permanently dark hero sections */
+.animated-mixing-border-dark::after,
+:is(.dark, .dark *) .animated-mixing-border-dark::after {
+  background: linear-gradient(145deg, #0a1120 0%, #06231d 50%, #0a1120 100%) !important;
+}
+
 .animated-mixing-border > * {
   position: relative;
   z-index: 2;

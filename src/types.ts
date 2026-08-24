@@ -15,15 +15,18 @@ export interface Question {
 
 export interface Exam {
   id: string;
+  examId?: string;
   title: string;
+  description?: string;
   subject: 'বাংলা' | 'ইংরেজি' | 'গণিত' | 'GK' | 'BCS' | '11th - 20th Grade Job' | string;
   durationMinutes: number;
   totalQuestions: number;
   totalMarks: number;
   questions: Question[];
-  status: 'live' | 'upcoming' | 'archive';
+  status: 'live' | 'upcoming' | 'archive' | 'archived' | string;
   startTime?: string; // For upcoming exams
   archiveTime?: string; // For auto-archiving
+  archiveDateTime?: string; // Standard archive timestamp
   dateCreated: string;
   isPremium?: boolean; // True if the exam is premium
   isPublished?: boolean;
@@ -164,3 +167,56 @@ export interface UpcomingExamSettings {
   updatedAt?: string | any;
   lastUpdated?: string;
 }
+
+export interface UpcomingExamDoc {
+  examId: string;
+  title: string;
+  description?: string;
+  examDateTime?: string;
+  archiveDateTime?: string;
+  examDate?: string;
+  archiveDate?: string;
+  examType: 'free' | 'premium' | string;
+  status: 'upcoming' | 'live' | 'archive' | 'completed' | string;
+  isPublished: boolean;
+  createdBy: string;
+  createdAt?: any;
+  updatedAt?: any;
+  duration?: number;
+  durationMinutes?: number;
+  subject?: string;
+  totalQuestions?: number;
+  totalMarks?: number;
+  questions?: Question[];
+}
+
+export interface ExamContentDoc {
+  examId: string;
+  title: string;
+  description?: string;
+  examType?: string;
+  duration: number;
+  totalMarks: number;
+  totalQuestions: number;
+  status: string;
+  createdAt?: any;
+  updatedAt?: any;
+  createdBy?: string;
+}
+
+export interface ExamQuestionDoc {
+  questionId: string;
+  questionNumber?: number;
+  question?: string;
+  questionText?: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  correctAnswer: string;
+  explanation?: string;
+  marks: number;
+  createdAt?: any;
+  updatedAt?: any;
+}
+

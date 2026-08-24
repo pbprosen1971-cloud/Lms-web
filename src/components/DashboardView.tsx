@@ -20,6 +20,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Exam, ExamResult, UserProfile } from '../types';
+import { formatSafeDisplay } from '../lib/dateUtils';
 
 interface DashboardViewProps {
   user: UserProfile;
@@ -429,7 +430,7 @@ export default function DashboardView({
                     </div>
                     <div>
                       <h5 className="font-bold text-xs sm:text-sm line-clamp-1">{exam.title}</h5>
-                      <span className="text-[10px] text-slate-400">তৈরি হয়েছে: {exam.dateCreated}</span>
+                      <span className="text-[10px] text-slate-400">তৈরি হয়েছে: {formatSafeDisplay(exam.dateCreated, '—')}</span>
                     </div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-slate-400" />
@@ -474,7 +475,7 @@ export default function DashboardView({
                   >
                     <div className="space-y-1 min-w-0">
                       <h4 className="font-bold text-sm leading-tight truncate">{result.examTitle}</h4>
-                      <p className="text-[10px] text-slate-400">পরীক্ষার তারিখ: {result.dateTaken}</p>
+                      <p className="text-[10px] text-slate-400">পরীক্ষার তারিখ: {formatSafeDisplay(result.dateTaken, '—')}</p>
                       
                       {/* Accurate details summary */}
                       <div className="flex items-center gap-2 text-xs pt-1">

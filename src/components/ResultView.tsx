@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Award, CheckCircle, XCircle, HelpCircle, Download, FileText, ChevronRight, RefreshCw, Trophy, Calendar, Sparkles, Share2, Copy, Check } from 'lucide-react';
 import { ExamResult } from '../types';
+import { formatSafeDisplay } from '../lib/dateUtils';
 
 interface ResultViewProps {
   result: ExamResult;
@@ -92,7 +93,7 @@ export default function ResultView({ result, setView, user }: ResultViewProps) {
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-400">
-            পরীক্ষার্থীর নাম: <strong className="font-semibold text-slate-700 dark:text-slate-200">{result.studentName}</strong> ({result.studentEmail}) • তারিখ: {result.dateTaken}
+            পরীক্ষার্থীর নাম: <strong className="font-semibold text-slate-700 dark:text-slate-200">{result.studentName}</strong> ({result.studentEmail}) • তারিখ: {formatSafeDisplay(result.dateTaken, '—')}
           </p>
 
           <div className="border-t border-slate-100 dark:border-slate-700/50 pt-4 max-w-sm mx-auto">

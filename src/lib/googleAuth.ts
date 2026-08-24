@@ -38,7 +38,7 @@ function notifyListeners() {
  */
 export async function connectGoogleSheetsAccount(): Promise<{ accessToken: string; user?: any }> {
   return new Promise((resolve, reject) => {
-    const clientId = firebaseAppletConfig.oAuthClientId || (window as any)._GOOGLE_CLIENT_ID;
+    const clientId = (firebaseAppletConfig as any).oAuthClientId || (window as any)._GOOGLE_CLIENT_ID;
     
     if (!clientId) {
       reject(new Error('OAuth Client ID কনফিগারেশন পাওয়া যায়নি।'));

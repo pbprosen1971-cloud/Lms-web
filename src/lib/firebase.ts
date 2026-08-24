@@ -1,21 +1,21 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import defaultAppletConfig from "../../firebase-applet-config.json";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyA605aHyfXbYo2j667FyNte__41yrAPSgw",
-  authDomain: "medha-exam.firebaseapp.com",
-  projectId: "medha-exam",
-  storageBucket: "medha-exam.firebasestorage.app",
-  messagingSenderId: "580902736257",
-  appId: "1:580902736257:web:47b11f4685fec25a331880",
-  measurementId: "G-45FGFTQVND"
+// AI Studio Applet Firebase configuration
+export const firebaseConfig = {
+  ...defaultAppletConfig,
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Critical: named database ID must be passed to getFirestore
+export const db = getFirestore(
+  app,
+  (firebaseConfig as any).firestoreDatabaseId || undefined
+);
 
 // Operational Error Handling for Firebase Integration Skill compliance
 export enum OperationType {

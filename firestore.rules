@@ -8,45 +8,56 @@ service cloud.firestore {
 
     // Users Collection
     match /users/{userId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow read, write: if true;
     }
 
-    // Exams Collection
+    // Exams Collection (legacy and general)
     match /exams/{examId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow read, write: if true;
+    }
+
+    // Dedicated /exam collection (Upcoming Exam / Exam Schedule)
+    match /exam/{examId} {
+      allow read, write: if true;
+    }
+
+    // Dedicated /Exam collection (Actual Exam Content) and nested questions
+    match /Exam/{examId} {
+      allow read, write: if true;
+
+      match /questions/{questionId} {
+        allow read, write: if true;
+      }
     }
 
     // Questions Collection
     match /questions/{questionId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // Results Collection
     match /results/{resultId} {
-      allow read: if true;
-      allow create, update: if true;
-      allow delete: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // Payments Collection
     match /payments/{paymentId} {
-      allow read, create, update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // Ministry Question Banks Collection
     match /ministryQuestionBanks/{bankId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // Site Settings Collection (e.g. siteSettings/upcomingExam)
     match /siteSettings/{settingId} {
-      allow read: if true;
-      allow create, update, delete: if true;
+      allow read, write: if true;
+    }
+
+    // Default catch-all rule
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }

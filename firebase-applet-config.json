@@ -1,11 +1,12 @@
 {
-  "projectId": "dub-cedar-g98sv",
-  "appId": "1:162603804078:web:12757c03f990b36faed43f",
-  "apiKey": "AIzaSyA3Q_hBIhFUYB8h0fgKT4Q6KLpsCSC4ajc",
-  "authDomain": "dub-cedar-g98sv.firebaseapp.com",
-  "storageBucket": "dub-cedar-g98sv.firebasestorage.app",
-  "messagingSenderId": "162603804078",
-  "measurementId": "",
-  "oAuthClientId": "162603804078-jle2fr339pl3ce938kk4tu5p6u9umjuc.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "projectId": "medha-exam",
+  "appId": "1:580902736257:web:47b11f4685fec25a331880",
+  "apiKey": "AIzaSyA605aHyfXbYo2j667FyNte__41yrAPSgw",
+  "authDomain": "medha-exam.firebaseapp.com",
+  "databaseURL": "https://medha-exam-default-rtdb.asia-southeast1.firebasedatabase.app",
+  "storageBucket": "medha-exam.firebasestorage.app",
+  "messagingSenderId": "580902736257",
+  "measurementId": "G-45FGFTQVND",
+  "firestoreDatabaseId": "(default)",
+  "oAuthClientId": ""
 }

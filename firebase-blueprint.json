@@ -105,6 +105,50 @@
         "updatedBy": { "type": "string" },
         "updatedAt": { "type": "string" }
       }
+    },
+    "exam": {
+      "title": "exam",
+      "description": "Dedicated Upcoming Exam and Exam Schedule collection",
+      "type": "object",
+      "properties": {
+        "examId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "examDateTime": { "type": "string" },
+        "archiveDateTime": { "type": "string" },
+        "examDate": { "type": "string" },
+        "archiveDate": { "type": "string" },
+        "examType": { "type": "string", "enum": ["free", "premium"] },
+        "status": { "type": "string", "enum": ["upcoming", "live", "archive", "completed"] },
+        "isPublished": { "type": "boolean" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "subject": { "type": "string" },
+        "duration": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "totalMarks": { "type": "number" }
+      },
+      "required": ["examId", "title", "status"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "Actual examination content with subcollection questions",
+      "type": "object",
+      "properties": {
+        "examId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "examType": { "type": "string" },
+        "duration": { "type": "number" },
+        "totalMarks": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["examId", "title"]
     }
   }
 }

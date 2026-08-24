@@ -44,6 +44,7 @@ import { SUBJECTS, MOCK_REVIEWS, MOCK_LEADERBOARD, INITIAL_STATS, INITIAL_MINIST
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { subscribeToUpcomingExamSettings } from '../services/firestoreService';
+import { formatSafeDisplay, formatBengaliDateTimeSafe, toBengaliDigits } from '../lib/dateUtils';
 import heroExamPrepBg from '../assets/images/hero_exam_prep_1786609165056.jpg';
 
 const FALLBACK_SUBJECT_QUESTIONS: Record<string, Question[]> = {
@@ -400,6 +401,21 @@ export default function HomeView({
   }, []);
 
   const activeUpcomingSetting = propUpcomingSettings || localUpcomingSettings;
+
+  // Filter out upcoming settings if the exam has already been transitioned to live or archive
+  const validUpcomingSetting = useMemo(() => {
+    if (!activeUpcomingSetting || !activeUpcomingSetting.title || activeUpcomingSetting.isPublished === false) {
+      return null;
+    }
+    const sExamId = activeUpcomingSetting.examId;
+    if (sExamId) {
+      const matchExam = exams.find(e => e.id === sExamId);
+      if (matchExam && (matchExam.status === 'live' || matchExam.status === 'archive')) {
+        return null;
+      }
+    }
+    return activeUpcomingSetting;
+  }, [activeUpcomingSetting, exams]);
 
   // Ministry Question Bank Practice Modal State
   const [activeMinistryBank, setActiveMinistryBank] = useState<MinistryQuestionBank | null>(null);
@@ -818,11 +834,37 @@ export default function HomeView({
   }, [exams, searchQuery, selectedSubject]);
 
   const liveExams = useMemo(() => {
-    return filteredExams.filter((exam) => exam.status === 'live');
+    const now = Date.now();
+    return filteredExams.filter((exam) => {
+      if (exam.status === 'archive' || exam.status === 'archived') return false;
+      if (exam.status === 'upcoming') return false;
+
+      const archStr = exam.archiveDateTime || exam.archiveTime || (exam as any).archiveDate;
+      if (archStr) {
+        const archDate = new Date(archStr);
+        if (!isNaN(archDate.getTime()) && now >= archDate.getTime()) {
+          return false;
+        }
+      }
+      return exam.status === 'live';
+    });
   }, [filteredExams]);
 
   const archiveExams = useMemo(() => {
-    return filteredExams.filter((exam) => exam.status === 'archive');
+    const now = Date.now();
+    return filteredExams.filter((exam) => {
+      if (exam.status === 'upcoming') return false;
+      if (exam.status === 'archive' || exam.status === 'archived') return true;
+
+      const archStr = exam.archiveDateTime || exam.archiveTime || (exam as any).archiveDate;
+      if (archStr) {
+        const archDate = new Date(archStr);
+        if (!isNaN(archDate.getTime()) && now >= archDate.getTime()) {
+          return true;
+        }
+      }
+      return false;
+    });
   }, [filteredExams]);
 
   const upcomingExams = useMemo(() => {
@@ -908,21 +950,21 @@ export default function HomeView({
 
             {/* Hero Feature Card Showcase - Interactive Bangla Question Widget */}
             <div className="hidden lg:block lg:col-span-4">
-              <div className="animated-mixing-border rounded-2xl p-5 shadow-2xl space-y-4">
+              <div className="animated-mixing-border animated-mixing-border-dark rounded-2xl p-5 shadow-2xl space-y-4">
                 
                 {/* Badge Header */}
-                <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3">
-                  <span className="flex items-center gap-2 text-xs font-bold text-emerald-300 bg-emerald-500/20 px-3 py-1 rounded-full border border-emerald-500/30">
+                <div className="flex items-center justify-between border-b border-emerald-500/30 pb-3">
+                  <span className="flex items-center gap-2 text-xs font-bold text-emerald-300 bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-400/40 shadow-sm">
                     <Sparkles className="h-4 w-4 text-emerald-400" />
                     কুইক টেস্ট (বাংলা সাহিত্য)
                   </span>
-                  <span className="text-xs text-slate-400 font-medium">১টি প্রশ্ন</span>
+                  <span className="text-xs text-slate-300 font-semibold bg-slate-800/80 px-2 py-0.5 rounded-md">১টি প্রশ্ন</span>
                 </div>
 
                 {/* Question Text */}
                 <div className="space-y-1.5 text-left">
-                  <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">প্রশ্ন:</span>
-                  <p className="text-base font-bold text-white leading-snug">
+                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">প্রশ্ন:</span>
+                  <p className="text-base sm:text-lg font-bold text-white leading-snug drop-shadow-sm">
                     বাংলা সাহিত্যের প্রথম সার্থক উপন্যাস কোনটি?
                   </p>
                 </div>
@@ -934,30 +976,30 @@ export default function HomeView({
                     { text: 'আলালের ঘরের দুলাল', isCorrect: false }
                   ].map((option, idx) => {
                     const isSelected = heroQuizSelectedOption === idx;
-                    let btnStyle = "border-slate-700/80 bg-slate-800/80 text-slate-200 hover:border-emerald-400 hover:bg-gradient-to-r hover:from-emerald-900/40 hover:via-slate-800 hover:to-teal-900/40 hover:text-white hover:shadow-lg hover:shadow-emerald-500/20 hover:-translate-y-0.5 hover:scale-[1.02]";
+                    let btnStyle = "border-slate-700/90 bg-slate-900/90 text-slate-100 hover:border-emerald-400 hover:bg-slate-800 hover:text-white hover:shadow-lg hover:shadow-emerald-500/20 hover:-translate-y-0.5 hover:scale-[1.02]";
                     if (isSelected) {
                       btnStyle = option.isCorrect
-                        ? "border-emerald-400 bg-gradient-to-r from-emerald-600/40 to-teal-600/30 text-emerald-100 ring-2 ring-emerald-400/60 shadow-lg shadow-emerald-500/30 scale-[1.01]"
-                        : "border-red-400 bg-gradient-to-r from-red-600/40 to-rose-600/30 text-red-100 ring-2 ring-red-400/60 shadow-lg shadow-red-500/30 scale-[1.01]";
+                        ? "border-emerald-400 bg-emerald-900/80 text-emerald-100 ring-2 ring-emerald-400/60 shadow-lg shadow-emerald-500/30 scale-[1.01]"
+                        : "border-red-400 bg-red-900/80 text-red-100 ring-2 ring-red-400/60 shadow-lg shadow-red-500/30 scale-[1.01]";
                     }
 
                     return (
                       <button
                         key={idx}
                         onClick={() => setHeroQuizSelectedOption(idx)}
-                        className={`w-full text-left p-3.5 rounded-xl border font-medium text-sm transition-all duration-300 ease-out active:scale-95 flex items-center justify-between group cursor-pointer ${btnStyle}`}
+                        className={`w-full text-left p-3.5 rounded-xl border font-semibold text-sm transition-all duration-300 ease-out active:scale-95 flex items-center justify-between group cursor-pointer ${btnStyle}`}
                       >
                         <span className="flex items-center gap-3">
-                          <span className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs font-bold transition-all duration-300 ${
+                          <span className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs font-extrabold transition-all duration-300 ${
                             isSelected && option.isCorrect
                               ? 'border-emerald-300 bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/50 scale-110'
                               : isSelected && !option.isCorrect
                               ? 'border-red-300 bg-red-500 text-white shadow-md shadow-red-500/50 scale-110'
-                              : 'border-slate-600 bg-slate-900 text-slate-300 group-hover:border-emerald-400 group-hover:bg-emerald-500/20 group-hover:text-emerald-300 group-hover:scale-110'
+                              : 'border-slate-600 bg-slate-950 text-white group-hover:border-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 group-hover:scale-110'
                           }`}>
                             {idx === 0 ? 'ক' : 'খ'}
                           </span>
-                          <span className="transition-colors duration-200 group-hover:text-white font-medium">
+                          <span className="transition-colors duration-200 group-hover:text-white font-bold text-white">
                             {option.text}
                           </span>
                         </span>
@@ -1091,7 +1133,7 @@ export default function HomeView({
                     className={`group relative cursor-pointer rounded-2xl p-4 border text-center transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl ${
                       isSelected
                         ? 'bg-primary text-white border-primary shadow-lg shadow-primary/25'
-                        : 'bg-white dark:bg-slate-800 border-slate-200/60 dark:border-slate-700/60 hover:border-primary/40'
+                        : 'bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 hover:border-primary/50'
                     }`}
                   >
                     <div
@@ -1103,16 +1145,16 @@ export default function HomeView({
                     >
                       {getSubjectIcon(subject.iconName)}
                     </div>
-                    <h4 className="font-bold text-sm sm:text-base leading-tight line-clamp-1">{subject.subject}</h4>
-                    <div className={`text-[11px] mt-1 space-y-0.5 ${isSelected ? 'text-white/90' : 'text-slate-400 dark:text-slate-500'}`}>
+                    <h4 className="font-extrabold text-sm sm:text-base leading-tight line-clamp-1 text-slate-900 dark:text-slate-100">{subject.subject}</h4>
+                    <div className={`text-[11px] mt-1 space-y-0.5 ${isSelected ? 'text-white font-semibold' : 'text-slate-600 dark:text-slate-400 font-medium'}`}>
                       <p>{subject.examsCount} টি এক্সাম</p>
-                      <p className="font-semibold">{subject.questionsCount} টি প্রশ্ন</p>
+                      <p className="font-bold text-slate-800 dark:text-slate-200">{subject.questionsCount} টি প্রশ্ন</p>
                     </div>
 
                     <div className={`mt-3 py-1 px-2 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1 ${
                       isSelected 
                         ? 'bg-white/20 text-white' 
-                        : 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white'
+                        : 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-300 group-hover:bg-primary group-hover:text-white'
                     }`}>
                       <span>অনুশীলন করুন</span>
                       <ArrowRight className="h-2.5 w-2.5" />
@@ -1130,11 +1172,11 @@ export default function HomeView({
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <Briefcase className="h-5 w-5 text-amber-500" />
                   <span>দপ্তর ক্যাটাগরি</span>
-                  <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-bold rounded-full">
+                  <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] font-bold rounded-full">
                     জব প্রিপারেশন
                   </span>
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">বিসিএস, ব্যাংক ও ১১তম-২০তম গ্রেডের স্পেশাল মডেল টেস্ট ও প্রশ্ন ব্যাংক</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400">বিসিএস, ব্যাংক ও ১১তম-২০তম গ্রেডের স্পেশাল মডেল টেস্ট ও প্রশ্ন ব্যাংক</p>
               </div>
             </div>
 
@@ -1153,7 +1195,7 @@ export default function HomeView({
                     className={`group relative cursor-pointer rounded-2xl p-4 sm:p-5 border text-left transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl flex items-center justify-between gap-4 ${
                       isSelected
                         ? 'bg-gradient-to-r from-[#0D47A1] to-[#2196F3] text-white border-primary shadow-lg shadow-primary/25'
-                        : 'bg-white dark:bg-slate-800 border-slate-200/60 dark:border-slate-700/60 hover:border-amber-500/40'
+                        : 'bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 hover:border-amber-500/50'
                     }`}
                   >
                     <div className="flex items-center gap-3.5">
@@ -1167,11 +1209,11 @@ export default function HomeView({
                         {getSubjectIcon(subject.iconName)}
                       </div>
                       <div className="space-y-1">
-                        <h4 className="font-extrabold text-base sm:text-lg leading-tight">{subject.subject}</h4>
-                        <div className={`text-xs space-x-2 ${isSelected ? 'text-white/90' : 'text-slate-500 dark:text-slate-400'}`}>
+                        <h4 className="font-extrabold text-base sm:text-lg leading-tight text-slate-900 dark:text-slate-100">{subject.subject}</h4>
+                        <div className={`text-xs space-x-2 ${isSelected ? 'text-white/90' : 'text-slate-600 dark:text-slate-400'}`}>
                           <span>{subject.examsCount} টি এক্সাম</span>
                           <span>•</span>
-                          <span className="font-bold">{subject.questionsCount} টি প্রশ্ন</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{subject.questionsCount} টি প্রশ্ন</span>
                         </div>
                       </div>
                     </div>
@@ -1179,7 +1221,7 @@ export default function HomeView({
                     <div className={`p-2 rounded-xl shrink-0 transition-all flex items-center gap-1 text-[11px] font-bold ${
                       isSelected 
                         ? 'bg-white/20 text-white' 
-                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 group-hover:bg-amber-500 group-hover:text-white'
+                        : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 group-hover:bg-amber-500 group-hover:text-white'
                     }`}>
                       <span className="hidden sm:inline">অনুশীলন</span>
                       <ArrowRight className="h-4 w-4" />
@@ -1200,10 +1242,10 @@ export default function HomeView({
               <TrendingUp className="h-6 w-6 text-primary" />
               চলতি ও আসন্ন পরীক্ষা সমূহ
             </h2>
-            <p className="text-sm text-slate-500 mt-1">আপনার সুবিধাজনক সময়ে পরীক্ষায় অংশ নিয়ে মেধা যাচাই করুন।</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">আপনার সুবিধাজনক সময়ে পরীক্ষায় অংশ নিয়ে মেধা যাচাই করুন।</p>
           </div>
           {selectedSubject && (
-            <div className="self-start px-3 py-1 bg-primary/10 text-primary dark:bg-primary/20 text-xs font-semibold rounded-lg">
+            <div className="self-start px-3 py-1 bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-300 text-xs font-bold rounded-lg border border-primary/20">
               ফিল্টার: {selectedSubject}
             </div>
           )}
@@ -1213,16 +1255,16 @@ export default function HomeView({
           {/* Left Column: Live Exams Grid */}
           <div className="lg:col-span-8">
             {liveExams.length === 0 ? (
-              <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-12 text-center h-full flex flex-col justify-center items-center">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-12 text-center h-full flex flex-col justify-center items-center">
                 <FileText className="h-12 w-12 text-slate-400 mb-4" />
-                <h3 className="text-lg font-bold">কোনো চলমান পরীক্ষা পাওয়া যায়নি</h3>
-                <p className="text-slate-500 text-sm mt-1">সার্চ ফিল্টারটি পরিবর্তন করে পুনরায় চেষ্টা করুন অথবা ড্যাশবোর্ড দেখুন।</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">কোনো চলমান পরীক্ষা পাওয়া যায়নি</h3>
+                <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">সার্চ ফিল্টারটি পরিবর্তন করে পুনরায় চেষ্টা করুন অথবা ড্যাশবোর্ড দেখুন।</p>
                 <button
                   onClick={() => {
                     setSearchQuery('');
                     setSelectedSubject(null);
                   }}
-                  className="mt-4 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl"
+                  className="mt-4 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary-dark transition-colors"
                 >
                   রিসেট করুন
                 </button>
@@ -1232,67 +1274,67 @@ export default function HomeView({
                 {liveExams.map((exam) => (
                   <div
                     key={exam.id}
-                    className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary/30 transition-all duration-300 flex flex-col justify-between"
+                    className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary/40 dark:hover:border-primary/40 transition-all duration-300 flex flex-col justify-between"
                   >
                     {/* Exam Status Badge & Subject */}
                     <div className="p-6 pb-4 space-y-3 flex-grow">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-md capitalize">
+                          <span className="text-xs font-bold text-primary bg-primary/10 dark:bg-primary/20 dark:text-emerald-300 border border-primary/20 px-2.5 py-1 rounded-md capitalize">
                             {exam.subject}
                           </span>
                           {exam.isPremium ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50 uppercase">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200/90 px-2 py-0.5 rounded-md dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800 uppercase">
                               <Lock className="h-2.5 w-2.5" />
                               Premium
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md dark:bg-emerald-950/30 dark:text-emerald-400 uppercase">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/90 px-2 py-0.5 rounded-md dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800 uppercase">
                               Free
                             </span>
                           )}
                         </div>
-                        <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full dark:bg-emerald-950/30 dark:text-emerald-400">
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/70 px-2.5 py-0.5 rounded-full dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800/80">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                           চলমান (Live)
                         </span>
                       </div>
 
-                      <h3 className="font-bold text-lg text-slate-900 dark:text-white leading-snug line-clamp-2">
+                      <h3 className="font-extrabold text-lg text-slate-900 dark:text-slate-100 leading-snug line-clamp-2">
                         {exam.title}
                       </h3>
 
                       {/* Metadata Row */}
-                      <div className="grid grid-cols-3 gap-2 pt-2 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="grid grid-cols-3 gap-2 pt-2 text-xs text-slate-600 dark:text-slate-400">
                         <div className="flex flex-col">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            {exam.questions?.length || exam.totalQuestions || '১-৫০'}
+                          <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
+                            {exam.questions && exam.questions.length > 0 ? exam.questions.length : (exam.totalQuestions ?? 0)}
                           </span>
-                          <span>প্রশ্ন সংখ্যা</span>
+                          <span className="text-slate-600 dark:text-slate-400 font-medium">প্রশ্ন সংখ্যা</span>
                         </div>
-                        <div className="flex flex-col border-l border-slate-200 dark:border-slate-700 pl-2">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                        <div className="flex flex-col border-l border-slate-200/80 dark:border-slate-800 pl-2">
+                          <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
                             {exam.durationMinutes} মিনিট
                           </span>
-                          <span>সময়সীমা</span>
+                          <span className="text-slate-600 dark:text-slate-400 font-medium">সময়সীমা</span>
                         </div>
-                        <div className="flex flex-col border-l border-slate-200 dark:border-slate-700 pl-2">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            {exam.totalMarks || (exam.questions?.length || exam.totalQuestions || 10) * 1}
+                        <div className="flex flex-col border-l border-slate-200/80 dark:border-slate-800 pl-2">
+                          <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
+                            {exam.totalMarks ?? (exam.questions && exam.questions.length > 0 ? exam.questions.length : (exam.totalQuestions ?? 0))}
                           </span>
-                          <span>মোট মার্কস</span>
+                          <span className="text-slate-600 dark:text-slate-400 font-medium">মোট মার্কস</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Exam Action Footer */}
-                    <div className="p-6 pt-0 border-t border-slate-100 dark:border-slate-700/40 bg-slate-50/50 dark:bg-slate-800/20 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">
-                        তৈরি হয়েছে: {exam.dateCreated}
+                    <div className="p-6 pt-3 pb-4 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-950/60 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                        তৈরি হয়েছে: {formatSafeDisplay(exam.dateCreated, '—')}
                       </span>
                       <button
                         onClick={() => handleStartExam(exam)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-semibold shadow-md shadow-primary/10 hover:shadow-primary/20 transform hover:-translate-y-0.5 transition-all duration-200"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 hover:shadow-primary/30 transform hover:-translate-y-0.5 transition-all duration-200"
                       >
                         অংশ নিন
                         <ArrowRight className="h-3.5 w-3.5" />
@@ -1306,139 +1348,152 @@ export default function HomeView({
 
           {/* Right Column: Dedicated Upcoming Exams Sidebar */}
           <div className="lg:col-span-4">
-            <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-6 shadow-sm sticky top-24 space-y-4">
-              <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-6 shadow-sm sticky top-24 space-y-4">
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-slate-100 flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-800">
                 <span className="flex items-center gap-2">
                   <Clock className="h-5 w-5 text-amber-500 animate-pulse" />
                   <span>আসন্ন পরীক্ষা সমূহ (Upcoming)</span>
                 </span>
-                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-400 px-2 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-900/40">
+                <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/70 px-2 py-0.5 rounded-full border border-amber-200/80 dark:border-amber-800/80">
                   শিডিউল লাইভ
                 </span>
               </h3>
 
-              {/* 1. Firestore Site Settings Featured Upcoming Exam Title */}
-              {activeUpcomingSetting && activeUpcomingSetting.title && activeUpcomingSetting.isPublished !== false && (
-                <div className="p-4 bg-gradient-to-br from-amber-500/10 via-amber-50/50 to-transparent dark:from-amber-950/30 dark:via-slate-800/80 dark:to-transparent border border-amber-500/30 rounded-2xl space-y-3 relative overflow-hidden">
-                  <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-extrabold text-amber-800 dark:text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-500/30">
-                      {activeUpcomingSetting.subject || 'BCS'}
-                    </span>
-                    {activeUpcomingSetting.isPremium ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md dark:bg-amber-950/40 dark:text-amber-400">
-                        <Lock className="h-2.5 w-2.5" />
-                        Premium
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md dark:bg-emerald-950/40 dark:text-emerald-300">
-                        ফ্রি এক্সেস (Free)
-                      </span>
-                    )}
-                  </div>
-
-                  <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white leading-snug">
-                    {activeUpcomingSetting.title}
-                  </h4>
-
-                  {activeUpcomingSetting.description && (
-                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-2">
-                      {activeUpcomingSetting.description}
-                    </p>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
-                    {(activeUpcomingSetting.duration || activeUpcomingSetting.durationMinutes) && (
-                      <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                        <Clock className="h-3 w-3 text-slate-400 shrink-0" />
-                        <span>সময়: <strong>{activeUpcomingSetting.duration || activeUpcomingSetting.durationMinutes} মি.</strong></span>
-                      </div>
-                    )}
-                    {(activeUpcomingSetting.startTime || activeUpcomingSetting.examDate) && (
-                      <div className="flex items-center gap-1 text-amber-700 dark:text-amber-400 font-semibold col-span-2">
-                        <Calendar className="h-3 w-3 shrink-0" />
-                        <span>
-                          শুরু: <strong>
-                            {activeUpcomingSetting.startTime 
-                              ? formatBanglaDateTime(activeUpcomingSetting.startTime) 
-                              : activeUpcomingSetting.examDate}
-                          </strong>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {activeUpcomingSetting.examId && exams.find(e => e.id === activeUpcomingSetting.examId) && (
-                    <button
-                      onClick={() => {
-                        const target = exams.find(e => e.id === activeUpcomingSetting.examId);
-                        if (target) {
-                          if ((target.status as string) === 'live' || (target.status as string) === 'completed' || (target.status as string) === 'archived') {
-                            handleStartExam(target);
-                          } else {
-                            setSelectedExam(target);
-                            setView('exam');
-                          }
-                        }
-                      }}
-                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 mt-2"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      <span>প্রস্তুতি ও সিলেবাস দেখুন</span>
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* 2. List of Other Scheduled Upcoming Exams */}
+              {/* Unified Upcoming Exams List */}
               {(() => {
-                const otherUpcoming = upcomingExams.filter(exam => {
-                  if (!activeUpcomingSetting || !activeUpcomingSetting.title) return true;
-                  return exam.title !== activeUpcomingSetting.title && exam.id !== activeUpcomingSetting.examId;
+                const upcomingList: Array<{
+                  id: string;
+                  title: string;
+                  subject?: string;
+                  description?: string;
+                  startTime?: string;
+                  examDate?: string;
+                  durationMinutes?: number;
+                  totalQuestions?: number;
+                  totalMarks?: number;
+                  isPremium?: boolean;
+                }> = [];
+
+                const seenIds = new Set<string>();
+                const seenTitles = new Set<string>();
+
+                if (validUpcomingSetting && validUpcomingSetting.title && validUpcomingSetting.isPublished !== false) {
+                  const titleKey = validUpcomingSetting.title.trim().toLowerCase();
+                  upcomingList.push({
+                    id: validUpcomingSetting.examId || 'featured-upcoming',
+                    title: validUpcomingSetting.title,
+                    subject: validUpcomingSetting.subject || 'BCS',
+                    description: validUpcomingSetting.description || '',
+                    startTime: validUpcomingSetting.startTime || '',
+                    examDate: validUpcomingSetting.examDate || '',
+                    durationMinutes: validUpcomingSetting.durationMinutes || (validUpcomingSetting as any).duration || 30,
+                    totalQuestions: validUpcomingSetting.totalQuestions || 0,
+                    totalMarks: validUpcomingSetting.totalMarks || 0,
+                    isPremium: !!validUpcomingSetting.isPremium,
+                  });
+                  if (validUpcomingSetting.examId) seenIds.add(validUpcomingSetting.examId);
+                  seenTitles.add(titleKey);
+                }
+
+                upcomingExams.forEach(exam => {
+                  const normTitle = (exam.title || '').trim().toLowerCase();
+                  if (!seenIds.has(exam.id) && !seenTitles.has(normTitle)) {
+                    const qCount = (exam.questions && exam.questions.length > 0) 
+                      ? exam.questions.length 
+                      : (exam.totalQuestions || 0);
+                    upcomingList.push({
+                      id: exam.id,
+                      title: exam.title,
+                      subject: exam.subject || 'BCS',
+                      description: exam.description || '',
+                      startTime: exam.startTime || '',
+                      examDate: (exam as any).examDate || '',
+                      durationMinutes: exam.durationMinutes || 30,
+                      totalQuestions: qCount,
+                      totalMarks: exam.totalMarks || qCount,
+                      isPremium: !!exam.isPremium,
+                    });
+                    seenIds.add(exam.id);
+                    seenTitles.add(normTitle);
+                  }
                 });
 
-                const hasFeatured = activeUpcomingSetting && activeUpcomingSetting.title && activeUpcomingSetting.isPublished !== false;
-
-                if (!hasFeatured && otherUpcoming.length === 0) {
+                if (upcomingList.length === 0) {
                   return (
-                    <div className="text-center py-12 text-slate-400 dark:text-slate-500 space-y-2">
-                      <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                    <div className="text-center py-12 text-slate-500 dark:text-slate-400 space-y-2">
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
                         খুব শীঘ্রই নতুন পরীক্ষা যুক্ত হবে, আমাদের সাথে থাকুন।
                       </p>
                     </div>
                   );
                 }
 
-                if (otherUpcoming.length > 0) {
-                  return (
-                    <div className="divide-y divide-slate-100 dark:divide-slate-700/60 space-y-4 pt-2">
-                      {otherUpcoming.map((exam) => (
-                        <div key={exam.id} className="pt-4 first:pt-0 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                              {exam.subject}
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50">
+                return (
+                  <div className="space-y-4">
+                    {upcomingList.map((item, idx) => (
+                      <div
+                        key={`upcoming-item-${item.id}-${idx}`}
+                        className="p-4 bg-amber-50/80 dark:bg-slate-800/80 border border-amber-200/90 dark:border-amber-500/30 rounded-2xl space-y-3 relative overflow-hidden transition-all duration-200 hover:border-amber-500/50 hover:shadow-md"
+                      >
+                        <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-extrabold text-amber-900 dark:text-amber-300 bg-amber-100/90 dark:bg-amber-950/80 px-2 py-0.5 rounded-lg border border-amber-300/80 dark:border-amber-800">
+                            {item.subject || 'BCS'}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {item.isPremium && (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded-md dark:bg-amber-950/70 dark:text-amber-300">
+                                <Lock className="h-2.5 w-2.5" />
+                                Premium
+                              </span>
+                            )}
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300/90 px-2 py-0.5 rounded-md dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
                               আসন্ন লাইভ
                             </span>
                           </div>
-
-                          <h4 className="font-bold text-sm text-slate-800 dark:text-white leading-snug">
-                            {exam.title}
-                          </h4>
-
-                          {exam.startTime && (
-                            <div className="p-2.5 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl text-[10px] text-amber-700 dark:text-amber-400 flex items-center gap-1.5 font-medium leading-relaxed">
-                              <Clock className="h-3.5 w-3.5 shrink-0" />
-                              <span>শুরু হবে: <strong className="font-extrabold">{formatBanglaDateTime(exam.startTime)}</strong></span>
-                            </div>
-                          )}
                         </div>
-                      ))}
-                    </div>
-                  );
-                }
 
-                return null;
+                        <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-slate-100 leading-snug">
+                          {item.title}
+                        </h4>
+
+                        {item.description && (
+                          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-2">
+                            {item.description}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                          {item.durationMinutes ? (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                              <span className="text-slate-700 dark:text-slate-300 font-bold">{item.durationMinutes}</span> মিনিট
+                            </span>
+                          ) : null}
+                          {item.totalQuestions && item.totalQuestions > 0 ? (
+                            <span className="flex items-center gap-1 border-l border-slate-300 dark:border-slate-700 pl-3">
+                              <FileText className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                              <span className="text-slate-700 dark:text-slate-300 font-bold">{item.totalQuestions}</span> টি প্রশ্ন
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {(item.startTime || item.examDate) && (
+                          <div className="p-2.5 bg-amber-100/80 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-300 flex items-center gap-1.5 font-medium leading-relaxed">
+                            <Calendar className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
+                            <span>
+                              শুরু হবে: <strong className="font-extrabold">
+                                {item.startTime 
+                                  ? formatBanglaDateTime(item.startTime) 
+                                  : item.examDate}
+                              </strong>
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
               })()}
             </div>
           </div>
@@ -1453,68 +1508,68 @@ export default function HomeView({
               <Award className="h-6 w-6 text-primary" />
               আর্কাইভকৃত পরীক্ষা সমূহ (Archive Exams)
             </h2>
-            <p className="text-sm text-slate-500 mt-1">পূর্বে হয়ে যাওয়া পরীক্ষাগুলোর প্রশ্ন ও সমাধান দেখে নিজেকে ঝালিয়ে নিন।</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">পূর্বে হয়ে যাওয়া পরীক্ষাগুলোর প্রশ্ন ও সমাধান দেখে নিজেকে ঝালিয়ে নিন।</p>
           </div>
         </div>
 
         {archiveExams.length === 0 ? (
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-12 text-center">
-            <FileText className="h-10 w-10 text-slate-300 mx-auto mb-3 animate-pulse" />
-            <p className="text-slate-500 text-sm">বর্তমানে কোনো আর্কাইভকৃত পরীক্ষা পাওয়া যায়নি।</p>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-12 text-center">
+            <FileText className="h-10 w-10 text-slate-400 mx-auto mb-3 animate-pulse" />
+            <p className="text-slate-600 dark:text-slate-400 text-sm">বর্তমানে কোনো আর্কাইভকৃত পরীক্ষা পাওয়া যায়নি।</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {archiveExams.map((exam) => (
               <div
                 key={exam.id}
-                className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary/30 transition-all duration-300 flex flex-col justify-between"
+                className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary/40 dark:hover:border-primary/40 transition-all duration-300 flex flex-col justify-between"
               >
                 {/* Exam Status Badge & Subject */}
                 <div className="p-6 pb-4 space-y-3 flex-grow">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-md capitalize">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-md capitalize">
                       {exam.subject}
                     </span>
-                    <span className="flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-50 dark:bg-slate-900/40 px-2 py-0.5 rounded-full dark:text-slate-400">
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
                       আর্কাইভ (Archive)
                     </span>
                   </div>
 
-                  <h3 className="font-bold text-base text-slate-800 dark:text-white leading-snug line-clamp-2">
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-slate-100 leading-snug line-clamp-2">
                     {exam.title}
                   </h3>
 
                   {/* Metadata Row */}
-                  <div className="grid grid-cols-3 gap-2 pt-2 text-xs text-slate-500 dark:text-slate-400">
+                  <div className="grid grid-cols-3 gap-2 pt-2 text-xs text-slate-600 dark:text-slate-400">
                     <div className="flex flex-col">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">
-                        {exam.questions?.length || exam.totalQuestions || '১-৪০'}
+                      <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
+                        {exam.questions && exam.questions.length > 0 ? exam.questions.length : (exam.totalQuestions ?? 0)}
                       </span>
-                      <span>প্রশ্ন</span>
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">প্রশ্ন</span>
                     </div>
-                    <div className="flex flex-col border-l border-slate-200 dark:border-slate-700 pl-2">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    <div className="flex flex-col border-l border-slate-200/80 dark:border-slate-800 pl-2">
+                      <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
                         {exam.durationMinutes} মিনিট
                       </span>
-                      <span>সময়</span>
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">সময়</span>
                     </div>
-                    <div className="flex flex-col border-l border-slate-200 dark:border-slate-700 pl-2">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">
-                        {exam.totalMarks || (exam.questions?.length || exam.totalQuestions || 10) * 1}
+                    <div className="flex flex-col border-l border-slate-200/80 dark:border-slate-800 pl-2">
+                      <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
+                        {exam.totalMarks ?? (exam.questions && exam.questions.length > 0 ? exam.questions.length : (exam.totalQuestions ?? 0))}
                       </span>
-                      <span>মার্কস</span>
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">মার্কস</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Exam Action Footer */}
-                <div className="p-6 pt-0 border-t border-slate-100 dark:border-slate-700/40 bg-slate-50/30 dark:bg-slate-800/20 flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400">
+                <div className="p-6 pt-3 pb-4 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-950/60 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
                     আর্কাইভ হয়েছে: {exam.archiveTime ? new Date(exam.archiveTime).toLocaleDateString('bn-BD') : exam.dateCreated}
                   </span>
                   <button
                     onClick={() => handleStartExam(exam)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold shadow-sm transition-all duration-200"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold shadow-sm transition-all duration-200"
                   >
                     রিভিউ এক্সাম
                     <ArrowRight className="h-3 w-3" />
@@ -1530,17 +1585,17 @@ export default function HomeView({
       <section id="ministry-banks-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pt-6 scroll-mt-20">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-4">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 text-primary dark:text-primary-light text-xs font-bold rounded-lg mb-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 text-primary dark:text-emerald-300 text-xs font-bold rounded-lg mb-2 border border-primary/20">
               <BookOpen className="h-4 w-4 text-primary" />
               <span>মন্ত্রণালয় ও অধিদপ্তর বিশেষ প্রস্তুতি</span>
             </div>
             <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
               <span>মন্ত্রণালয় ও দপ্তরভিত্তিক প্রশ্ন ব্যাংকসমূহ</span>
-              <span className="px-2.5 py-0.5 bg-primary/10 text-primary dark:text-primary-light border border-primary/20 text-xs font-bold rounded-full">
+              <span className="px-2.5 py-0.5 bg-primary/10 text-primary dark:text-emerald-300 border border-primary/20 text-xs font-bold rounded-full">
                 {publishedMinistryBanks.length} টি প্রশ্ন ব্যাংক
               </span>
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
               এডমিন প্যানেলে প্রকাশিত বিভিন্ন মন্ত্রণালয়ের বিষয়ভিত্তিক নিয়োগ পরীক্ষার প্রশ্ন, বিকল্প উত্তর, সঠিক উত্তর ও বিশদ সমাধান থেকে পছন্দ অনুযায়ী অনুশীলন বা পরীক্ষা দিন।
             </p>
           </div>
@@ -1554,7 +1609,7 @@ export default function HomeView({
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all ${
                 selectedMinistryFilter === 'ALL'
                   ? 'bg-primary text-white shadow-md shadow-primary/20'
-                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
               }`}
             >
               সকল মন্ত্রণালয় ({publishedMinistryBanks.length})
@@ -1568,7 +1623,7 @@ export default function HomeView({
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all ${
                     selectedMinistryFilter === minName
                       ? 'bg-primary text-white shadow-md shadow-primary/20'
-                      : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
                   }`}
                 >
                   🏢 {minName} ({count})
@@ -1583,43 +1638,43 @@ export default function HomeView({
           {filteredMinistryBanks.map((bank) => (
             <div
               key={bank.id}
-              className="group bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 hover:border-primary/50 dark:hover:border-primary/50 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-4 relative overflow-hidden"
+              className="group bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 hover:border-primary/50 dark:hover:border-primary/50 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-4 relative overflow-hidden"
             >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 text-primary dark:text-primary-light font-extrabold text-xs rounded-xl">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs rounded-xl">
                     🏢 {bank.ministryName}
                   </span>
-                  <span className="text-[11px] font-bold text-slate-400">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                     {bank.questions?.length || bank.totalQuestions || 0} টি প্রশ্ন
                   </span>
                 </div>
 
-                <h4 className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-white leading-snug group-hover:text-primary transition-colors">
+                <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white leading-snug group-hover:text-primary transition-colors">
                   {bank.title}
                 </h4>
 
-                <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400 font-medium">
                   <span className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5 text-slate-400" />
+                    <Clock className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                     <span>{bank.durationMinutes || 10} মিনিট</span>
                   </span>
                   <span>•</span>
                   <span className="flex items-center gap-1">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                    <span>ব্যাখ্যাসহ সমাধান</span>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-slate-700 dark:text-slate-300">ব্যাখ্যাসহ সমাধান</span>
                   </span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
                 <button
                   onClick={() => {
                     setActiveMinistryBank(bank);
                     setMbPracticeTab('qa');
                     setMbUserAnswers({});
                   }}
-                  className="w-full py-2.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center gap-1.5"
                 >
                   <BookOpen className="h-3.5 w-3.5 text-primary" />
                   <span>অনুশীলন করুন</span>
@@ -1714,7 +1769,7 @@ export default function HomeView({
                 className={`rounded-2xl p-6 transition-all duration-300 flex flex-col justify-between relative shadow-md hover:shadow-xl ${
                   plan.popular
                     ? 'animated-mixing-border shadow-amber-500/10'
-                    : 'bg-white dark:bg-slate-800 border-2 border-slate-200/80 dark:border-slate-700 hover:border-amber-500/50'
+                    : 'bg-white dark:bg-slate-900 border-2 border-slate-200/90 dark:border-slate-800 hover:border-amber-500/50'
                 }`}
               >
                 {plan.badge && (
@@ -1725,22 +1780,22 @@ export default function HomeView({
 
                 <div className="space-y-4">
                   <div>
-                    <h3 className="font-extrabold text-lg text-slate-900 dark:text-white">{plan.title}</h3>
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{plan.duration}</span>
+                    <h3 className="font-extrabold text-lg text-slate-900 dark:text-slate-100">{plan.title}</h3>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{plan.duration}</span>
                   </div>
 
-                  <div className="py-3 border-y border-slate-100 dark:border-slate-700/60">
+                  <div className="py-3 border-y border-slate-200/80 dark:border-slate-800">
                     <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-black text-amber-500">{plan.priceFormatted}</span>
-                      <span className="text-xs text-slate-400 font-semibold">/ {plan.duration}</span>
+                      <span className="text-3xl font-black text-amber-600 dark:text-amber-400">{plan.priceFormatted}</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 font-bold">/ {plan.duration}</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">{plan.description}</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{plan.description}</p>
                   </div>
 
-                  <ul className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+                  <ul className="space-y-2.5 text-xs text-slate-700 dark:text-slate-300 font-medium">
                     {plan.features.map((feat, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <Check className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                        <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                         <span>{feat}</span>
                       </li>
                     ))}
@@ -1749,7 +1804,7 @@ export default function HomeView({
 
                 <div className="pt-6">
                   {user?.isPremium ? (
-                    <div className="py-2.5 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-bold text-center border border-emerald-200/50 flex items-center justify-center gap-1.5">
+                    <div className="py-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-bold text-center border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-center gap-1.5">
                       <ShieldCheck className="h-4 w-4" /> সক্রিয় মেম্বারশিপ
                     </div>
                   ) : (
@@ -1767,7 +1822,7 @@ export default function HomeView({
                       className={`w-full py-3 rounded-xl font-extrabold text-xs transition-all shadow-md ${
                         plan.popular
                           ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-amber-500/20'
-                          : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white'
+                          : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white border border-slate-700'
                       }`}
                     >
                       {user ? 'প্যাকেজটি সাবস্ক্রাইব করুন' : 'লগইন করে সাবস্ক্রাইব করুন'}
@@ -1778,7 +1833,7 @@ export default function HomeView({
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-500 dark:text-slate-400 font-semibold pt-2">
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-600 dark:text-slate-400 font-bold pt-2">
             <span>🔒 নিরাপদ বিকাশ / নগদ / রকেট / কার্ড পেমেন্ট</span>
             <span>•</span>
             <span>⚡ ইনস্ট্যান্ট সক্রিয়</span>
@@ -1800,17 +1855,17 @@ export default function HomeView({
                 <Trophy className="h-6 w-6 text-amber-500" />
                 মেধাবী শিক্ষার্থী লিডারবোর্ড
               </h2>
-              <p className="text-xs text-slate-500 mt-1">এই সপ্তাহের সেরা স্কোরধারী শিক্ষার্থীদের তালিকা।</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">এই সপ্তাহের সেরা স্কোরধারী শিক্ষার্থীদের তালিকা।</p>
             </div>
-            <span className="text-xs font-semibold text-primary">সাপ্তাহিক আপডেট</span>
+            <span className="text-xs font-bold text-primary dark:text-emerald-400">সাপ্তাহিক আপডেট</span>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl overflow-hidden shadow-md">
-            <div className="divide-y divide-slate-100 dark:divide-slate-700/40">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden shadow-md">
+            <div className="divide-y divide-slate-200/80 dark:divide-slate-800">
               {MOCK_LEADERBOARD.map((student, idx) => (
                 <div
                   key={student.rank}
-                  className="p-4 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors duration-200"
+                  className="p-4 flex items-center justify-between hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors duration-200"
                 >
                   <div className="flex items-center gap-3">
                     {/* Rank Badge */}
@@ -1822,7 +1877,7 @@ export default function HomeView({
                       ) : student.rank === 3 ? (
                         <Trophy className="h-6 w-6 text-amber-700" />
                       ) : (
-                        <span className="text-sm font-bold text-slate-400">#{student.rank}</span>
+                        <span className="text-sm font-bold text-slate-500 dark:text-slate-400">#{student.rank}</span>
                       )}
                     </div>
 
@@ -1830,15 +1885,15 @@ export default function HomeView({
                       src={student.avatar}
                       alt={student.name}
                       referrerPolicy="no-referrer"
-                      className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                      className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700"
                     />
 
                     <div>
-                      <h4 className="font-bold text-sm text-slate-800 dark:text-white">{student.name}</h4>
-                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                      <h4 className="font-extrabold text-sm text-slate-900 dark:text-slate-100">{student.name}</h4>
+                      <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium">
                         <span>{student.examsTaken} টি টেস্ট</span>
                         <span>•</span>
-                        <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400 font-medium">
+                        <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400 font-bold">
                           <Flame className="h-3 w-3 fill-current" /> {student.streak} দিন স্ট্রাক
                         </span>
                       </div>
@@ -1847,7 +1902,7 @@ export default function HomeView({
 
                   {/* Score badge */}
                   <div className="text-right">
-                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-sm rounded-lg">
+                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 font-extrabold text-sm rounded-lg border border-emerald-500/20">
                       {student.score} পয়েন্ট
                     </span>
                   </div>
@@ -1864,14 +1919,14 @@ export default function HomeView({
               <Star className="h-6 w-6 text-amber-500 fill-current" />
               আমাদের শিক্ষার্থীদের মতামত
             </h2>
-            <p className="text-xs text-slate-500 mt-1">শিক্ষার্থীরা আমাদের প্ল্যাটফর্ম সম্পর্কে যা বলছেন।</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">শিক্ষার্থীরা আমাদের প্ল্যাটফর্ম সম্পর্কে যা বলছেন।</p>
           </div>
 
           <div className="space-y-4">
             {MOCK_REVIEWS.map((review) => (
               <div
                 key={review.id}
-                className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-5 shadow-sm space-y-3"
+                className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-3"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -1879,24 +1934,24 @@ export default function HomeView({
                       src={review.avatar}
                       alt={review.name}
                       referrerPolicy="no-referrer"
-                      className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                      className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700"
                     />
                     <div>
-                      <h4 className="font-bold text-sm text-slate-800 dark:text-white leading-tight">
+                      <h4 className="font-extrabold text-sm text-slate-900 dark:text-slate-100 leading-tight">
                         {review.name}
                       </h4>
-                      <p className="text-[11px] text-slate-400">{review.role}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{review.role}</p>
                     </div>
                   </div>
                   
                   {/* Stars */}
                   <div className="flex items-center gap-0.5 text-amber-500">
                     <Star className="h-3.5 w-3.5 fill-current" />
-                    <span className="text-xs font-bold ml-1">{review.rating}</span>
+                    <span className="text-xs font-bold ml-1 text-slate-800 dark:text-slate-200">{review.rating}</span>
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed italic">
+                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed italic">
                   "{review.text}"
                 </p>
               </div>

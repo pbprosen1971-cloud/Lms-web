@@ -8,6 +8,7 @@ import { User, Phone, GraduationCap, Mail, Award, Calendar, ChevronRight, CheckC
 import { UserProfile, ExamResult } from '../types';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { formatSafeDisplay, safeTimestampToString } from '../lib/dateUtils';
 
 interface ProfileViewProps {
   user: UserProfile;
@@ -140,15 +141,15 @@ export default function ProfileView({
             শিক্ষা প্রতিষ্ঠান: {user.institution || 'শিক্ষা প্রতিষ্ঠানের তথ্য নেই'}
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400">
-            <span>নিবন্ধনের তারিখ: {user.joinedDate}</span>
+            <span>নিবন্ধনের তারিখ: {formatSafeDisplay(user.joinedDate, '—')}</span>
             {user.isPremium && user.isPremiumDate && (
               <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                প্রিমিয়াম শুরু: {new Date(user.isPremiumDate).toLocaleDateString('bn-BD')}
+                প্রিমিয়াম শুরু: {formatSafeDisplay(user.isPremiumDate, '—')}
               </span>
             )}
             {user.isPremium && user.isPremiumExpiryDate && (
               <span className="text-amber-600 dark:text-amber-400 font-bold">
-                মেয়াদের শেষ তারিখ: {new Date(user.isPremiumExpiryDate).toLocaleDateString('bn-BD')}
+                মেয়াদের শেষ তারিখ: {formatSafeDisplay(user.isPremiumExpiryDate, '—')}
               </span>
             )}
           </div>
@@ -370,7 +371,7 @@ export default function ProfileView({
                     <div className="flex items-center gap-3 text-[10px] text-slate-400">
                       <span>আইডি: {cert.credentialId}</span>
                       <span>•</span>
-                      <span>তারিখ: {cert.issueDate}</span>
+                      <span>তারিখ: {formatSafeDisplay(cert.issueDate, '—')}</span>
                     </div>
                   </div>
 
