@@ -23,6 +23,7 @@ import {
   saveResultToFirestore,
   subscribeToUpcomingExamSettings,
   saveUpcomingExamSettings,
+  updateExamArchiveStatus,
   safeTimestampToString,
   safeDateOnlyString,
 } from './services/firestoreService';
@@ -354,6 +355,32 @@ export default function App() {
     });
     return () => unsubscribeUpcoming();
   }, []);
+
+  // 2.6 Automatically transition upcoming exams to 'live' when their start date/time arrives
+  useEffect(() => {
+    const checkAndTransitionExamsToLive = async () => {
+      const now = Date.now();
+      for (const exam of exams) {
+        if (exam.status === 'upcoming') {
+          const rawStart = exam.startTime || (exam as any).examDateTime || exam.startDate || (exam as any).examDate;
+          if (rawStart && rawStart.trim()) {
+            const startTimeMs = new Date(rawStart).getTime();
+            if (!isNaN(startTimeMs) && now >= startTimeMs) {
+              try {
+                await updateExamArchiveStatus(exam.id, 'live');
+              } catch (err) {
+                console.warn(`Error auto-transitioning exam ${exam.id} to live:`, err);
+              }
+            }
+          }
+        }
+      }
+    };
+
+    checkAndTransitionExamsToLive();
+    const intervalTimer = setInterval(checkAndTransitionExamsToLive, 10000);
+    return () => clearInterval(intervalTimer);
+  }, [exams]);
 
   useEffect(() => {
     // Load or initialize Ministry Question Banks

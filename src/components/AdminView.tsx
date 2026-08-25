@@ -503,6 +503,9 @@ export default function AdminView({
       const targetExamId = settingExamId || `upcoming-exam-${Date.now()}`;
       const existingExam = exams.find(ex => ex.id === targetExamId);
 
+      const rawStart = settingStartTime ? settingStartTime.trim() : '';
+      const rawDate = settingDate ? settingDate.trim() : (rawStart ? (rawStart.includes('T') ? rawStart.split('T')[0] : rawStart) : '');
+
       // 2. Prepare Exam object for the upcoming exams list & question editor
       const syncExam: Exam = {
         id: targetExamId,
@@ -514,8 +517,9 @@ export default function AdminView({
         status: 'upcoming',
         isPublished: settingIsPublished,
         isPremium: settingIsPremium,
-        startTime: settingStartTime || undefined,
-        dateCreated: settingDate || (settingStartTime ? settingStartTime.split('T')[0] : new Date().toISOString().split('T')[0]),
+        startTime: rawStart || undefined,
+        startDate: rawDate || undefined,
+        dateCreated: rawDate || '',
         questions: existingExam?.questions || [],
       };
 
@@ -526,7 +530,9 @@ export default function AdminView({
         description: settingDesc.trim(),
         subject: settingSubject,
         durationMinutes: Number(settingDuration) || 30,
-        startTime: settingStartTime,
+        startTime: rawStart || '',
+        startDate: rawDate || '',
+        examDate: rawDate || '',
         archiveTime: existingExam?.archiveTime,
         isPremium: settingIsPremium,
         isPublished: settingIsPublished,
@@ -548,8 +554,9 @@ export default function AdminView({
         subject: settingSubject,
         duration: Number(settingDuration) || 30,
         durationMinutes: Number(settingDuration) || 30,
-        startTime: settingStartTime,
-        examDate: settingDate || (settingStartTime ? settingStartTime.split('T')[0] : ''),
+        startTime: rawStart || '',
+        startDate: rawDate || '',
+        examDate: rawDate || '',
         isPublished: settingIsPublished,
         isPremium: settingIsPremium,
         examId: targetExamId,
@@ -633,14 +640,20 @@ export default function AdminView({
       const targetExamId = editingUpcomingExamId || `upcoming-exam-${Date.now()}`;
       const existingExam = exams.find(e => e.id === targetExamId);
 
+      const rawStart = upcomingStartTime ? upcomingStartTime.trim() : '';
+      const rawDate = rawStart ? (rawStart.includes('T') ? rawStart.split('T')[0] : rawStart) : '';
+
       const scheduleData = {
         id: targetExamId,
         title: upcomingTitle.trim(),
         description: upcomingDescription.trim(),
         subject: upcomingSubject,
         durationMinutes: Number(upcomingDuration) || 30,
-        startTime: upcomingStartTime || undefined,
-        archiveTime: upcomingArchiveTime || undefined,
+        startTime: rawStart || '',
+        startDate: rawDate || '',
+        examDate: rawDate || '',
+        archiveTime: upcomingArchiveTime ? upcomingArchiveTime.trim() : '',
+        archiveDateTime: upcomingArchiveTime ? upcomingArchiveTime.trim() : '',
         isPremium: upcomingIsPremium,
         isPublished: upcomingIsPublished,
       };
@@ -657,9 +670,10 @@ export default function AdminView({
         status: 'upcoming',
         isPublished: upcomingIsPublished,
         isPremium: upcomingIsPremium,
-        startTime: upcomingStartTime || undefined,
-        archiveTime: upcomingArchiveTime || undefined,
-        dateCreated: existingExam?.dateCreated || (upcomingStartTime ? upcomingStartTime.split('T')[0] : new Date().toISOString().split('T')[0]),
+        startTime: rawStart || undefined,
+        startDate: rawDate || undefined,
+        archiveTime: upcomingArchiveTime ? upcomingArchiveTime.trim() : undefined,
+        dateCreated: rawDate || '',
         questions: existingExam?.questions || [],
       };
 

@@ -25,6 +25,9 @@ export interface Exam {
   questions: Question[];
   status: 'live' | 'upcoming' | 'archive' | 'archived' | string;
   startTime?: string; // For upcoming exams
+  startDate?: string; // Start date field for upcoming exams
+  examDateTime?: string; // Standard exam datetime
+  examDate?: string; // Standard exam date
   archiveTime?: string; // For auto-archiving
   archiveDateTime?: string; // Standard archive timestamp
   dateCreated: string;
@@ -155,6 +158,7 @@ export interface UpcomingExamSettings {
   description?: string;
   examId?: string;
   examDate?: string;
+  startDate?: string;
   startTime?: string;
   duration?: number;
   durationMinutes?: number;
@@ -173,7 +177,10 @@ export interface UpcomingExamDoc {
   title: string;
   description?: string;
   examDateTime?: string;
+  startDate?: string;
+  startTime?: string;
   archiveDateTime?: string;
+  archiveTime?: string;
   examDate?: string;
   archiveDate?: string;
   examType: 'free' | 'premium' | string;

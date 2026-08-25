@@ -402,7 +402,7 @@ export default function HomeView({
 
   const activeUpcomingSetting = propUpcomingSettings || localUpcomingSettings;
 
-  // Filter out upcoming settings if the exam has already been transitioned to live or archive
+  // Filter out upcoming settings if the exam has already been transitioned to live or archive, or if startTime has passed
   const validUpcomingSetting = useMemo(() => {
     if (!activeUpcomingSetting || !activeUpcomingSetting.title || activeUpcomingSetting.isPublished === false) {
       return null;
@@ -410,7 +410,14 @@ export default function HomeView({
     const sExamId = activeUpcomingSetting.examId;
     if (sExamId) {
       const matchExam = exams.find(e => e.id === sExamId);
-      if (matchExam && (matchExam.status === 'live' || matchExam.status === 'archive')) {
+      if (matchExam && (matchExam.status === 'live' || matchExam.status === 'archive' || matchExam.status === 'archived')) {
+        return null;
+      }
+    }
+    const rawStart = activeUpcomingSetting.startTime || (activeUpcomingSetting as any).startDate;
+    if (rawStart && rawStart.trim()) {
+      const startTimeMs = new Date(rawStart).getTime();
+      if (!isNaN(startTimeMs) && Date.now() >= startTimeMs) {
         return null;
       }
     }
@@ -837,10 +844,29 @@ export default function HomeView({
     const now = Date.now();
     return filteredExams.filter((exam) => {
       if (exam.status === 'archive' || exam.status === 'archived') return false;
-      if (exam.status === 'upcoming') return false;
+
+      // Check if this upcoming exam's scheduled time has arrived -> auto-transition to live
+      if (exam.status === 'upcoming') {
+        const rawStart = exam.startTime || (exam as any).examDateTime || exam.startDate || (exam as any).examDate;
+        if (rawStart && rawStart.trim()) {
+          const startTimeMs = new Date(rawStart).getTime();
+          if (!isNaN(startTimeMs) && now >= startTimeMs) {
+            // Check if it also passed archive time
+            const archStr = exam.archiveDateTime || exam.archiveTime || (exam as any).archiveDate;
+            if (archStr && archStr.trim()) {
+              const archDate = new Date(archStr);
+              if (!isNaN(archDate.getTime()) && now >= archDate.getTime()) {
+                return false;
+              }
+            }
+            return true; // Auto-transitioned to Live section!
+          }
+        }
+        return false;
+      }
 
       const archStr = exam.archiveDateTime || exam.archiveTime || (exam as any).archiveDate;
-      if (archStr) {
+      if (archStr && archStr.trim()) {
         const archDate = new Date(archStr);
         if (!isNaN(archDate.getTime()) && now >= archDate.getTime()) {
           return false;
@@ -853,11 +879,17 @@ export default function HomeView({
   const archiveExams = useMemo(() => {
     const now = Date.now();
     return filteredExams.filter((exam) => {
-      if (exam.status === 'upcoming') return false;
       if (exam.status === 'archive' || exam.status === 'archived') return true;
 
+      if (exam.status === 'upcoming') {
+        const rawStart = exam.startTime || (exam as any).examDateTime || exam.startDate || (exam as any).examDate;
+        if (!rawStart || !rawStart.trim()) return false;
+        const startTimeMs = new Date(rawStart).getTime();
+        if (isNaN(startTimeMs) || now < startTimeMs) return false;
+      }
+
       const archStr = exam.archiveDateTime || exam.archiveTime || (exam as any).archiveDate;
-      if (archStr) {
+      if (archStr && archStr.trim()) {
         const archDate = new Date(archStr);
         if (!isNaN(archDate.getTime()) && now >= archDate.getTime()) {
           return true;
@@ -868,7 +900,18 @@ export default function HomeView({
   }, [filteredExams]);
 
   const upcomingExams = useMemo(() => {
-    return exams.filter((exam) => exam.status === 'upcoming');
+    const now = Date.now();
+    return exams.filter((exam) => {
+      if (exam.status !== 'upcoming') return false;
+      const rawStart = exam.startTime || (exam as any).examDateTime || exam.startDate || (exam as any).examDate;
+      if (rawStart && rawStart.trim()) {
+        const startTimeMs = new Date(rawStart).getTime();
+        if (!isNaN(startTimeMs) && now >= startTimeMs) {
+          return false; // Already reached start time, automatically in Live section
+        }
+      }
+      return true;
+    });
   }, [exams]);
 
   const handleStartExam = (exam: Exam) => {
@@ -1463,27 +1506,21 @@ export default function HomeView({
                           </p>
                         )}
 
-                        <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-400 font-medium">
-                          {item.durationMinutes ? (
+                        {item.totalQuestions && item.totalQuestions > 0 ? (
+                          <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-400 font-medium">
                             <span className="flex items-center gap-1">
-                              <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                              <span className="text-slate-700 dark:text-slate-300 font-bold">{item.durationMinutes}</span> মিনিট
-                            </span>
-                          ) : null}
-                          {item.totalQuestions && item.totalQuestions > 0 ? (
-                            <span className="flex items-center gap-1 border-l border-slate-300 dark:border-slate-700 pl-3">
                               <FileText className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                               <span className="text-slate-700 dark:text-slate-300 font-bold">{item.totalQuestions}</span> টি প্রশ্ন
                             </span>
-                          ) : null}
-                        </div>
+                          </div>
+                        ) : null}
 
-                        {(item.startTime || item.examDate) && (
+                        {Boolean((item.startTime && item.startTime.trim()) || (item.examDate && item.examDate.trim())) && (
                           <div className="p-2.5 bg-amber-100/80 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-300 flex items-center gap-1.5 font-medium leading-relaxed">
                             <Calendar className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
                             <span>
                               শুরু হবে: <strong className="font-extrabold">
-                                {item.startTime 
+                                {item.startTime && item.startTime.trim() 
                                   ? formatBanglaDateTime(item.startTime) 
                                   : item.examDate}
                               </strong>

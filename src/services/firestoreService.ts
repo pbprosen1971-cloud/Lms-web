@@ -107,6 +107,7 @@ export async function saveUpcomingExamScheduleToFirestore(
     examDateTime?: string;
     archiveDateTime?: string;
     startTime?: string;
+    startDate?: string;
     archiveTime?: string;
     examDate?: string;
     archiveDate?: string;
@@ -136,8 +137,15 @@ export async function saveUpcomingExamScheduleToFirestore(
     }
   } catch (e) {}
 
-  const examDateTime = examData.examDateTime || examData.startTime || examData.examDate || '';
-  const archiveDateTime = examData.archiveDateTime || examData.archiveTime || examData.archiveDate || '';
+  const rawDateTime = examData.examDateTime || examData.startTime || examData.startDate || examData.examDate || '';
+  const examDateTime = rawDateTime ? rawDateTime.trim() : '';
+  const startDate = examDateTime ? (examDateTime.includes('T') ? examDateTime.split('T')[0] : examDateTime) : '';
+  const examDate = startDate;
+
+  const rawArchive = examData.archiveDateTime || examData.archiveTime || examData.archiveDate || '';
+  const archiveDateTime = rawArchive ? rawArchive.trim() : '';
+  const archiveDate = archiveDateTime ? (archiveDateTime.includes('T') ? archiveDateTime.split('T')[0] : archiveDateTime) : '';
+
   const examType = examData.examType || (examData.isPremium ? 'premium' : 'free');
   const duration = Number(examData.durationMinutes || examData.duration || 30);
   const subject = examData.subject || 'BCS';
@@ -149,10 +157,13 @@ export async function saveUpcomingExamScheduleToFirestore(
     examId: targetExamId,
     title: examData.title.trim(),
     description: (examData.description || '').trim(),
-    examDateTime: examDateTime,
-    archiveDateTime: archiveDateTime,
-    examDate: examDateTime ? examDateTime.split('T')[0] : (examData.examDate || ''),
-    archiveDate: archiveDateTime ? archiveDateTime.split('T')[0] : (examData.archiveDate || ''),
+    examDateTime: examDateTime || '',
+    startTime: examDateTime || '',
+    startDate: startDate || '',
+    examDate: examDate || '',
+    archiveDateTime: archiveDateTime || '',
+    archiveTime: archiveDateTime || '',
+    archiveDate: archiveDate || '',
     examType: examType,
     status: status,
     isPublished: isPublished,
@@ -184,6 +195,13 @@ export async function saveUpcomingExamScheduleToFirestore(
       totalMarks: Number(examData.totalMarks || examData.questions?.length || 0),
       totalQuestions: Number(examData.totalQuestions || examData.questions?.length || 0),
       status: status,
+      examDateTime: examDateTime || '',
+      startTime: examDateTime || '',
+      startDate: startDate || '',
+      examDate: examDate || '',
+      archiveDateTime: archiveDateTime || '',
+      archiveTime: archiveDateTime || '',
+      archiveDate: archiveDate || '',
       updatedAt: serverTimestamp(),
       createdBy: createdBy,
     };
@@ -214,10 +232,14 @@ export async function saveUpcomingExamScheduleToFirestore(
       isPublished: isPublished,
       createdBy: createdBy,
       isPremium: examType === 'premium',
-      startTime: examDateTime || null,
-      archiveTime: archiveDateTime || null,
-      createdAt: examDateTime ? examDateTime.split('T')[0] : new Date().toISOString().split('T')[0],
-      dateCreated: examDateTime ? examDateTime.split('T')[0] : new Date().toISOString().split('T')[0],
+      startTime: examDateTime || '',
+      startDate: startDate || '',
+      examDateTime: examDateTime || '',
+      examDate: examDate || '',
+      archiveTime: archiveDateTime || '',
+      archiveDateTime: archiveDateTime || '',
+      dateCreated: startDate || '',
+      createdAt: startDate || '',
     }, { merge: true });
 
     // 5. Update siteSettings/upcomingExam ONLY IF status is 'upcoming'
@@ -227,8 +249,9 @@ export async function saveUpcomingExamScheduleToFirestore(
         title: examData.title.trim(),
         description: (examData.description || '').trim(),
         examId: targetExamId,
-        examDate: examDateTime ? examDateTime.split('T')[0] : '',
-        startTime: examDateTime,
+        examDate: examDate || '',
+        startDate: startDate || '',
+        startTime: examDateTime || '',
         duration: duration,
         durationMinutes: duration,
         isPublished: isPublished,
@@ -249,10 +272,13 @@ export async function saveUpcomingExamScheduleToFirestore(
       examId: targetExamId,
       title: examData.title.trim(),
       description: examData.description || '',
-      examDateTime,
-      archiveDateTime,
-      examDate: examDateTime ? examDateTime.split('T')[0] : '',
-      archiveDate: archiveDateTime ? archiveDateTime.split('T')[0] : '',
+      examDateTime: examDateTime || '',
+      startDate: startDate || '',
+      startTime: examDateTime || '',
+      archiveDateTime: archiveDateTime || '',
+      archiveTime: archiveDateTime || '',
+      examDate: examDate || '',
+      archiveDate: archiveDate || '',
       examType,
       status,
       isPublished,
@@ -325,9 +351,10 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       const totalQ = qList.length > 0 ? qList.length : (typeof data.totalQuestions === 'number' ? data.totalQuestions : Number(data.totalQuestions || 0));
       const totalM = typeof data.totalMarks === 'number' && data.totalMarks > 0 ? data.totalMarks : (totalQ > 0 ? totalQ : 0);
 
-      const startTimeStr = safeTimestampToString(data.examDateTime || data.startTime || undefined);
+      const startTimeStr = safeTimestampToString(data.examDateTime || data.startTime || data.startDate || undefined);
       const archiveTimeStr = safeTimestampToString(data.archiveDateTime || data.archiveTime || undefined);
-      const dateCreatedStr = safeDateOnlyString(data.examDate || data.createdAt || data.dateCreated);
+      const rawDateStr = data.startDate || data.examDate || data.createdAt || data.dateCreated;
+      const dateCreatedStr = rawDateStr ? safeDateOnlyString(rawDateStr) : '';
 
       examDocsMap.set(examId, {
         id: examId,
@@ -342,6 +369,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         createdBy: String(data.createdBy || ''),
         questions: qList,
         startTime: startTimeStr || undefined,
+        startDate: data.startDate || (startTimeStr ? startTimeStr.split('T')[0] : '') || undefined,
         archiveTime: archiveTimeStr || undefined,
         dateCreated: dateCreatedStr,
         isPremium: data.examType === 'premium' || !!data.isPremium,
@@ -361,9 +389,10 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       const totalQ = qList.length > 0 ? qList.length : (typeof data.totalQuestions === 'number' ? data.totalQuestions : Number(data.totalQuestions || 0));
       const totalM = typeof data.totalMarks === 'number' && data.totalMarks > 0 ? data.totalMarks : (totalQ > 0 ? totalQ : 0);
 
-      const startTimeStr = safeTimestampToString(data.examDateTime || data.startTime || undefined);
+      const startTimeStr = safeTimestampToString(data.examDateTime || data.startTime || data.startDate || undefined);
       const archiveTimeStr = safeTimestampToString(data.archiveDateTime || data.archiveTime || undefined);
-      const dateCreatedStr = safeDateOnlyString(data.examDate || data.createdAt || data.dateCreated);
+      const rawDateStr = data.startDate || data.examDate || data.createdAt || data.dateCreated;
+      const dateCreatedStr = rawDateStr ? safeDateOnlyString(rawDateStr) : '';
 
       capitalDocsMap.set(examId, {
         id: examId,
@@ -379,6 +408,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         createdBy: String(data.createdBy || ''),
         questions: qList,
         startTime: startTimeStr || undefined,
+        startDate: data.startDate || (startTimeStr ? startTimeStr.split('T')[0] : '') || undefined,
         archiveTime: archiveTimeStr || undefined,
         archiveDateTime: archiveTimeStr || undefined,
         dateCreated: dateCreatedStr,
@@ -399,9 +429,10 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       const totalQ = qList.length > 0 ? qList.length : (typeof data.totalQuestions === 'number' ? data.totalQuestions : Number(data.totalQuestions || 0));
       const totalM = typeof data.totalMarks === 'number' && data.totalMarks > 0 ? data.totalMarks : (totalQ > 0 ? totalQ : 0);
 
-      const startTimeStr = safeTimestampToString(data.startTime || data.examDateTime || undefined);
+      const startTimeStr = safeTimestampToString(data.startTime || data.examDateTime || data.startDate || undefined);
       const archiveTimeStr = safeTimestampToString(data.archiveTime || data.archiveDateTime || undefined);
-      const dateCreatedStr = safeDateOnlyString(data.createdAt || data.dateCreated || data.examDate);
+      const rawDateStr = data.startDate || data.examDate || data.createdAt || data.dateCreated;
+      const dateCreatedStr = rawDateStr ? safeDateOnlyString(rawDateStr) : '';
 
       legacyDocsMap.set(examId, {
         id: examId,
@@ -416,6 +447,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         createdBy: String(data.createdBy || ''),
         questions: qList,
         startTime: startTimeStr || undefined,
+        startDate: data.startDate || (startTimeStr ? startTimeStr.split('T')[0] : '') || undefined,
         archiveTime: archiveTimeStr || undefined,
         dateCreated: dateCreatedStr,
         isPremium: !!data.isPremium,
@@ -499,12 +531,17 @@ export async function clearUpcomingExamSettings(examIdToClear?: string): Promise
  */
 export async function updateUpcomingExamInFirestore(
   examId: string,
-  updates: Partial<UpcomingExamDoc> & { questions?: Question[] }
+  updates: Partial<UpcomingExamDoc> & { questions?: Question[]; startDate?: string; startTime?: string }
 ): Promise<void> {
   try {
     const examRef = doc(db, 'exam', examId);
+    const rawDateTime = updates.examDateTime || updates.startTime || updates.startDate || updates.examDate;
+    const examDateTime = rawDateTime !== undefined ? (rawDateTime ? rawDateTime.trim() : '') : undefined;
+    const startDate = examDateTime !== undefined ? (examDateTime ? (examDateTime.includes('T') ? examDateTime.split('T')[0] : examDateTime) : '') : undefined;
+
     const payload: any = {
       ...updates,
+      ...(examDateTime !== undefined && { examDateTime, startTime: examDateTime, startDate, examDate: startDate }),
       updatedAt: serverTimestamp(),
     };
     await setDoc(examRef, payload, { merge: true });
@@ -520,6 +557,12 @@ export async function updateUpcomingExamInFirestore(
     if (updates.totalQuestions !== undefined) capitalUpdates.totalQuestions = updates.totalQuestions;
     if (updates.totalMarks !== undefined) capitalUpdates.totalMarks = updates.totalMarks;
     if (updates.questions !== undefined) capitalUpdates.questions = updates.questions;
+    if (examDateTime !== undefined) {
+      capitalUpdates.examDateTime = examDateTime;
+      capitalUpdates.startTime = examDateTime;
+      capitalUpdates.startDate = startDate;
+      capitalUpdates.examDate = startDate;
+    }
     await setDoc(capitalExamRef, capitalUpdates, { merge: true });
 
     // Also sync /exams/{examId}
@@ -530,8 +573,8 @@ export async function updateUpcomingExamInFirestore(
       ...(updates.status && { status: updates.status }),
       ...(updates.isPublished !== undefined && { isPublished: updates.isPublished }),
       ...(updates.examType && { isPremium: updates.examType === 'premium' }),
-      ...(updates.examDateTime && { startTime: updates.examDateTime }),
-      ...(updates.archiveDateTime && { archiveTime: updates.archiveDateTime }),
+      ...(examDateTime !== undefined && { startTime: examDateTime, startDate: startDate, examDateTime: examDateTime, examDate: startDate, dateCreated: startDate, createdAt: startDate }),
+      ...(updates.archiveDateTime && { archiveTime: updates.archiveDateTime, archiveDateTime: updates.archiveDateTime }),
       ...(updates.totalQuestions !== undefined && { totalQuestions: updates.totalQuestions }),
       ...(updates.totalMarks !== undefined && { totalMarks: updates.totalMarks }),
       ...(updates.questions !== undefined && { questions: updates.questions }),
@@ -1131,13 +1174,19 @@ export function subscribeToUpcomingExamSettings(callback: (settings: UpcomingExa
           }
         }
 
+        const rawDateTime = data.startTime || data.startDate || data.examDate || '';
+        const startTime = rawDateTime ? rawDateTime.trim() : '';
+        const startDate = data.startDate || (startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '');
+        const examDate = data.examDate || startDate || '';
+
         const settingsObj: UpcomingExamSettings = {
           id: docSnap.id,
           title: data.title || '',
           description: data.description || '',
           examId: data.examId || '',
-          examDate: data.examDate || '',
-          startTime: data.startTime || '',
+          examDate: examDate,
+          startDate: startDate,
+          startTime: startTime,
           duration: Number(data.duration || data.durationMinutes || 15),
           durationMinutes: Number(data.durationMinutes || data.duration || 15),
           isPublished: data.isPublished !== false,
@@ -1186,13 +1235,19 @@ export async function getUpcomingExamSettings(): Promise<UpcomingExamSettings | 
         }
       }
 
+      const rawDateTime = data.startTime || data.startDate || data.examDate || '';
+      const startTime = rawDateTime ? rawDateTime.trim() : '';
+      const startDate = data.startDate || (startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '');
+      const examDate = data.examDate || startDate || '';
+
       const settingsObj: UpcomingExamSettings = {
         id: docSnap.id,
         title: data.title || '',
         description: data.description || '',
         examId: data.examId || '',
-        examDate: data.examDate || '',
-        startTime: data.startTime || '',
+        examDate: examDate,
+        startDate: startDate,
+        startTime: startTime,
         duration: Number(data.duration || data.durationMinutes || 15),
         durationMinutes: Number(data.durationMinutes || data.duration || 15),
         isPublished: data.isPublished !== false,
@@ -1227,12 +1282,18 @@ export async function saveUpcomingExamSettings(settings: UpcomingExamSettings, u
   const docRef = doc(db, 'siteSettings', 'upcomingExam');
   const nowIso = new Date().toISOString();
   
+  const rawDateTime = settings.startTime || settings.startDate || settings.examDate || '';
+  const startTime = rawDateTime ? rawDateTime.trim() : '';
+  const startDate = startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '';
+  const examDate = startDate;
+
   const payload = {
     title: (settings.title || '').trim(),
     description: (settings.description || '').trim(),
     examId: settings.examId || '',
-    examDate: settings.examDate || '',
-    startTime: settings.startTime || '',
+    examDate: examDate || '',
+    startDate: startDate || '',
+    startTime: startTime || '',
     duration: Number(settings.duration || settings.durationMinutes || 15),
     durationMinutes: Number(settings.durationMinutes || settings.duration || 15),
     isPublished: settings.isPublished !== false,
