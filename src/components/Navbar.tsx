@@ -185,6 +185,26 @@ export default function Navbar({
               </button>
             ))}
 
+            {/* Mobile Theme Toggle */}
+            <div className="pt-2 pb-1 px-1">
+              <button
+                onClick={toggleDarkMode}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-amber-400 font-bold text-xs border border-slate-200 dark:border-slate-700 transition-all"
+              >
+                {darkMode ? (
+                  <>
+                    <Sun className="h-4 w-4 text-amber-500" />
+                    <span>ডে মোডে সুইচ করুন</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                    <span>নাইট মোডে সুইচ করুন</span>
+                  </>
+                )}
+              </button>
+            </div>
+
             {user ? (
               <div className="pt-4 pb-2 border-t border-slate-200 dark:border-slate-800 mt-4 px-3 space-y-3">
                 <div className="flex items-center gap-3">

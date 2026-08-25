@@ -2317,14 +2317,14 @@ export default function HomeView({
                               >
                                 <div className="flex items-center gap-3 pr-2">
                                   <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                                    isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                                    isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
                                   }`}>
                                     {optionLabels[optIdx]}
                                   </span>
                                   <span>{opt}</span>
                                 </div>
                                 {isCorrect && (
-                                  <span className="text-[11px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shrink-0 ml-2">
+                                  <span className="text-[11px] bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shrink-0 ml-2">
                                     <Check className="h-3.5 w-3.5" /> সঠিক উত্তর
                                   </span>
                                 )}
@@ -2332,13 +2332,13 @@ export default function HomeView({
                             );
                           } else {
                             // Interactive Practice Mode
-                            let btnStyle = 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-primary/50';
+                            let btnStyle = 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 hover:border-primary/50';
                             
                             if (selectedOpt !== undefined) {
                               if (isCorrect) {
-                                btnStyle = 'bg-emerald-500/15 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-bold';
+                                btnStyle = 'bg-emerald-500/15 border-emerald-500 text-emerald-950 dark:text-emerald-200 font-bold';
                               } else if (isSelectedByUser && !isCorrect) {
-                                btnStyle = 'bg-rose-500/15 border-rose-500 text-rose-900 dark:text-rose-200 font-bold';
+                                btnStyle = 'bg-rose-500/15 border-rose-500 text-rose-950 dark:text-rose-200 font-bold';
                               }
                             }
 
@@ -2353,7 +2353,7 @@ export default function HomeView({
                                 className={`p-3.5 sm:p-4 rounded-xl border text-xs sm:text-sm text-left transition-all flex items-center justify-between min-h-[48px] ${btnStyle}`}
                               >
                                 <div className="flex items-center gap-3 pr-2">
-                                  <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center text-xs font-bold shrink-0">
+                                  <span className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 flex items-center justify-center text-xs font-bold shrink-0">
                                     {optionLabels[optIdx]}
                                   </span>
                                   <span>{opt}</span>

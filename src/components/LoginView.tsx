@@ -829,32 +829,6 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                   : 'নতুন শিক্ষার্থী? এখানে একটি অ্যাকাউন্ট তৈরি করুন'}
               </button>
             </div>
-
-            {/* Quick Demo & Admin Access Panel */}
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700 text-xs space-y-2">
-              <div className="flex items-center justify-between text-slate-700 dark:text-slate-300 font-bold">
-                <span className="flex items-center gap-1.5">
-                  <ShieldAlert className="h-3.5 w-3.5 text-emerald-500" />
-                  এডমিন ডিরেক্ট অ্যাক্সেস
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('medha@admin.com');
-                    setPassword('777031');
-                    setIsRegistering(false);
-                    setError('');
-                  }}
-                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] transition-colors shadow-sm"
-                >
-                  তথ্য পূরণ করুন
-                </button>
-              </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                <span>ইমেইল: <code className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">medha@admin.com</code></span>
-                <span>পাসওয়ার্ড: <code className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">777031</code></span>
-              </div>
-            </div>
           </div>
         </div>
 
