@@ -135,13 +135,21 @@ export default function Navbar({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleNavClick('login')}
-                  className="px-4 py-2 text-sm font-medium glass-btn-secondary rounded-xl"
+                  className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${
+                    currentView === 'login'
+                      ? 'bg-primary text-white shadow-md shadow-primary/20 scale-[1.02]'
+                      : 'glass-btn-secondary text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
                 >
                   লগইন
                 </button>
                 <button
                   onClick={() => handleNavClick('register')}
-                  className="px-4 py-2 text-sm font-semibold text-white glass-btn-primary rounded-xl"
+                  className={`px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-200 cursor-pointer ${
+                    currentView === 'register'
+                      ? 'bg-primary text-white shadow-md shadow-primary/20 scale-[1.02]'
+                      : 'glass-btn-primary text-white'
+                  }`}
                 >
                   রেজিস্ট্রেশন
                 </button>
@@ -245,13 +253,21 @@ export default function Navbar({
               <div className="pt-4 space-y-2 px-3 border-t border-slate-100 dark:border-slate-800 mt-3">
                 <button
                   onClick={() => handleNavClick('login')}
-                  className="w-full py-2.5 text-center text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 border border-slate-200 dark:border-slate-800 rounded-xl"
+                  className={`w-full py-2.5 text-center text-sm font-semibold rounded-xl transition-all ${
+                    currentView === 'login'
+                      ? 'bg-primary text-white shadow-md'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+                  }`}
                 >
                   লগইন
                 </button>
                 <button
                   onClick={() => handleNavClick('register')}
-                  className="w-full py-2.5 text-center text-sm font-semibold text-white bg-primary hover:bg-primary-dark rounded-xl shadow-md"
+                  className={`w-full py-2.5 text-center text-sm font-semibold rounded-xl transition-all ${
+                    currentView === 'register'
+                      ? 'bg-primary text-white shadow-md'
+                      : 'text-white bg-primary/90 hover:bg-primary-dark shadow-md'
+                  }`}
                 >
                   রেজিস্ট্রেশন
                 </button>

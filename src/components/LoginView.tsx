@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, User, GraduationCap, ShieldAlert, ArrowRight, Chrome, ArrowLeft, KeyRound, Eye, EyeOff, Sparkles, X, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Mail, Lock, User, GraduationCap, ShieldAlert, ArrowRight, Chrome, ArrowLeft, KeyRound, Eye, EyeOff, Sparkles, X, CheckCircle2, ShieldCheck, RefreshCw, LogIn, UserPlus } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile } from '../types';
 import { 
   signInWithEmailAndPassword, 
@@ -635,19 +636,76 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
         {/* Right Side: Auth Inputs / Form */}
         <div className="col-span-1 lg:col-span-7 flex flex-col justify-center items-center p-6 sm:p-12 md:p-16 bg-white dark:bg-slate-900">
-          <div className="w-full max-w-md space-y-8">
+          <div className="w-full max-w-md space-y-6 sm:space-y-7">
             
-            {/* Form Top Headers */}
-            <div className="text-center lg:text-left space-y-2">
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
-                {isRegistering ? 'নতুন অ্যাকাউন্ট খুলুন' : 'মেধা পোর্টালে লগইন'}
-              </h1>
-              <p className="text-sm text-slate-500">
-                {isRegistering
-                  ? 'আপনার সঠিক তথ্য দিয়ে কুইজ টেস্টে অংশ নেওয়া শুরু করুন।'
-                  : 'পরীক্ষা দিতে ও আপনার ড্যাশবোর্ড অ্যাক্সেস করতে লগইন করুন।'}
-              </p>
+            {/* Animated Auth Mode Switcher Tabs */}
+            <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRegistering(false);
+                  setError('');
+                }}
+                className={`relative flex-1 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer z-10 ${
+                  !isRegistering
+                    ? 'text-slate-900 dark:text-white font-bold'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                {!isRegistering && (
+                  <motion.div
+                    layoutId="auth-tab-pill"
+                    className="absolute inset-0 bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200/70 dark:border-slate-700/70 -z-10"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <LogIn className="h-4 w-4" />
+                <span>লগইন</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRegistering(true);
+                  setError('');
+                }}
+                className={`relative flex-1 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer z-10 ${
+                  isRegistering
+                    ? 'text-slate-900 dark:text-white font-bold'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                {isRegistering && (
+                  <motion.div
+                    layoutId="auth-tab-pill"
+                    className="absolute inset-0 bg-white dark:bg-slate-900 rounded-xl shadow-xs border border-slate-200/70 dark:border-slate-700/70 -z-10"
+                    transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <UserPlus className="h-4 w-4" />
+                <span>রেজিস্ট্রেশন</span>
+              </button>
             </div>
+
+            {/* Form Top Headers with Smooth Transition */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={isRegistering ? 'register-header' : 'login-header'}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className="text-center lg:text-left space-y-1.5"
+              >
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                  {isRegistering ? 'নতুন অ্যাকাউন্ট খুলুন' : 'মেধা পোর্টালে লগইন'}
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500">
+                  {isRegistering
+                    ? 'আপনার সঠিক তথ্য দিয়ে কুইজ টেস্টে অংশ নেওয়া শুরু করুন।'
+                    : 'পরীক্ষা দিতে ও আপনার ড্যাশবোর্ড অ্যাক্সেস করতে লগইন করুন।'}
+                </p>
+              </motion.div>
+            </AnimatePresence>
 
             {/* Error Message Alert */}
             {error && (
@@ -659,44 +717,53 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
             {/* Standard Credentials Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
-              {isRegistering && (
-                <>
-                  {/* Name field */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-600 dark:text-slate-300">নাম</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                        <User className="h-4.5 w-4.5" />
+              <AnimatePresence initial={false}>
+                {isRegistering && (
+                  <motion.div
+                    key="registration-fields"
+                    initial={{ opacity: 0, height: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                    exit={{ opacity: 0, height: 0, scale: 0.98 }}
+                    transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                    className="space-y-4 overflow-hidden"
+                  >
+                    {/* Name field */}
+                    <div className="space-y-1.5 pt-0.5">
+                      <label className="text-xs font-bold text-slate-600 dark:text-slate-300">নাম</label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                          <User className="h-4.5 w-4.5" />
+                        </div>
+                        <input
+                          type="text"
+                          required={isRegistering}
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="আপনার সম্পূর্ণ নাম লিখুন"
+                          className="block w-full pl-10 pr-3.5 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        />
                       </div>
-                      <input
-                        type="text"
-                        required
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="আপনার সম্পূর্ণ নাম লিখুন"
-                        className="block w-full pl-10 pr-3.5 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                      />
                     </div>
-                  </div>
 
-                  {/* Institution Field */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-600 dark:text-slate-300">শিক্ষা প্রতিষ্ঠান</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                        <GraduationCap className="h-4.5 w-4.5" />
+                    {/* Institution Field */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-600 dark:text-slate-300">শিক্ষা প্রতিষ্ঠান</label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                          <GraduationCap className="h-4.5 w-4.5" />
+                        </div>
+                        <input
+                          type="text"
+                          value={institution}
+                          onChange={(e) => setInstitution(e.target.value)}
+                          placeholder="আপনার শিক্ষা প্রতিষ্ঠানের নাম লিখুন"
+                          className="block w-full pl-10 pr-3.5 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        />
                       </div>
-                      <input
-                        type="text"
-                        value={institution}
-                        onChange={(e) => setInstitution(e.target.value)}
-                        placeholder="আপনার শিক্ষা প্রতিষ্ঠানের নাম লিখুন"
-                        className="block w-full pl-10 pr-3.5 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                      />
                     </div>
-                  </div>
-                </>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Email Address */}
               <div className="space-y-1.5">
@@ -724,7 +791,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                     <button
                       type="button"
                       onClick={() => setShowForgotModal(true)}
-                      className="text-xs font-semibold text-primary hover:underline"
+                      className="text-xs font-semibold text-primary hover:underline cursor-pointer"
                     >
                       পাসওয়ার্ড ভুলে গেছেন?
                     </button>
@@ -739,7 +806,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="Password"
                     className="block w-full pl-10 pr-10 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                   />
                   <button
@@ -759,25 +826,40 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
               </div>
 
               {/* Submit Button */}
-              <button
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 glass-btn-primary text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-3 px-4 glass-btn-primary text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {loading ? 'অপেক্ষা করুন...' : (isRegistering ? 'নিবন্ধন সম্পন্ন করুন' : 'প্রবেশ করুন')}
-                <ArrowRight className="h-4 w-4" />
-              </button>
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={loading ? 'loading' : (isRegistering ? 'reg' : 'log')}
+                    initial={{ opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -3 }}
+                    transition={{ duration: 0.15 }}
+                    className="flex items-center gap-2"
+                  >
+                    {loading ? 'অপেক্ষা করুন...' : (isRegistering ? 'নিবন্ধন সম্পন্ন করুন' : 'প্রবেশ করুন')}
+                    <ArrowRight className="h-4 w-4" />
+                  </motion.span>
+                </AnimatePresence>
+              </motion.button>
             </form>
 
             {/* Split / Or Divider */}
-            <div className="relative flex items-center py-2">
+            <div className="relative flex items-center py-1">
               <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
               <span className="flex-shrink mx-4 text-xs font-medium text-slate-400 uppercase">অথবা</span>
               <div className="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
             </div>
 
             {/* Google Identity Provider Login / Sign-up Button */}
-            <button
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
               onClick={handleGoogleLogin}
               disabled={loading}
               type="button"
@@ -805,12 +887,20 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                   />
                 </svg>
               )}
-              <span>
-                {loading
-                  ? 'প্রবেশ করা হচ্ছে...'
-                  : (isRegistering ? 'Google অ্যাকাউন্ট দিয়ে সাইন আপ করুন' : 'Google অ্যাকাউন্ট দিয়ে সাইন ইন করুন')}
-              </span>
-            </button>
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={loading ? 'loading' : (isRegistering ? 'g-reg' : 'g-log')}
+                  initial={{ opacity: 0, y: 3 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -3 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  {loading
+                    ? 'প্রবেশ করা হচ্ছে...'
+                    : (isRegistering ? 'Google অ্যাকাউন্ট দিয়ে সাইন আপ করুন' : 'Google অ্যাকাউন্ট দিয়ে সাইন ইন করুন')}
+                </motion.span>
+              </AnimatePresence>
+            </motion.button>
 
             {/* Toggle state link */}
             <div className="text-center pt-2">
@@ -820,11 +910,22 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                   setIsRegistering(!isRegistering);
                   setError('');
                 }}
-                className="text-xs sm:text-sm text-slate-500 hover:text-slate-700 font-medium"
+                className="text-xs sm:text-sm text-slate-500 hover:text-primary transition-colors font-medium cursor-pointer"
               >
-                {isRegistering
-                  ? 'ইতিমধ্যে একটি অ্যাকাউন্ট আছে? লগইন করুন'
-                  : 'নতুন শিক্ষার্থী? এখানে একটি অ্যাকাউন্ট তৈরি করুন'}
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={isRegistering ? 'to-login' : 'to-register'}
+                    initial={{ opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -3 }}
+                    transition={{ duration: 0.15 }}
+                    className="inline-block"
+                  >
+                    {isRegistering
+                      ? 'ইতিমধ্যে একটি অ্যাকাউন্ট আছে? লগইন করুন'
+                      : 'নতুন শিক্ষার্থী? এখানে একটি অ্যাকাউন্ট তৈরি করুন'}
+                  </motion.span>
+                </AnimatePresence>
               </button>
             </div>
           </div>
