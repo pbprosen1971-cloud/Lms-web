@@ -4,10 +4,11 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { User, Phone, GraduationCap, Mail, Award, Calendar, ChevronRight, CheckCircle2, ShieldAlert, Check, Edit2, Trash2, Image, Crown, Sparkles, ShieldCheck } from 'lucide-react';
+import { User, Phone, GraduationCap, Mail, Award, Calendar, ChevronRight, CheckCircle2, ShieldAlert, Check, Edit2, Trash2, Image, Crown, Sparkles, ShieldCheck, Loader2 } from 'lucide-react';
 import { UserProfile, ExamResult } from '../types';
 import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { updateProfile } from 'firebase/auth';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { formatSafeDisplay, safeTimestampToString } from '../lib/dateUtils';
 
 interface ProfileViewProps {
@@ -30,6 +31,7 @@ export default function ProfileView({
   const [name, setName] = useState(user.name);
   const [avatar, setAvatar] = useState(user.avatar || '');
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
   React.useEffect(() => {
@@ -65,31 +67,57 @@ export default function ProfileView({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
+    const trimmedName = name.trim() || user.name || 'শিক্ষার্থী';
+    const trimmedPhone = phone.trim();
+    const trimmedInstitution = institution.trim();
+    const trimmedAvatar = avatar.trim();
+
     const updated: UserProfile = {
       ...user,
-      name,
-      fullName: name,
-      phone,
-      institution,
-      avatar,
+      name: trimmedName,
+      fullName: trimmedName,
+      displayName: trimmedName,
+      phone: trimmedPhone,
+      institution: trimmedInstitution,
+      avatar: trimmedAvatar,
+      photoURL: trimmedAvatar || user.photoURL || '',
     };
 
-    const targetUid = user.id || user.uid;
+    const targetUid = user.id || user.uid || auth.currentUser?.uid;
     if (targetUid) {
       try {
         await setDoc(doc(db, 'users', targetUid), {
-          name,
-          fullName: name,
-          phone,
-          institution,
-          avatar,
+          name: trimmedName,
+          fullName: trimmedName,
+          displayName: trimmedName,
+          phone: trimmedPhone,
+          institution: trimmedInstitution,
+          avatar: trimmedAvatar,
+          photoURL: trimmedAvatar || '',
         }, { merge: true });
       } catch (err) {
         console.warn("Error updating user profile in Firestore:", err);
       }
     }
 
+    if (auth.currentUser) {
+      try {
+        await updateProfile(auth.currentUser, {
+          displayName: trimmedName,
+          photoURL: trimmedAvatar || undefined,
+        });
+      } catch (authErr) {
+        console.warn("Error updating auth profile displayName/photoURL:", authErr);
+      }
+    }
+
+    try {
+      localStorage.setItem('active_user_session', JSON.stringify(updated));
+    } catch (e) {}
+
     onUpdateUser(updated);
+    setIsSaving(false);
     setIsEditing(false);
     setSuccessMsg('তথ্যগুলো সফলভাবে আপডেট করা হয়েছে এবং ফায়ারবেসে সংরক্ষিত হয়েছে!');
     setTimeout(() => setSuccessMsg(''), 3000);
@@ -290,9 +318,17 @@ export default function ProfileView({
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-md transition-colors"
+                disabled={isSaving}
+                className="w-full py-2.5 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
               >
-                পরিবর্তন সংরক্ষণ করুন
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>সংরক্ষণ হচ্ছে...</span>
+                  </>
+                ) : (
+                  <span>পরিবর্তন সংরক্ষণ করুন</span>
+                )}
               </button>
             </form>
           ) : (

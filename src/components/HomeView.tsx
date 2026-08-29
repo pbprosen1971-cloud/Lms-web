@@ -626,18 +626,22 @@ export default function HomeView({
     e.preventDefault();
     setPaymentProcessing(true);
 
+    const customerName = user?.name || user?.fullName || (user?.email ? user.email.split('@')[0] : 'শিক্ষার্থী');
+    const customerEmail = user?.email || 'student@medha.com';
+    const customerPhone = user?.phone || '01700000000';
+
     const payload = {
       amount: selectedPlan.price,
-      cus_name: user?.name || 'Prosenjit Biswas',
-      cus_email: user?.email || 'pbprosen1971@gmail.com',
-      cus_phone: user?.phone || '01700000000',
-      customer_name: user?.name || 'Prosenjit Biswas',
-      customer_email: user?.email || 'pbprosen1971@gmail.com',
-      customer_phone: user?.phone || '01700000000',
+      cus_name: customerName,
+      cus_email: customerEmail,
+      cus_phone: customerPhone,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      customer_phone: customerPhone,
       metadata: {
         planId: selectedPlan.id,
         planTitle: selectedPlan.title,
-        userId: user?.id || 'guest',
+        userId: user?.id || user?.uid || 'guest',
       }
     };
 
@@ -676,15 +680,15 @@ export default function HomeView({
           body: JSON.stringify({
             amount: selectedPlan.price,
             currency: 'BDT',
-            cus_name: user?.name || 'Prosenjit Biswas',
-            cus_email: user?.email || 'pbprosen1971@gmail.com',
-            cus_phone: user?.phone || '01700000000',
+            cus_name: customerName,
+            cus_email: customerEmail,
+            cus_phone: customerPhone,
             cus_add1: 'Dhaka',
             cus_city: 'Dhaka',
             cus_country: 'Bangladesh',
-            customer_name: user?.name || 'Prosenjit Biswas',
-            customer_email: user?.email || 'pbprosen1971@gmail.com',
-            customer_phone: user?.phone || '01700000000',
+            customer_name: customerName,
+            customer_email: customerEmail,
+            customer_phone: customerPhone,
             redirect_url: window.location.origin + '?payment=success',
             cancel_url: window.location.origin + '?payment=cancel',
             return_url: window.location.origin + '?payment=success',

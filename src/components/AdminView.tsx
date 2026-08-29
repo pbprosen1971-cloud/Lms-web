@@ -1047,6 +1047,84 @@ export default function AdminView({
     }
   };
 
+  // Student Profile Editing & Name Repair States
+  const [editingStudent, setEditingStudent] = useState<any | null>(null);
+  const [editStudentName, setEditStudentName] = useState<string>('');
+  const [editStudentInstitution, setEditStudentInstitution] = useState<string>('');
+  const [editStudentPhone, setEditStudentPhone] = useState<string>('');
+  const [savingStudent, setSavingStudent] = useState<boolean>(false);
+  const [studentSaveMsg, setStudentSaveMsg] = useState<string>('');
+
+  const [repairingNames, setRepairingNames] = useState<boolean>(false);
+  const [repairCount, setRepairCount] = useState<number | null>(null);
+
+  const handleOpenEditStudent = (stud: any) => {
+    setEditingStudent(stud);
+    setEditStudentName(stud.name || stud.fullName || '');
+    setEditStudentInstitution(stud.institution || '');
+    setEditStudentPhone(stud.phone || '');
+    setStudentSaveMsg('');
+  };
+
+  const handleSaveStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    setSavingStudent(true);
+    setStudentSaveMsg('');
+
+    const targetDocId = editingStudent.uid || editingStudent.id;
+    const updatedName = editStudentName.trim() || (editingStudent.email ? editingStudent.email.split('@')[0] : 'শিক্ষার্থী');
+
+    try {
+      await setDoc(doc(db, 'users', targetDocId), {
+        name: updatedName,
+        fullName: updatedName,
+        displayName: updatedName,
+        institution: editStudentInstitution.trim(),
+        phone: editStudentPhone.trim(),
+      }, { merge: true });
+
+      setStudentSaveMsg('শিক্ষার্থীর প্রোফাইল সফলভাবে আপডেট করা হয়েছে!');
+      setTimeout(() => {
+        setEditingStudent(null);
+        setStudentSaveMsg('');
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to update student profile in Firestore:", err);
+    } finally {
+      setSavingStudent(false);
+    }
+  };
+
+  const handleRepairCorruptedNames = async () => {
+    setRepairingNames(true);
+    let count = 0;
+    try {
+      for (const stud of firestoreStudents) {
+        const email = (stud.email || '').toLowerCase().trim();
+        const isFounder = email === 'pbprosen1971@gmail.com' || email === 'prosenjit@medha.com';
+        if ((stud.name === 'Prosenjit Biswas' || stud.fullName === 'Prosenjit Biswas') && !isFounder) {
+          const correctName = (stud.displayName && stud.displayName !== 'Prosenjit Biswas') 
+            ? stud.displayName 
+            : (stud.email ? stud.email.split('@')[0] : 'শিক্ষার্থী');
+          const targetDocId = stud.uid || stud.id;
+          await setDoc(doc(db, 'users', targetDocId), {
+            name: correctName,
+            fullName: correctName,
+            displayName: correctName,
+          }, { merge: true });
+          count++;
+        }
+      }
+      setRepairCount(count);
+      setTimeout(() => setRepairCount(null), 5000);
+    } catch (err) {
+      console.warn("Batch name repair failed:", err);
+    } finally {
+      setRepairingNames(false);
+    }
+  };
+
   // Add more option inputs dynamically to new question creator
   const handleAddQuestionField = () => {
     setNewQuestions([
@@ -1283,22 +1361,44 @@ export default function AdminView({
           {activeTab === 'students' && (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <h3 className="font-bold text-lg text-slate-900 dark:text-white">শিক্ষার্থী তালিকা ও একাউন্ট কন্ট্রোল</h3>
+                <div>
+                  <h3 className="font-bold text-lg text-slate-900 dark:text-white">শিক্ষার্থী তালিকা ও একাউন্ট কন্ট্রোল</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">মোট শিক্ষার্থী: {firestoreStudents.length} জন</p>
+                </div>
                 
-                {/* Search input inside tab */}
-                <div className="relative max-w-xs w-full">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 dark:text-slate-400">
-                    <Search className="h-4 w-4" />
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={handleRepairCorruptedNames}
+                    disabled={repairingNames}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-300 dark:border-amber-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                    title="ডেটাবেজের ডিফল্ট নামগুলো রিয়েল নামে সিঙ্ক করুন"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${repairingNames ? 'animate-spin' : ''}`} />
+                    <span>{repairingNames ? 'সংস্কার হচ্ছে...' : 'নাম অটো-সংস্কার'}</span>
+                  </button>
+
+                  {/* Search input inside tab */}
+                  <div className="relative max-w-xs w-full">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 dark:text-slate-400">
+                      <Search className="h-4 w-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="নাম, ইমেইল বা UID দিয়ে খুঁজুন..."
+                      className="block w-full pl-9 pr-3.5 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="নাম, ইমেইল বা UID দিয়ে খুঁজুন..."
-                    className="block w-full pl-9 pr-3.5 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
                 </div>
               </div>
+
+              {repairCount !== null && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 text-xs font-semibold rounded-xl flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>{repairCount > 0 ? `${repairCount} জন শিক্ষার্থীর নাম সফলভাবে সংস্কার করা হয়েছে!` : 'সব শিক্ষার্থীর নাম ইতোমধ্যে সঠিকভাবে সেট করা আছে।'}</span>
+                </div>
+              )}
 
               {/* Students Grid/Table */}
               <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700/60">
@@ -1394,13 +1494,22 @@ export default function AdminView({
                           </td>
                           <td className="p-3 text-center font-bold">{stud.examsCount} বার</td>
                           <td className="p-3 text-right">
-                            <button
-                              onClick={() => handleDeleteStudent(stud.id, stud.email)}
-                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg dark:hover:bg-rose-950/30"
-                              title="সদস্য মুছুন"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenEditStudent(stud)}
+                                className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                title="প্রোফাইল তথ্য ও নাম এডিট করুন"
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteStudent(stud.id, stud.email)}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg dark:hover:bg-rose-950/30 transition-colors"
+                                title="সদস্য মুছুন"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -1408,6 +1517,93 @@ export default function AdminView({
                   </tbody>
                 </table>
               </div>
+
+              {/* Edit Student Modal */}
+              {editingStudent && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div>
+                        <h4 className="font-bold text-base text-slate-900 dark:text-white">শিক্ষার্থীর তথ্য সংশোধন</h4>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{editingStudent.email}</p>
+                      </div>
+                      <button
+                        onClick={() => setEditingStudent(null)}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveStudent} className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          শিক্ষার্থীর পূর্ণ নাম *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={editStudentName}
+                          onChange={(e) => setEditStudentName(e.target.value)}
+                          className="w-full px-3.5 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="সঠিক নাম লিখুন"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          শিক্ষা প্রতিষ্ঠান
+                        </label>
+                        <input
+                          type="text"
+                          value={editStudentInstitution}
+                          onChange={(e) => setEditStudentInstitution(e.target.value)}
+                          className="w-full px-3.5 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="শিক্ষা প্রতিষ্ঠানের নাম"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          ফোন নম্বর
+                        </label>
+                        <input
+                          type="text"
+                          value={editStudentPhone}
+                          onChange={(e) => setEditStudentPhone(e.target.value)}
+                          className="w-full px-3.5 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                          placeholder="০১৭০০-০০০০০০"
+                        />
+                      </div>
+
+                      {studentSaveMsg && (
+                        <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-lg flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span>{studentSaveMsg}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingStudent(null)}
+                          className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                        >
+                          বাতিল
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={savingStudent}
+                          className="px-5 py-2 text-xs font-bold text-white bg-primary hover:bg-primary-dark rounded-xl shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          {savingStudent ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : null}
+                          <span>{savingStudent ? 'সংরক্ষণ হচ্ছে...' : 'পরিবর্তন সংরক্ষণ করুন'}</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

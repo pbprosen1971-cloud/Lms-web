@@ -13,7 +13,8 @@ import {
   GoogleAuthProvider,
   sendPasswordResetEmail,
   sendEmailVerification,
-  signOut
+  signOut,
+  updateProfile
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
@@ -103,7 +104,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
       const isSpecialStudent = lowerEmail === 'prosenjit@medha.com' || lowerEmail === 'student@medha.com';
 
       if (isRegistering) {
-        if (!name) {
+        const trimmedName = name.trim();
+        if (!trimmedName) {
           setError('দয়া করে আপনার নাম প্রদান করুন।');
           setLoading(false);
           return;
@@ -113,11 +115,18 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         let firebaseUser: any = null;
         try {
           // 1. Create User in Firebase Auth
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
           firebaseUser = userCredential.user;
           uid = firebaseUser.uid;
 
-          // 2. Send Email Verification using Firebase Auth
+          // 2. Set Firebase Auth displayName to user's real signup name
+          try {
+            await updateProfile(firebaseUser, { displayName: trimmedName });
+          } catch (profErr) {
+            console.warn("Failed to set auth displayName:", profErr);
+          }
+
+          // 3. Send Email Verification using Firebase Auth
           try {
             await sendEmailVerification(firebaseUser);
           } catch (e) {}
@@ -129,14 +138,15 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           }
         }
 
-        // 3. Prepare Profile Shape conforming to users/{uid} collection schema
+        // 4. Prepare Profile Shape conforming to users/{uid} collection schema
         const nowIso = new Date().toISOString();
         const newUserProfile: UserProfile = {
           id: uid,
           uid: uid,
-          name: name,
-          fullName: name,
-          email: email,
+          name: trimmedName,
+          fullName: trimmedName,
+          displayName: trimmedName,
+          email: email.trim(),
           phone: '',
           photoURL: '',
           avatar: '',
@@ -144,7 +154,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           accountStatus: 'active',
           createdAt: nowIso,
           lastLogin: nowIso,
-          institution: institution || '',
+          institution: institution?.trim() || '',
           joinedDate: new Date().toLocaleDateString('bn-BD'),
           earnedCertificates: [],
           isPremium: false,
@@ -154,7 +164,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           inPremiumExpiryDate: '',
         };
 
-        // 4. Store Profile in Firestore (degrades gracefully)
+        // 5. Store Profile in Firestore (degrades gracefully)
         try {
           await setDoc(doc(db, 'users', uid), newUserProfile, { merge: true });
         } catch (dbErr) {
@@ -398,16 +408,16 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
     }
   };
 
-  // Google Sign-In with Popup & Sandbox Fallback
+  // Google Sign-In with Popup
   const handleGoogleLogin = async () => {
     setError('');
     setLoading(true);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
 
-    // Set a fast 4-second timeout guard so preview iframe never hangs indefinitely
+    // Set a fast 6-second timeout guard so preview iframe doesn't hang indefinitely
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('auth/timeout')), 4000)
+      setTimeout(() => reject(new Error('auth/timeout')), 6000)
     );
 
     try {
@@ -418,6 +428,10 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
       const uid = result.user.uid;
       const nowIso = new Date().toISOString();
+      const userEmail = result.user.email?.toLowerCase() || '';
+      const isUserAdmin = userEmail === 'medha@admin.com' || userEmail === 'admin@medha.com';
+      const isFounderProsenjit = userEmail === 'pbprosen1971@gmail.com' || userEmail === 'prosenjit@medha.com';
+      const googleDisplayName = result.user.displayName || (result.user.email ? result.user.email.split('@')[0] : 'User');
 
       // Check if profile exists in Firestore
       let profile: UserProfile | null = null;
@@ -434,17 +448,15 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         }
       }
 
-      // Create new profile if not found, or update lastLogin
+      // Create new profile if not found, or update lastLogin & repair name if needed
       if (!profile) {
-        const userEmail = result.user.email?.toLowerCase() || '';
-        const isUserAdmin = userEmail === 'medha@admin.com' || userEmail === 'admin@medha.com';
-        const displayName = result.user.displayName || (result.user.email ? result.user.email.split('@')[0] : 'Prosenjit Biswas');
         profile = {
           id: uid,
           uid: uid,
-          name: displayName,
-          fullName: displayName,
-          email: result.user.email || 'pbprosen1971@gmail.com',
+          name: googleDisplayName,
+          fullName: googleDisplayName,
+          displayName: googleDisplayName,
+          email: result.user.email || '',
           phone: result.user.phoneNumber || '',
           photoURL: result.user.photoURL || '',
           avatar: result.user.photoURL || '',
@@ -472,70 +484,41 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         }
       } else {
         profile.lastLogin = nowIso;
+        const updates: any = { lastLogin: nowIso };
+
+        // Automatically repair Firestore user document if stored name was bugged "Prosenjit Biswas" or empty
+        if (
+          !profile.name ||
+          ((profile.name === 'Prosenjit Biswas' || profile.fullName === 'Prosenjit Biswas') && !isFounderProsenjit)
+        ) {
+          profile.name = googleDisplayName;
+          profile.fullName = googleDisplayName;
+          profile.displayName = googleDisplayName;
+          updates.name = googleDisplayName;
+          updates.fullName = googleDisplayName;
+          updates.displayName = googleDisplayName;
+        }
+
+        if (result.user.photoURL && (!profile.photoURL || !profile.avatar)) {
+          profile.photoURL = profile.photoURL || result.user.photoURL;
+          profile.avatar = profile.avatar || result.user.photoURL;
+          updates.photoURL = profile.photoURL;
+          updates.avatar = profile.avatar;
+        }
+
         try {
-          await setDoc(doc(db, 'users', uid), { lastLogin: nowIso }, { merge: true });
+          await setDoc(doc(db, 'users', uid), updates, { merge: true });
         } catch (e) {
-          console.warn("Failed to update lastLogin for google user", e);
+          console.warn("Failed to update lastLogin/name for google user", e);
         }
       }
 
+      localStorage.setItem('active_user_session', JSON.stringify(profile));
       onLoginSuccess(profile);
       setView(profile.role === 'admin' ? 'admin' : 'dashboard');
     } catch (err: any) {
       console.warn('Google Sign-In Popup failed or blocked in environment:', err);
-      
       const errorCode = err?.code || err?.message || '';
-      
-      // If popup is blocked by iframe, unauthorized domain in preview, or timed out:
-      // Provide an automatic, graceful direct login fallback for pbprosen1971@gmail.com
-      if (
-        errorCode === 'auth/popup-blocked' ||
-        errorCode === 'auth/unauthorized-domain' ||
-        errorCode === 'auth/popup-closed-by-user' ||
-        errorCode === 'auth/timeout' ||
-        errorCode.includes('timeout') ||
-        errorCode.includes('cross-origin') ||
-        errorCode.includes('network') ||
-        errorCode.includes('auth/')
-      ) {
-        // Log in directly with student profile for pbprosen1971@gmail.com
-        const uid = 'google-user-pbprosen1971';
-        const nowIso = new Date().toISOString();
-        const fallbackProfile: UserProfile = {
-          id: uid,
-          uid: uid,
-          name: 'Prosenjit Biswas',
-          fullName: 'Prosenjit Biswas',
-          email: 'pbprosen1971@gmail.com',
-          phone: '+৮৮০ ১৭০০-০০০০০০',
-          photoURL: '',
-          avatar: '',
-          role: 'student',
-          accountStatus: 'active',
-          createdAt: nowIso,
-          lastLogin: nowIso,
-          institution: 'ঢাকা বিশ্ববিদ্যালয়',
-          joinedDate: new Date().toLocaleDateString('bn-BD'),
-          earnedCertificates: [],
-          isPremium: true,
-          isPremiumDate: nowIso,
-          isPremiumExpiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-          inPremiumDate: nowIso,
-          inPremiumExpiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-        };
-
-        // Try storing in firestore doc for consistency
-        try {
-          await setDoc(doc(db, 'users', uid), fallbackProfile, { merge: true });
-        } catch (fsErr) {
-          console.warn("Firestore fallback profile write exception:", fsErr);
-        }
-
-        onLoginSuccess(fallbackProfile);
-        setView('dashboard');
-        return;
-      }
-
       setError(getBengaliErrorMessage(errorCode));
     } finally {
       setLoading(false);

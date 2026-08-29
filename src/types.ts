@@ -77,6 +77,7 @@ export interface UserProfile {
   uid: string;
   name: string;
   fullName: string;
+  displayName?: string;
   email: string;
   phone?: string;
   photoURL?: string;

@@ -452,7 +452,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
             return (
               <div
                 key={exam.id}
-                className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-850 border border-slate-200/80 dark:border-slate-700/70 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col gap-4"
+                className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col gap-4"
               >
                 {/* Top Row: Badges, Title & Copy ID */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -460,65 +460,65 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                     <div className="flex flex-wrap items-center gap-2">
                       {/* Live or Archived Badge */}
                       {subTab === 'live' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                           চলমান (Live)
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                           <Archive className="h-3 w-3" />
                           আর্কাইভ (Archived)
                         </span>
                       )}
 
                       {/* Subject Tag */}
-                      <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
                         {exam.subject || 'সাধারণ'}
                       </span>
 
                       {/* Free / Premium Badge */}
                       {exam.isPremium ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                           <Crown className="h-3 w-3 text-amber-500" /> প্রিমিয়াম
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                           ফ্রি
                         </span>
                       )}
 
                       {/* Auto-archive countdown indicator if live */}
                       {subTab === 'live' && hasArchiveTime && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200/60 dark:border-sky-800/40">
-                          <Clock className="h-3 w-3 text-sky-500" /> অটো-আর্কাইভ শিডিউল্ড
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-50 dark:bg-sky-950/60 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
+                          <Clock className="h-3 w-3 text-sky-600 dark:text-sky-400" /> অটো-আর্কাইভ শিডিউল্ড
                         </span>
                       )}
                     </div>
 
                     {/* Title */}
-                    <h4 className="text-base sm:text-lg font-black text-slate-900 dark:text-white pt-1">
+                    <h4 className="text-base sm:text-lg font-black text-slate-900 dark:text-white pt-1 leading-snug">
                       {exam.title}
                     </h4>
 
                     {/* Description if present */}
                     {exam.description && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                      <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 leading-relaxed">
                         {exam.description}
                       </p>
                     )}
                   </div>
 
                   {/* Monospace Exam ID pill with copy button */}
-                  <div className="flex items-center gap-1 self-start bg-slate-100 dark:bg-slate-900/80 px-2.5 py-1.5 rounded-xl border border-slate-200/60 dark:border-slate-800 text-[11px] font-mono text-slate-600 dark:text-slate-400">
-                    <span className="text-slate-400 select-none">ID:</span>
-                    <span className="font-bold">{exam.id}</span>
+                  <div className="flex items-center gap-1 self-start bg-slate-100 dark:bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px] font-mono text-slate-700 dark:text-slate-300">
+                    <span className="text-slate-500 dark:text-slate-400 select-none">ID:</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">{exam.id}</span>
                     <button
                       onClick={() => handleCopyId(exam.id)}
                       title="ID কপি করুন"
-                      className="p-1 hover:text-primary transition-colors ml-1"
+                      className="p-1 text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-primary transition-colors ml-1"
                     >
                       {copiedExamId === exam.id ? (
-                        <Check className="h-3 w-3 text-emerald-600" />
+                        <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                       ) : (
                         <Copy className="h-3 w-3" />
                       )}
@@ -527,42 +527,42 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                 </div>
 
                 {/* Metadata Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-50 dark:bg-slate-950/70 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs">
                   <div>
-                    <span className="block text-[11px] text-slate-400 font-medium">সময়সীমা:</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">
+                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-semibold">সময়সীমা:</span>
+                    <span className="font-extrabold text-slate-800 dark:text-slate-100">
                       {toBengaliDigits(exam.durationMinutes || 0)} মিনিট
                     </span>
                   </div>
                   <div>
-                    <span className="block text-[11px] text-slate-400 font-medium">মোট প্রশ্ন ও মার্কস:</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">
+                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-semibold">মোট প্রশ্ন ও মার্কস:</span>
+                    <span className="font-extrabold text-slate-800 dark:text-slate-100">
                       {toBengaliDigits(questionCount)} টি ({toBengaliDigits(marksCount)} মার্ক)
                     </span>
                   </div>
                   <div>
-                    <span className="block text-[11px] text-slate-400 font-medium">তৈরির তারিখ:</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">
+                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-semibold">তৈরির তারিখ:</span>
+                    <span className="font-extrabold text-slate-800 dark:text-slate-100">
                       {formatSafeDisplay(exam.dateCreated, '—')}
                     </span>
                   </div>
                   <div>
-                    <span className="block text-[11px] text-slate-400 font-medium">
+                    <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
                       {subTab === 'live' ? 'আর্কাইভ তারিখ ও সময়:' : 'আর্কাইভ হওয়ার তারিখ:'}
                     </span>
-                    <span className={`font-bold ${hasArchiveTime ? 'text-primary' : 'text-slate-500'}`}>
+                    <span className={`font-extrabold ${hasArchiveTime ? 'text-primary dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
                       {archiveDateFormatted}
                     </span>
                   </div>
                 </div>
 
                 {/* Action Buttons Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800">
                   <div className="flex flex-wrap items-center gap-2">
                     {/* 1. Set / Edit Archive Date Button */}
                     <button
                       onClick={() => handleOpenDateModal(exam)}
-                      className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-all"
+                      className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
                     >
                       <Calendar className="h-3.5 w-3.5 text-primary" />
                       <span>{hasArchiveTime ? 'আর্কাইভ তারিখ পরিবর্তন' : 'আর্কাইভ তারিখ সেট করুন'}</span>
@@ -573,7 +573,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                       <>
                         <button
                           onClick={() => handleOpenStatusModal(exam, 'archive')}
-                          className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60 flex items-center gap-1.5 transition-all"
+                          className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1.5 transition-all cursor-pointer"
                         >
                           <Archive className="h-3.5 w-3.5" />
                           <span>আর্কাইভ করুন</span>
@@ -581,17 +581,17 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
 
                         <button
                           onClick={() => handleOpenStatusModal(exam, 'archive')}
-                          className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition-all"
+                          className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
                           title="পরীক্ষাটি লাইভ থেকে নামিয়ে আর্কাইভে স্থানান্তর করুন"
                         >
-                          <EyeOff className="h-3.5 w-3.5 text-slate-500" />
+                          <EyeOff className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                           <span>লাইভ থেকে সরান</span>
                         </button>
                       </>
                     ) : (
                       <button
                         onClick={() => handleOpenStatusModal(exam, 'live')}
-                        className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/25 flex items-center gap-1.5 transition-all"
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/25 flex items-center gap-1.5 transition-all cursor-pointer"
                       >
                         <Play className="h-3.5 w-3.5" />
                         <span>পুনরায় চালু করুন (Make Live)</span>
@@ -602,10 +602,10 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                   {/* 3. Permanent Delete Button */}
                   <button
                     onClick={() => handleOpenDeleteModal(exam)}
-                    className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 border border-rose-200/60 dark:border-rose-800/60 flex items-center gap-1.5 transition-all ml-auto"
+                    className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-1.5 transition-all ml-auto cursor-pointer"
                     title="ডেটাবেজ থেকে এই পরীক্ষা ও এর সকল প্রশ্ন স্থায়ীভাবে মুছে ফেলুন"
                   >
-                    <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                    <Trash2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
                     <span>স্থায়ীভাবে মুছে ফেলুন</span>
                   </button>
                 </div>
@@ -619,8 +619,8 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
       {/* 1. MODAL: SET / EDIT ARCHIVE DATE & TIME */}
       {/* ========================================================= */}
       {dateModalExam && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-850 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-primary/10 rounded-xl text-primary">
@@ -630,12 +630,12 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                   <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
                     আর্কাইভ তারিখ ও সময় নির্ধারণ
                   </h3>
-                  <p className="text-xs text-slate-400">পরীক্ষা: {dateModalExam.title}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">পরীক্ষা: {dateModalExam.title}</p>
                 </div>
               </div>
               <button
                 onClick={() => setDateModalExam(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -643,63 +643,63 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
                   আর্কাইভের নির্দিষ্ট তারিখ ও সময় (Auto Archive DateTime)
                 </label>
                 <input
                   type="datetime-local"
                   value={modalDateTime}
                   onChange={(e) => setModalDateTime(e.target.value)}
-                  className="w-full px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  className="w-full px-4 py-2.5 text-xs sm:text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                   এই সময়ের পর পরীক্ষাটি স্বয়ংক্রিয়ভাবে হোম পেজের লাইভ থেকে আর্কাইভ সেকশনে স্থানান্তরিত হবে।
                 </p>
               </div>
 
               {/* Quick Presets */}
               <div>
-                <span className="block text-xs font-bold text-slate-500 mb-2">দ্রুত সময় যোগ করুন (Presets):</span>
+                <span className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-2">দ্রুত সময় যোগ করুন (Presets):</span>
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={() => handleApplyPresetHours(1)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     +১ ঘণ্টা
                   </button>
                   <button
                     type="button"
                     onClick={() => handleApplyPresetHours(6)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     +৬ ঘণ্টা
                   </button>
                   <button
                     type="button"
                     onClick={() => handleApplyPresetHours(12)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     +১২ ঘণ্টা
                   </button>
                   <button
                     type="button"
                     onClick={() => handleApplyPresetHours(24)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     +১ দিন
                   </button>
                   <button
                     type="button"
                     onClick={() => handleApplyPresetHours(72)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     +৩ দিন
                   </button>
                   <button
                     type="button"
                     onClick={() => handleApplyPresetHours(168)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
                     +৭ দিন
                   </button>
@@ -707,7 +707,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                     <button
                       type="button"
                       onClick={() => setModalDateTime('')}
-                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 text-rose-600"
+                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 cursor-pointer"
                     >
                       সময় মুছে ফেলুন (আনলিমিটেড)
                     </button>
@@ -720,7 +720,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
               <button
                 type="button"
                 onClick={() => setDateModalExam(null)}
-                className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer"
               >
                 বাতিল
               </button>
@@ -728,7 +728,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                 type="button"
                 disabled={isProcessing}
                 onClick={handleSaveArchiveDateTime}
-                className="px-5 py-2 text-xs font-bold rounded-xl bg-primary hover:bg-primary/90 text-white shadow-md shadow-primary/20 flex items-center gap-1.5 disabled:opacity-50"
+                className="px-5 py-2 text-xs font-bold rounded-xl bg-primary hover:bg-primary/90 text-white shadow-md shadow-primary/20 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
               >
                 {isProcessing && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                 সংরক্ষণ করুন
@@ -742,11 +742,11 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
       {/* 2. MODAL: STATUS CHANGE (ARCHIVE OR RESTORE TO LIVE) */}
       {/* ========================================================= */}
       {statusModalExam && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-850 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
             <div className="flex items-center gap-3">
               <div className={`p-3 rounded-2xl ${
-                targetStatus === 'archive' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600'
+                targetStatus === 'archive' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
               }`}>
                 {targetStatus === 'archive' ? <Archive className="h-6 w-6" /> : <Play className="h-6 w-6" />}
               </div>
@@ -754,29 +754,29 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                 <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
                   {targetStatus === 'archive' ? 'পরীক্ষাটি আর্কাইভ করবেন?' : 'পরীক্ষাটি পুনরায় লাইভ চালু করবেন?'}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">{statusModalExam.title}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{statusModalExam.title}</p>
               </div>
             </div>
 
-            <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+            <div className="space-y-3 text-xs text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
               {targetStatus === 'archive' ? (
-                <p>
+                <p className="leading-relaxed">
                   এই পরীক্ষাটি আর্কাইভ করলে এটি হোম পেজের <strong>"আর্কাইভ পরীক্ষা"</strong> সেকশনে চলে যাবে। এর প্রশ্ন এবং অতীত রেজাল্টসমূহ সম্পূর্ণ অক্ষত থাকবে।
                 </p>
               ) : (
                 <div className="space-y-2">
-                  <p>
+                  <p className="leading-relaxed">
                     পরীক্ষাটি পুনরায় <strong>"চলমান পরীক্ষা (Live)"</strong> হিসেবে হোম পেজে প্রকাশ করা হবে এবং শিক্ষার্থীরা পরীক্ষায় অংশ নিতে পারবে।
                   </p>
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
                       ঐচ্ছিক: নতুন আর্কাইভ তারিখ সেট করুন
                     </label>
                     <input
                       type="datetime-local"
                       value={restoreDateTime}
                       onChange={(e) => setRestoreDateTime(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
                     />
                   </div>
                 </div>
@@ -787,7 +787,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
               <button
                 type="button"
                 onClick={() => setStatusModalExam(null)}
-                className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer"
               >
                 বাতিল
               </button>
@@ -795,7 +795,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                 type="button"
                 disabled={isProcessing}
                 onClick={handleConfirmStatusChange}
-                className={`px-5 py-2 text-xs font-bold rounded-xl text-white shadow-md flex items-center gap-1.5 disabled:opacity-50 ${
+                className={`px-5 py-2 text-xs font-bold rounded-xl text-white shadow-md flex items-center gap-1.5 disabled:opacity-50 cursor-pointer ${
                   targetStatus === 'archive'
                     ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
                     : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
@@ -813,17 +813,17 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
       {/* 3. MODAL: PERMANENT DELETE WARNING */}
       {/* ========================================================= */}
       {deleteModalExam && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-850 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 dark:border-rose-900/50 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-200 dark:border-rose-900/50 space-y-5">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex-shrink-0">
-                <AlertTriangle className="h-6 w-6 text-rose-600" />
+              <div className="p-3 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex-shrink-0">
+                <AlertTriangle className="h-6 w-6 text-rose-600 dark:text-rose-400" />
               </div>
               <div>
                 <h3 className="font-extrabold text-base text-rose-600 dark:text-rose-400">
                   স্থায়ীভাবে পরীক্ষাটি মুছে ফেলতে চান?
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">আইডি: {deleteModalExam.id}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">আইডি: {deleteModalExam.id}</p>
               </div>
             </div>
 
@@ -842,7 +842,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
               <button
                 type="button"
                 onClick={() => setDeleteModalExam(null)}
-                className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer"
               >
                 বাতিল করুন
               </button>
@@ -850,7 +850,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                 type="button"
                 disabled={isProcessing}
                 onClick={handleConfirmPermanentDelete}
-                className="px-5 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/25 flex items-center gap-1.5 disabled:opacity-50"
+                className="px-5 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/25 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
               >
                 {isProcessing && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
                 হ্যাঁ, স্থায়ীভাবে মুছুন

@@ -143,11 +143,52 @@ export default function App() {
                 }
               }
 
+              const userEmail = (firebaseUser.email || '').toLowerCase().trim();
+              const isFounderProsenjit = userEmail === 'pbprosen1971@gmail.com' || userEmail === 'prosenjit@medha.com';
+              const providerDisplayName = firebaseUser.providerData?.find(p => p.displayName)?.displayName || '';
+              const authDisplayName = firebaseUser.displayName || providerDisplayName;
+              
+              const rawStoredName = data.name || data.fullName || data.displayName || '';
+              let resolvedName = '';
+
+              if (rawStoredName && rawStoredName !== 'Prosenjit Biswas') {
+                resolvedName = rawStoredName;
+              } else if (isFounderProsenjit) {
+                resolvedName = rawStoredName || authDisplayName || 'Prosenjit Biswas';
+              } else if (authDisplayName && authDisplayName !== 'Prosenjit Biswas') {
+                resolvedName = authDisplayName;
+              } else if (rawStoredName && rawStoredName !== 'Prosenjit Biswas') {
+                resolvedName = rawStoredName;
+              } else if (firebaseUser.email) {
+                resolvedName = firebaseUser.email.split('@')[0];
+              } else {
+                resolvedName = 'শিক্ষার্থী';
+              }
+
+              // Auto-repair Firestore user document if corrupted with "Prosenjit Biswas"
+              if (
+                (data.name === 'Prosenjit Biswas' || data.fullName === 'Prosenjit Biswas' || data.displayName === 'Prosenjit Biswas') &&
+                !isFounderProsenjit &&
+                resolvedName &&
+                resolvedName !== 'Prosenjit Biswas'
+              ) {
+                try {
+                  await setDoc(doc(db, 'users', firebaseUser.uid), {
+                    name: resolvedName,
+                    fullName: resolvedName,
+                    displayName: resolvedName,
+                  }, { merge: true });
+                } catch (repairErr) {
+                  console.warn("Auto-repair user name in Firestore failed:", repairErr);
+                }
+              }
+
               profileData = {
                 id: firebaseUser.uid,
                 uid: firebaseUser.uid,
-                name: String(data.fullName || data.name || firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'ইউজার')),
-                fullName: String(data.fullName || data.name || firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'ইউজার')),
+                name: resolvedName,
+                fullName: resolvedName,
+                displayName: resolvedName,
                 email: String(data.email || firebaseUser.email || ''),
                 phone: String(data.phone || ''),
                 photoURL: String(data.photoURL || data.avatar || firebaseUser.photoURL || ''),
@@ -167,13 +208,15 @@ export default function App() {
               };
             } else {
               // Initial profile creation if doc doesn't exist yet in Firestore
-              const defaultName = firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'ইউজার');
+              const providerDisplayName = firebaseUser.providerData?.find(p => p.displayName)?.displayName || '';
+              const defaultName = firebaseUser.displayName || providerDisplayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'শিক্ষার্থী');
               const displayName = isAdminEmail ? 'মুহাম্মদ আশরাফুল ইসলাম' : defaultName;
               profileData = {
                 id: firebaseUser.uid,
                 uid: firebaseUser.uid,
                 name: displayName,
                 fullName: displayName,
+                displayName: displayName,
                 email: firebaseUser.email || '',
                 phone: isAdminEmail ? '+৮৮০ ১৭০০-১১২২৩৪' : '',
                 photoURL: firebaseUser.photoURL || '',
@@ -423,8 +466,8 @@ export default function App() {
           subject: 'BCS',
           userId: 'student-1',
           studentId: 'student-1',
-          studentName: 'Prosenjit Biswas',
-          studentEmail: 'prosenjit@medha.com',
+          studentName: 'আরিফ হোসেন',
+          studentEmail: 'arif@student.com',
           score: 7,
           totalMarks: 10,
           percentage: 70,
@@ -447,10 +490,10 @@ export default function App() {
           examId: 'exam-2',
           examTitle: 'English Grammar Masterclass - Right Form of Verbs',
           subject: 'ইংরেজি',
-          userId: 'student-1',
-          studentId: 'student-1',
-          studentName: 'Prosenjit Biswas',
-          studentEmail: 'prosenjit@medha.com',
+          userId: 'student-2',
+          studentId: 'student-2',
+          studentName: 'তানজিলা রহমান',
+          studentEmail: 'tanjila@student.com',
           score: 8,
           totalMarks: 8,
           percentage: 100,
@@ -475,10 +518,10 @@ export default function App() {
           examId: 'exam-3',
           examTitle: 'প্রাথমিক বিদ্যালয় সহকারী শিক্ষক নিয়োগ প্রস্তুতি - গণিত',
           subject: 'গণিত',
-          userId: 'student-1',
-          studentId: 'student-1',
-          studentName: 'Prosenjit Biswas',
-          studentEmail: 'prosenjit@medha.com',
+          userId: 'student-3',
+          studentId: 'student-3',
+          studentName: 'সাকিব আহমেদ',
+          studentEmail: 'sakib@student.com',
           score: 4,
           totalMarks: 6,
           percentage: 67,
@@ -593,7 +636,7 @@ export default function App() {
     
     if (auth.currentUser) {
       try {
-        await setDoc(doc(db, 'users', auth.currentUser.uid), updatedProfile);
+        await setDoc(doc(db, 'users', auth.currentUser.uid), updatedProfile, { merge: true });
       } catch (err) {
         try {
           handleFirestoreError(err, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
