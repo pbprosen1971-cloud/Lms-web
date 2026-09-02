@@ -228,3 +228,9 @@
   z-index: 2;
 }
 
+/* Google reCAPTCHA widget seamless iframe polish */
+#login-recaptcha-widget iframe {
+  border-radius: 6px !important;
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+

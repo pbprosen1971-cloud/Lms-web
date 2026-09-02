@@ -9,8 +9,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Google Identity Services for client-side OAuth -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <!-- Google reCAPTCHA v2 API -->
-    <script src="https://www.google.com/recaptcha/api.js?render=explicit" async defer></script>
+    <!-- Google reCAPTCHA v2 API with explicit onload handler -->
+    <script>
+      window.onRecaptchaLoad = function() {
+        window.__recaptchaLoaded = true;
+        window.dispatchEvent(new Event('recaptcha-ready'));
+      };
+    </script>
+    <script src="https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit" async defer></script>
     <script>
       (function() {
         try {

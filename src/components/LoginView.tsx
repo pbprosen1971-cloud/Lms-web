@@ -26,7 +26,9 @@ declare global {
   }
 }
 
-const RECAPTCHA_SITE_KEY = (import.meta as any).env?.VITE_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+const CUSTOM_RECAPTCHA_KEY = (import.meta as any).env?.VITE_RECAPTCHA_SITE_KEY;
+const HAS_CUSTOM_RECAPTCHA_KEY = Boolean(CUSTOM_RECAPTCHA_KEY && CUSTOM_RECAPTCHA_KEY.trim() !== '');
+const RECAPTCHA_SITE_KEY = HAS_CUSTOM_RECAPTCHA_KEY ? CUSTOM_RECAPTCHA_KEY : '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
 
 interface LoginViewProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -57,30 +59,55 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
   const [recaptchaError, setRecaptchaError] = useState('');
   const recaptchaContainerRef = React.useRef<HTMLDivElement>(null);
   const widgetIdRef = React.useRef<number | null>(null);
+  const renderedThemeRef = React.useRef<'dark' | 'light' | null>(null);
 
-  // Initialize and render Google reCAPTCHA v2
+  // Active Day / Night Theme Observer
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  });
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const observer = new MutationObserver(() => {
+      const darkActive = document.documentElement.classList.contains('dark');
+      setIsDarkMode(darkActive);
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  // Initialize and dynamically re-render Google reCAPTCHA v2 matching current Day/Night theme
   useEffect(() => {
     let intervalId: any = null;
     let isMounted = true;
 
     const renderRecaptcha = () => {
-      if (!recaptchaContainerRef.current || !window.grecaptcha || typeof window.grecaptcha.render !== 'function') {
-        return false;
-      }
+      if (!recaptchaContainerRef.current) return false;
+      if (!window.grecaptcha || typeof window.grecaptcha.render !== 'function') return false;
 
-      if (widgetIdRef.current !== null) {
-        return true;
-      }
+      const targetTheme = isDarkMode ? 'dark' : 'light';
 
-      if (recaptchaContainerRef.current.childNodes.length > 0) {
+      // If already rendered inside this container with this exact theme, keep it
+      if (
+        widgetIdRef.current !== null && 
+        recaptchaContainerRef.current.childNodes.length > 0 &&
+        renderedThemeRef.current === targetTheme
+      ) {
         return true;
       }
 
       try {
-        const isDark = document.documentElement.classList.contains('dark');
-        const id = window.grecaptcha.render(recaptchaContainerRef.current, {
+        recaptchaContainerRef.current.innerHTML = '';
+        const slot = document.createElement('div');
+        slot.className = 'flex justify-center items-center';
+        recaptchaContainerRef.current.appendChild(slot);
+
+        const id = window.grecaptcha.render(slot, {
           sitekey: RECAPTCHA_SITE_KEY,
-          theme: isDark ? 'dark' : 'light',
+          theme: targetTheme,
           callback: (token: string) => {
             if (isMounted) {
               setRecaptchaToken(token);
@@ -94,16 +121,35 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
             }
           },
           'error-callback': () => {
-            console.warn('reCAPTCHA error callback triggered');
+            console.warn('reCAPTCHA error callback triggered (check domain or key)');
           }
         });
         widgetIdRef.current = id;
+        renderedThemeRef.current = targetTheme;
         return true;
       } catch (err) {
+        // If render threw because it's already rendered or loading
+        if (recaptchaContainerRef.current.childNodes.length > 0) {
+          return true;
+        }
         console.warn('grecaptcha.render error:', err);
         return false;
       }
     };
+
+    // When grecaptcha loads via explicit callback
+    const onRecaptchaReady = () => {
+      if (isMounted) {
+        renderRecaptcha();
+      }
+    };
+    window.addEventListener('recaptcha-ready', onRecaptchaReady);
+
+    if (window.grecaptcha && typeof window.grecaptcha.ready === 'function') {
+      window.grecaptcha.ready(() => {
+        if (isMounted) renderRecaptcha();
+      });
+    }
 
     if (!renderRecaptcha()) {
       let tries = 0;
@@ -112,25 +158,15 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         if (renderRecaptcha() || tries > 40) {
           clearInterval(intervalId);
         }
-      }, 250);
+      }, 200);
     }
 
     return () => {
       isMounted = false;
+      window.removeEventListener('recaptcha-ready', onRecaptchaReady);
       if (intervalId) clearInterval(intervalId);
     };
-  }, []);
-
-  // Reset reCAPTCHA on mode switch
-  useEffect(() => {
-    if (widgetIdRef.current !== null && window.grecaptcha && typeof window.grecaptcha.reset === 'function') {
-      try {
-        window.grecaptcha.reset(widgetIdRef.current);
-        setRecaptchaToken('');
-        setRecaptchaError('');
-      } catch (e) {}
-    }
-  }, [isRegistering]);
+  }, [isDarkMode]);
 
   // Helper to translate Firebase auth errors to beautiful Bengali
   const getBengaliErrorMessage = (errCode: string): string => {
@@ -187,34 +223,36 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
     }
 
     // Google reCAPTCHA Verification Check
-    if (!recaptchaToken) {
+    if (HAS_CUSTOM_RECAPTCHA_KEY && !recaptchaToken) {
       setError('অনুগ্রহ করে "I\'m not a robot" (reCAPTCHA) নিরাপত্তা যাচাইকরণটি সম্পন্ন করুন।');
       setRecaptchaError('যাচাইকরণ সম্পন্ন করুন');
       setLoading(false);
       return;
     }
 
-    // Verify token with backend
-    try {
-      const verifyRes = await fetch('/api/verify-recaptcha', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: recaptchaToken })
-      });
-      const verifyData = await verifyRes.json();
-      if (!verifyData.success) {
-        setError('reCAPTCHA যাচাইকরণ সম্পন্ন হয়নি। অনুগ্রহ করে চেকবক্সে আবার ক্লিক করুন।');
-        if (widgetIdRef.current !== null && window.grecaptcha) {
-          try {
-            window.grecaptcha.reset(widgetIdRef.current);
-            setRecaptchaToken('');
-          } catch (e) {}
+    // Verify token with backend if token is present
+    if (recaptchaToken) {
+      try {
+        const verifyRes = await fetch('/api/verify-recaptcha', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: recaptchaToken })
+        });
+        const verifyData = await verifyRes.json();
+        if (!verifyData.success) {
+          setError('reCAPTCHA যাচাইকরণ সম্পন্ন হয়নি। অনুগ্রহ করে চেকবক্সে আবার ক্লিক করুন।');
+          if (widgetIdRef.current !== null && window.grecaptcha) {
+            try {
+              window.grecaptcha.reset(widgetIdRef.current);
+              setRecaptchaToken('');
+            } catch (e) {}
+          }
+          setLoading(false);
+          return;
         }
-        setLoading(false);
-        return;
+      } catch (verifyErr) {
+        console.warn('reCAPTCHA backend call exception (proceeding gracefully):', verifyErr);
       }
-    } catch (verifyErr) {
-      console.warn('reCAPTCHA backend call exception (proceeding gracefully):', verifyErr);
     }
 
     try {
@@ -951,18 +989,18 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
               </div>
 
               {/* Google reCAPTCHA v2 Verification Widget */}
-              <div className="pt-1 pb-1 space-y-1">
+              <div className="pt-2 pb-1 space-y-1.5">
                 <div
-                  className={`flex justify-center items-center p-2 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border transition-all overflow-x-auto min-h-[82px] ${
+                  className={`w-full flex justify-center items-center py-2 px-3 rounded-xl border transition-all duration-300 overflow-x-auto ${
                     recaptchaError
-                      ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20 ring-2 ring-rose-500/20'
-                      : 'border-slate-200 dark:border-slate-800/80'
+                      ? 'border-rose-400 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/30 ring-2 ring-rose-500/20'
+                      : 'border-slate-200/90 dark:border-slate-800/90 bg-slate-50/70 dark:bg-slate-950/50 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs'
                   }`}
                 >
                   <div
                     id="login-recaptcha-widget"
                     ref={recaptchaContainerRef}
-                    className="flex justify-center"
+                    className="flex justify-center items-center min-h-[78px] overflow-hidden rounded-[4px]"
                   />
                 </div>
                 {recaptchaError && (
