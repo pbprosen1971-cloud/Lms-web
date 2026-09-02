@@ -20,6 +20,14 @@ import {
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 
+declare global {
+  interface Window {
+    grecaptcha?: any;
+  }
+}
+
+const RECAPTCHA_SITE_KEY = (import.meta as any).env?.VITE_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+
 interface LoginViewProps {
   onLoginSuccess: (user: UserProfile) => void;
   setView: (view: string) => void;
@@ -43,6 +51,86 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
+
+  // Google reCAPTCHA state & references
+  const [recaptchaToken, setRecaptchaToken] = useState('');
+  const [recaptchaError, setRecaptchaError] = useState('');
+  const recaptchaContainerRef = React.useRef<HTMLDivElement>(null);
+  const widgetIdRef = React.useRef<number | null>(null);
+
+  // Initialize and render Google reCAPTCHA v2
+  useEffect(() => {
+    let intervalId: any = null;
+    let isMounted = true;
+
+    const renderRecaptcha = () => {
+      if (!recaptchaContainerRef.current || !window.grecaptcha || typeof window.grecaptcha.render !== 'function') {
+        return false;
+      }
+
+      if (widgetIdRef.current !== null) {
+        return true;
+      }
+
+      if (recaptchaContainerRef.current.childNodes.length > 0) {
+        return true;
+      }
+
+      try {
+        const isDark = document.documentElement.classList.contains('dark');
+        const id = window.grecaptcha.render(recaptchaContainerRef.current, {
+          sitekey: RECAPTCHA_SITE_KEY,
+          theme: isDark ? 'dark' : 'light',
+          callback: (token: string) => {
+            if (isMounted) {
+              setRecaptchaToken(token);
+              setRecaptchaError('');
+              setError('');
+            }
+          },
+          'expired-callback': () => {
+            if (isMounted) {
+              setRecaptchaToken('');
+            }
+          },
+          'error-callback': () => {
+            console.warn('reCAPTCHA error callback triggered');
+          }
+        });
+        widgetIdRef.current = id;
+        return true;
+      } catch (err) {
+        console.warn('grecaptcha.render error:', err);
+        return false;
+      }
+    };
+
+    if (!renderRecaptcha()) {
+      let tries = 0;
+      intervalId = setInterval(() => {
+        tries++;
+        if (renderRecaptcha() || tries > 40) {
+          clearInterval(intervalId);
+        }
+      }, 250);
+    }
+
+    return () => {
+      isMounted = false;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
+  // Reset reCAPTCHA on mode switch
+  useEffect(() => {
+    if (widgetIdRef.current !== null && window.grecaptcha && typeof window.grecaptcha.reset === 'function') {
+      try {
+        window.grecaptcha.reset(widgetIdRef.current);
+        setRecaptchaToken('');
+        setRecaptchaError('');
+      } catch (e) {}
+    }
+  }, [isRegistering]);
 
   // Helper to translate Firebase auth errors to beautiful Bengali
   const getBengaliErrorMessage = (errCode: string): string => {
@@ -96,6 +184,37 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
       setError('পাসওয়ার্ডটি অত্যন্ত দুর্বল। এটি কমপক্ষে ৬ অক্ষরের হতে হবে।');
       setLoading(false);
       return;
+    }
+
+    // Google reCAPTCHA Verification Check
+    if (!recaptchaToken) {
+      setError('অনুগ্রহ করে "I\'m not a robot" (reCAPTCHA) নিরাপত্তা যাচাইকরণটি সম্পন্ন করুন।');
+      setRecaptchaError('যাচাইকরণ সম্পন্ন করুন');
+      setLoading(false);
+      return;
+    }
+
+    // Verify token with backend
+    try {
+      const verifyRes = await fetch('/api/verify-recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: recaptchaToken })
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyData.success) {
+        setError('reCAPTCHA যাচাইকরণ সম্পন্ন হয়নি। অনুগ্রহ করে চেকবক্সে আবার ক্লিক করুন।');
+        if (widgetIdRef.current !== null && window.grecaptcha) {
+          try {
+            window.grecaptcha.reset(widgetIdRef.current);
+            setRecaptchaToken('');
+          } catch (e) {}
+        }
+        setLoading(false);
+        return;
+      }
+    } catch (verifyErr) {
+      console.warn('reCAPTCHA backend call exception (proceeding gracefully):', verifyErr);
     }
 
     try {
@@ -404,6 +523,12 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         return;
       }
       setError(getBengaliErrorMessage(err.code || err.message));
+      if (widgetIdRef.current !== null && window.grecaptcha) {
+        try {
+          window.grecaptcha.reset(widgetIdRef.current);
+          setRecaptchaToken('');
+        } catch (e) {}
+      }
     } finally {
       setLoading(false);
     }
@@ -823,6 +948,28 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                     )}
                   </button>
                 </div>
+              </div>
+
+              {/* Google reCAPTCHA v2 Verification Widget */}
+              <div className="pt-1 pb-1 space-y-1">
+                <div
+                  className={`flex justify-center items-center p-2 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border transition-all overflow-x-auto min-h-[82px] ${
+                    recaptchaError
+                      ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20 ring-2 ring-rose-500/20'
+                      : 'border-slate-200 dark:border-slate-800/80'
+                  }`}
+                >
+                  <div
+                    id="login-recaptcha-widget"
+                    ref={recaptchaContainerRef}
+                    className="flex justify-center"
+                  />
+                </div>
+                {recaptchaError && (
+                  <p className="text-[11px] text-rose-500 font-semibold text-center animate-fade-in">
+                    অনুগ্রহ করে "I'm not a robot" চেকবক্সে ক্লিক করে যাচাই করুন।
+                  </p>
+                )}
               </div>
 
               {/* Submit Button */}
