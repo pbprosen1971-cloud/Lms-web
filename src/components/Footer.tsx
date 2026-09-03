@@ -207,7 +207,7 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
               <span className="font-bold text-lg text-white">মেধা এক্সাম</span>
             </div>
             <p className="text-sm text-slate-400 leading-relaxed">
-              মেধা এক্সাম একটি প্রফেশনাল ও শিক্ষার্থী বান্ধব অনলাইন মূল্যায়ন প্ল্যাটফর্ম। BCS, ব্যাংক এবং বিশ্ববিদ্যালয়ের ভর্তি পরীক্ষার সেরা প্রস্তুতির জন্য।
+              মেধা এক্সাম একটি প্রফেশনাল ও শিক্ষার্থী বান্ধব অনলাইন MCQ প্রস্তুতি মূল্যায়ন প্ল্যাটফর্ম। BCS, ব্যাংক এবং ১৩ - ২০ তম গ্রেড MCQ পরীক্ষার সেরা প্রস্তুতির জন্য।
             </p>
             <div className="text-xs text-slate-300 font-medium pt-1 flex items-center gap-1.5 flex-wrap">
               <span className="text-slate-400">Founder & Developer:</span>
