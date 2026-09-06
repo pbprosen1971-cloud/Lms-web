@@ -1424,23 +1424,32 @@ export default function HomeView({
                 const seenIds = new Set<string>();
                 const seenTitles = new Set<string>();
 
-                if (validUpcomingSetting && validUpcomingSetting.title && validUpcomingSetting.isPublished !== false) {
-                  const titleKey = validUpcomingSetting.title.trim().toLowerCase();
-                  upcomingList.push({
-                    id: validUpcomingSetting.examId || 'featured-upcoming',
-                    title: validUpcomingSetting.title,
-                    subject: validUpcomingSetting.subject || 'BCS',
-                    description: validUpcomingSetting.description || '',
-                    startTime: validUpcomingSetting.startTime || '',
-                    examDate: validUpcomingSetting.examDate || '',
-                    durationMinutes: validUpcomingSetting.durationMinutes || (validUpcomingSetting as any).duration || 30,
-                    totalQuestions: validUpcomingSetting.totalQuestions || 0,
-                    totalMarks: validUpcomingSetting.totalMarks || 0,
-                    isPremium: !!validUpcomingSetting.isPremium,
-                  });
-                  if (validUpcomingSetting.examId) seenIds.add(validUpcomingSetting.examId);
-                  seenTitles.add(titleKey);
-                }
+                const itemsToProcess = (validUpcomingSetting?.items && Array.isArray(validUpcomingSetting.items) && validUpcomingSetting.items.length > 0)
+                  ? validUpcomingSetting.items
+                  : (validUpcomingSetting && validUpcomingSetting.title ? [validUpcomingSetting] : []);
+
+                itemsToProcess.forEach(item => {
+                  if (item && item.title && item.isPublished !== false) {
+                    const titleKey = item.title.trim().toLowerCase();
+                    const itemId = item.examId || item.id || `featured-${titleKey}`;
+                    if (!seenIds.has(itemId) && !seenTitles.has(titleKey)) {
+                      upcomingList.push({
+                        id: itemId,
+                        title: item.title,
+                        subject: item.subject || 'BCS',
+                        description: item.description || '',
+                        startTime: item.startTime || '',
+                        examDate: item.examDate || '',
+                        durationMinutes: item.durationMinutes || (item as any).duration || 30,
+                        totalQuestions: item.totalQuestions || 0,
+                        totalMarks: item.totalMarks || 0,
+                        isPremium: !!item.isPremium,
+                      });
+                      seenIds.add(itemId);
+                      seenTitles.add(titleKey);
+                    }
+                  }
+                });
 
                 upcomingExams.forEach(exam => {
                   const normTitle = (exam.title || '').trim().toLowerCase();

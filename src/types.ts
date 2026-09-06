@@ -86,7 +86,10 @@ export interface UserProfile {
   accountStatus: 'active' | 'blocked';
   createdAt: string;
   lastLogin: string;
+  studentId?: string;
   institution?: string;
+  batch?: string;
+  registrationDate?: string;
   joinedDate?: string;
   earnedCertificates?: Certificate[];
   isPremium?: boolean;
@@ -161,6 +164,7 @@ export interface UpcomingExamSettings {
   examDate?: string;
   startDate?: string;
   startTime?: string;
+  archiveTime?: string;
   duration?: number;
   durationMinutes?: number;
   isPublished?: boolean;
@@ -171,6 +175,7 @@ export interface UpcomingExamSettings {
   updatedBy?: string;
   updatedAt?: string | any;
   lastUpdated?: string;
+  items?: UpcomingExamSettings[];
 }
 
 export interface UpcomingExamDoc {

@@ -1,6 +1,6 @@
 {
-  "name": "Student Exam Portal",
-  "description": "A professional and student-friendly exam preparation platform featuring live exams, student dashboards, leaderboards, and a comprehensive admin panel.",
+  "name": "Medha Exam",
+  "description": "মেধা এক্সাম (Medha Exam) - বিসিএস ও সরকারি চাকরি পরীক্ষার পূর্ণাঙ্গ লাইভ প্রস্তুতি পোর্টাল ও গুগল স্প্রেডশীট ইন্টিগ্রেশন",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

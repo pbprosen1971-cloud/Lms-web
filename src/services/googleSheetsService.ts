@@ -5,7 +5,9 @@
 
 import { Exam, ExamResult, Question, UserProfile, PaymentRecord } from '../types';
 import { getGoogleAccessToken } from '../lib/googleAuth';
-import { saveQuestionToFirestore } from './firestoreService';
+import { saveQuestionToFirestore, mapFirestoreDocToQuestion } from './firestoreService';
+import { doc, setDoc, collection, getDocs, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 // Standard Google Sheets column definitions
 export const SHEET_COLUMNS = {
@@ -46,6 +48,29 @@ export interface SheetQuestionsParseResult {
     examId: string;
     questionNumber: number;
   }[];
+}
+
+export interface SheetStudentRowValidation {
+  rowNumber: number;
+  uid: string;
+  studentId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  batch: string;
+  accountStatus: string;
+  registrationDate: string;
+  isValid: boolean;
+  errors: string[];
+}
+
+export interface SheetStudentsParseResult {
+  totalRows: number;
+  validCount: number;
+  errorCount: number;
+  errorRowNumbers: number[];
+  rows: SheetStudentRowValidation[];
+  validStudents: UserProfile[];
 }
 
 const DEFAULT_SPREADSHEET_KEY = 'medha_connected_spreadsheet_id';
@@ -180,15 +205,88 @@ export function formatStudentsForSheet(students: UserProfile[]): any[][] {
     SHEET_COLUMNS.STUDENTS,
     ...students.map(s => [
       s.uid || s.id || '',
-      s.id || s.uid || '',
+      s.studentId || s.id || s.uid || '',
       s.fullName || s.name || '',
       s.email || '',
       s.phone || '',
-      s.institution || 'সাধারণ ব্যাচ',
+      s.batch || s.institution || 'ঢাকা কলেজ',
       s.accountStatus || 'active',
-      s.createdAt || s.joinedDate || new Date().toISOString(),
+      s.registrationDate || s.createdAt || s.joinedDate || new Date().toISOString(),
     ])
   ];
+}
+
+/**
+ * Read and validate students from Google Sheets tab
+ */
+export async function readAndValidateStudentsFromSheet(
+  spreadsheetId: string,
+  sheetName: string = 'Students'
+): Promise<SheetStudentsParseResult> {
+  const token = getGoogleAccessToken();
+  if (!token) {
+    throw new Error('Google Sheets অথেনটিকেশন টোকেন পাওয়া যায়নি। দয়া করে প্রথমে Google একাউন্ট কানেক্ট করুন।');
+  }
+
+  const res = await fetch('/api/sheets/read-students', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      spreadsheetId,
+      sheetName,
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.message || 'শিট থেকে শিক্ষার্থীদের তথ্য পড়া সম্ভব হয়নি।');
+  }
+
+  return data.data;
+}
+
+/**
+ * Save parsed students from Google Sheets to Firestore
+ */
+export async function saveStudentsToFirestore(
+  students: UserProfile[]
+): Promise<{ successCount: number; failedCount: number; errors: string[] }> {
+  let successCount = 0;
+  let failedCount = 0;
+  const errors: string[] = [];
+
+  for (const stud of students) {
+    const docId = stud.uid || stud.id;
+    if (!docId) continue;
+    try {
+      await setDoc(doc(db, 'users', docId), {
+        uid: docId,
+        id: docId,
+        studentId: stud.studentId || docId,
+        name: stud.fullName || stud.name,
+        fullName: stud.fullName || stud.name,
+        email: stud.email || '',
+        phone: stud.phone || '',
+        batch: stud.batch || stud.institution || 'ঢাকা কলেজ',
+        institution: stud.batch || stud.institution || 'ঢাকা কলেজ',
+        accountStatus: stud.accountStatus || 'active',
+        role: stud.role || (stud.email?.toLowerCase() === 'medha@admin.com' ? 'admin' : 'student'),
+        createdAt: stud.createdAt || stud.registrationDate || new Date().toISOString(),
+        registrationDate: stud.registrationDate || stud.createdAt || new Date().toISOString(),
+        lastLogin: stud.lastLogin || new Date().toISOString(),
+        isPremium: stud.isPremium ?? (stud.email?.toLowerCase() === 'medha@admin.com'),
+      }, { merge: true });
+      successCount++;
+    } catch (err: any) {
+      failedCount++;
+      errors.push(`শিক্ষার্থী ${stud.fullName || docId} সংরক্ষণে সমস্যা: ${err?.message || 'অজানা সমস্যা'}`);
+    }
+  }
+
+  return { successCount, failedCount, errors };
 }
 
 /**
@@ -401,6 +499,7 @@ export async function exportAllDataToGoogleSheets(
     exams: Exam[];
     results: ExamResult[];
     payments?: PaymentRecord[];
+    questions?: Question[];
   }
 ): Promise<{ success: boolean; message: string; details: Record<string, number> }> {
   const token = getGoogleAccessToken();
@@ -413,7 +512,7 @@ export async function exportAllDataToGoogleSheets(
     sheets: {
       'Students': formatStudentsForSheet(dataPayload.students),
       'Exams': formatExamsForSheet(dataPayload.exams),
-      'Question Bank': formatQuestionsForSheet(dataPayload.exams),
+      'Question Bank': formatQuestionsForSheet(dataPayload.exams, dataPayload.questions),
       'Results': formatResultsForSheet(dataPayload.results),
       'Payments': formatPaymentsForSheet(dataPayload.payments || []),
       'Downloads': formatDownloadsForSheet(),
@@ -535,4 +634,462 @@ export async function retryPendingResultSyncs(spreadsheetId?: string): Promise<{
   }
 
   return { total: queue.length, succeeded, failed };
+}
+
+/**
+ * Automatically sync student record to connected Google Sheet
+ */
+export async function syncStudentToGoogleSheets(
+  student: UserProfile,
+  customSpreadsheetId?: string
+): Promise<{ success: boolean; synced: boolean; error?: string }> {
+  const spreadsheetId = customSpreadsheetId || getSavedSpreadsheetId();
+  if (!spreadsheetId) return { success: false, synced: false, error: 'কোনো সংযুক্ত গুগল শিট আইডি নেই' };
+
+  const token = getGoogleAccessToken();
+  if (!token) return { success: false, synced: false, error: 'Google অথেনটিকেশন নেই' };
+
+  try {
+    const res = await fetch('/api/sheets/sync-student', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ spreadsheetId, student }),
+    });
+    const data = await res.json();
+    return { success: res.ok && data.success, synced: res.ok && data.success, error: data.message };
+  } catch (err: any) {
+    return { success: false, synced: false, error: err?.message || 'নেটওয়ার্ক সমস্যা' };
+  }
+}
+
+/**
+ * Automatically sync exam record to connected Google Sheet
+ */
+export async function syncExamToGoogleSheets(
+  exam: Exam,
+  customSpreadsheetId?: string
+): Promise<{ success: boolean; synced: boolean; error?: string }> {
+  const spreadsheetId = customSpreadsheetId || getSavedSpreadsheetId();
+  if (!spreadsheetId) return { success: false, synced: false, error: 'কোনো সংযুক্ত গুগল শিট আইডি নেই' };
+
+  const token = getGoogleAccessToken();
+  if (!token) return { success: false, synced: false, error: 'Google অথেনটিকেশন নেই' };
+
+  try {
+    const res = await fetch('/api/sheets/sync-exam', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ spreadsheetId, exam }),
+    });
+    const data = await res.json();
+    return { success: res.ok && data.success, synced: res.ok && data.success, error: data.message };
+  } catch (err: any) {
+    return { success: false, synced: false, error: err?.message || 'নেটওয়ার্ক সমস্যা' };
+  }
+}
+
+/**
+ * Automatically sync question record to connected Google Sheet
+ */
+export async function syncQuestionToGoogleSheets(
+  question: Question,
+  examId: string = 'general',
+  questionNumber: number = 1,
+  customSpreadsheetId?: string
+): Promise<{ success: boolean; synced: boolean; error?: string }> {
+  const spreadsheetId = customSpreadsheetId || getSavedSpreadsheetId();
+  if (!spreadsheetId) return { success: false, synced: false, error: 'কোনো সংযুক্ত গুগল শিট আইডি নেই' };
+
+  const token = getGoogleAccessToken();
+  if (!token) return { success: false, synced: false, error: 'Google অথেনটিকেশন নেই' };
+
+  try {
+    const res = await fetch('/api/sheets/sync-question', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ spreadsheetId, question, examId, questionNumber }),
+    });
+    const data = await res.json();
+    return { success: res.ok && data.success, synced: res.ok && data.success, error: data.message };
+  } catch (err: any) {
+    return { success: false, synced: false, error: err?.message || 'নেটওয়ার্ক সমস্যা' };
+  }
+}
+
+/**
+ * Automatically sync payment record to connected Google Sheet
+ */
+export async function syncPaymentToGoogleSheets(
+  payment: PaymentRecord,
+  customSpreadsheetId?: string
+): Promise<{ success: boolean; synced: boolean; error?: string }> {
+  const spreadsheetId = customSpreadsheetId || getSavedSpreadsheetId();
+  if (!spreadsheetId) return { success: false, synced: false, error: 'কোনো সংযুক্ত গুগল শিট আইডি নেই' };
+
+  const token = getGoogleAccessToken();
+  if (!token) return { success: false, synced: false, error: 'Google অথেনটিকেশন নেই' };
+
+  try {
+    const res = await fetch('/api/sheets/sync-payment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ spreadsheetId, payment }),
+    });
+    const data = await res.json();
+    return { success: res.ok && data.success, synced: res.ok && data.success, error: data.message };
+  } catch (err: any) {
+    return { success: false, synced: false, error: err?.message || 'নেটওয়ার্ক সমস্যা' };
+  }
+}
+
+/**
+ * Safely reads all existing Firestore collections and exports them into the connected Google Sheet.
+ * STRICTLY READ-ONLY: Never alters, modifies or deletes anything in Firestore.
+ */
+export async function exportExistingFirestoreDataToGoogleSheets(
+  targetSpreadsheetId?: string
+): Promise<{
+  success: boolean;
+  message: string;
+  counts: {
+    students: number;
+    exams: number;
+    questions: number;
+    results: number;
+    payments: number;
+  };
+}> {
+  const spreadsheetId = targetSpreadsheetId || getSavedSpreadsheetId();
+  if (!spreadsheetId) {
+    throw new Error('কোনো সংযুক্ত গুগল স্প্রেডশীট আইডি পাওয়া যায়নি। দয়া করে প্রথমে গুগল শিট নির্বাচন বা তৈরি করুন।');
+  }
+
+  // 1. Fetch Students from Firestore (Read-Only)
+  const studentsSnap = await getDocs(collection(db, 'users'));
+  const students: UserProfile[] = [];
+  studentsSnap.forEach((d) => {
+    const data = d.data() as any;
+    students.push({
+      id: d.id,
+      uid: d.id,
+      studentId: data.studentId || d.id,
+      name: data.fullName || data.name || 'শিক্ষার্থী',
+      fullName: data.fullName || data.name || 'শিক্ষার্থী',
+      displayName: data.fullName || data.name || 'শিক্ষার্থী',
+      email: data.email || '',
+      phone: data.phone || '',
+      batch: data.batch || data.institution || 'সাধারণ ব্যাচ',
+      institution: data.institution || data.batch || '',
+      role: data.role === 'admin' ? 'admin' : 'student',
+      isPremium: !!data.isPremium,
+      accountStatus: data.accountStatus === 'blocked' ? 'blocked' : 'active',
+      createdAt: data.registrationDate || data.createdAt || new Date().toISOString(),
+      lastLogin: data.lastLogin || new Date().toISOString(),
+    });
+  });
+
+  // 2. Fetch Exams from Firestore (Read-Only across 'exams', 'exam', 'Exam')
+  const examsMap = new Map<string, Exam>();
+  for (const collName of ['exams', 'exam', 'Exam']) {
+    try {
+      const snap = await getDocs(collection(db, collName));
+      snap.forEach((d) => {
+        if (!examsMap.has(d.id)) {
+          const data = d.data() as any;
+          examsMap.set(d.id, {
+            id: d.id,
+            title: data.title || 'অনলাইন পরীক্ষা',
+            subject: data.subject || 'সাধারণ',
+            durationMinutes: Number(data.durationMinutes || data.duration || 10),
+            totalQuestions: Number(data.totalQuestions || 0),
+            totalMarks: Number(data.totalMarks || 0),
+            isPremium: !!data.isPremium,
+            status: data.status || 'live',
+            dateCreated: data.dateCreated || new Date().toISOString().split('T')[0],
+            questions: data.questions || [],
+          } as Exam);
+        }
+      });
+    } catch (e) {
+      console.warn(`Read ${collName} collection:`, e);
+    }
+  }
+  const exams = Array.from(examsMap.values());
+
+  // 3. Fetch Questions from Firestore (Read-Only)
+  const questionsMap = new Map<string, Question>();
+  try {
+    const qSnap = await getDocs(collection(db, 'questions'));
+    qSnap.forEach((d) => {
+      questionsMap.set(d.id, mapFirestoreDocToQuestion(d));
+    });
+  } catch (e) {
+    console.warn('Read questions collection:', e);
+  }
+  // Include questions inside exams if any
+  exams.forEach((ex) => {
+    (ex.questions || []).forEach((q) => {
+      if (q && q.id && !questionsMap.has(q.id)) {
+        questionsMap.set(q.id, q);
+      }
+    });
+  });
+  const questions = Array.from(questionsMap.values());
+
+  // 4. Fetch Results from Firestore (Read-Only)
+  const results: ExamResult[] = [];
+  try {
+    const rSnap = await getDocs(collection(db, 'results'));
+    rSnap.forEach((d) => {
+      const data = d.data() as any;
+      results.push({
+        id: d.id,
+        userId: data.userId || data.studentId || 'guest',
+        studentId: data.studentId || data.userId || 'guest',
+        studentName: data.studentName || 'শিক্ষার্থী',
+        examId: data.examId || '',
+        examTitle: data.examTitle || '',
+        score: Number(data.score || 0),
+        totalMarks: Number(data.totalMarks || 0),
+        percentage: Number(data.percentage || 0),
+        correctAnswers: Number(data.correctAnswers || 0),
+        wrongAnswers: Number(data.wrongAnswers || 0),
+        skippedAnswers: Number(data.skippedAnswers || 0),
+        submittedAt: data.submittedAt || new Date().toISOString(),
+      } as ExamResult);
+    });
+  } catch (e) {
+    console.warn('Read results collection:', e);
+  }
+
+  // 5. Fetch Payments from Firestore (Read-Only)
+  const payments: PaymentRecord[] = [];
+  try {
+    const pSnap = await getDocs(collection(db, 'payments'));
+    pSnap.forEach((d) => {
+      const data = d.data() as any;
+      payments.push({
+        id: d.id,
+        userId: data.userId || '',
+        transactionId: data.transactionId || '',
+        gateway: data.gateway || 'bKash',
+        amount: Number(data.amount || 249),
+        paymentStatus: data.paymentStatus || 'completed',
+        createdAt: data.createdAt || new Date().toISOString(),
+      } as PaymentRecord);
+    });
+  } catch (e) {
+    console.warn('Read payments collection:', e);
+  }
+
+  // Export all tables to Google Sheets without altering Firestore
+  const exportRes = await exportAllDataToGoogleSheets(spreadsheetId, {
+    students,
+    exams,
+    questions,
+    results,
+    payments,
+  });
+
+  return {
+    success: exportRes.success,
+    message: exportRes.message || 'বিদ্যমান সকল Firestore ডেটা গুগল শীটে যোগ করা হয়েছে।',
+    counts: {
+      students: students.length,
+      exams: exams.length,
+      questions: questions.length,
+      results: results.length,
+      payments: payments.length,
+    },
+  };
+}
+
+/**
+ * Initializes automatic real-time listener for Firestore documents.
+ * Whenever documents are created or updated via the website, they are instantly
+ * synchronized to the connected Google Sheet.
+ */
+let unsubscribers: Unsubscribe[] = [];
+
+export function startFirestoreRealtimeSheetsSync(
+  onSyncEvent?: (collection: string, docId: string, status: string) => void
+): () => void {
+  // Stop existing listeners if running
+  stopFirestoreRealtimeSheetsSync();
+
+  const syncCache = new Set<string>();
+  const isInitialized: Record<string, boolean> = {
+    users: false,
+    exams: false,
+    questions: false,
+    results: false,
+    payments: false,
+  };
+
+  // 1. Users real-time listener
+  try {
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      if (!isInitialized.users) {
+        // Mark initial batch as loaded
+        snapshot.docs.forEach((d) => syncCache.add(`user-${d.id}`));
+        isInitialized.users = true;
+        return;
+      }
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added' || change.type === 'modified') {
+          const d = change.doc;
+          const data = d.data() as any;
+          const student: UserProfile = {
+            id: d.id,
+            uid: d.id,
+            studentId: data.studentId || d.id,
+            name: data.fullName || data.name || 'শিক্ষার্থী',
+            fullName: data.fullName || data.name || 'শিক্ষার্থী',
+            displayName: data.fullName || data.name || 'শিক্ষার্থী',
+            email: data.email || '',
+            phone: data.phone || '',
+            batch: data.batch || data.institution || 'সাধারণ ব্যাচ',
+            institution: data.institution || data.batch || '',
+            role: data.role === 'admin' ? 'admin' : 'student',
+            isPremium: !!data.isPremium,
+            accountStatus: data.accountStatus === 'blocked' ? 'blocked' : 'active',
+            createdAt: data.registrationDate || data.createdAt || new Date().toISOString(),
+            lastLogin: data.lastLogin || new Date().toISOString(),
+          };
+          syncStudentToGoogleSheets(student).then((res) => {
+            if (res.synced) onSyncEvent?.('Students', d.id, 'synced');
+          });
+        }
+      });
+    });
+    unsubscribers.push(unsubUsers);
+  } catch (e) {
+    console.warn('Realtime sync users listener:', e);
+  }
+
+  // 2. Exams real-time listener
+  try {
+    const unsubExams = onSnapshot(collection(db, 'exams'), (snapshot) => {
+      if (!isInitialized.exams) {
+        snapshot.docs.forEach((d) => syncCache.add(`exam-${d.id}`));
+        isInitialized.exams = true;
+        return;
+      }
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added' || change.type === 'modified') {
+          const d = change.doc;
+          const data = d.data() as any;
+          const exam: Exam = {
+            id: d.id,
+            title: data.title || 'অনলাইন পরীক্ষা',
+            subject: data.subject || 'সাধারণ',
+            durationMinutes: Number(data.durationMinutes || data.duration || 10),
+            totalQuestions: Number(data.totalQuestions || 0),
+            totalMarks: Number(data.totalMarks || 0),
+            isPremium: !!data.isPremium,
+            status: data.status || 'live',
+            dateCreated: data.dateCreated || new Date().toISOString().split('T')[0],
+            questions: data.questions || [],
+          };
+          syncExamToGoogleSheets(exam).then((res) => {
+            if (res.synced) onSyncEvent?.('Exams', d.id, 'synced');
+          });
+        }
+      });
+    });
+    unsubscribers.push(unsubExams);
+  } catch (e) {
+    console.warn('Realtime sync exams listener:', e);
+  }
+
+  // 3. Results real-time listener
+  try {
+    const unsubResults = onSnapshot(collection(db, 'results'), (snapshot) => {
+      if (!isInitialized.results) {
+        snapshot.docs.forEach((d) => syncCache.add(`result-${d.id}`));
+        isInitialized.results = true;
+        return;
+      }
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added' || change.type === 'modified') {
+          const d = change.doc;
+          const data = d.data() as any;
+          const result: ExamResult = {
+            id: d.id,
+            userId: data.userId || data.studentId || 'guest',
+            studentId: data.studentId || data.userId || 'guest',
+            studentName: data.studentName || 'শিক্ষার্থী',
+            studentEmail: data.studentEmail || '',
+            examId: data.examId || '',
+            examTitle: data.examTitle || '',
+            subject: data.subject || 'সাধারণ',
+            score: Number(data.score || 0),
+            totalMarks: Number(data.totalMarks || 0),
+            percentage: Number(data.percentage || 0),
+            totalQuestions: Number(data.totalQuestions || 0),
+            correctAnswers: Number(data.correctAnswers || 0),
+            wrongAnswers: Number(data.wrongAnswers || 0),
+            skippedAnswers: Number(data.skippedAnswers || 0),
+            unansweredQuestions: Number(data.unansweredQuestions || 0),
+            submittedAt: data.submittedAt || new Date().toISOString(),
+            dateTaken: data.dateTaken || new Date().toLocaleDateString('bn-BD'),
+            timeSpentSeconds: Number(data.timeSpentSeconds || 0),
+            subjectPerformance: data.subjectPerformance || {},
+          };
+          syncResultToGoogleSheets(result).then((res) => {
+            if (res.synced) onSyncEvent?.('Results', d.id, 'synced');
+          });
+        }
+      });
+    });
+    unsubscribers.push(unsubResults);
+  } catch (e) {
+    console.warn('Realtime sync results listener:', e);
+  }
+
+  // 4. Questions real-time listener
+  try {
+    const unsubQuestions = onSnapshot(collection(db, 'questions'), (snapshot) => {
+      if (!isInitialized.questions) {
+        snapshot.docs.forEach((d) => syncCache.add(`question-${d.id}`));
+        isInitialized.questions = true;
+        return;
+      }
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added' || change.type === 'modified') {
+          const d = change.doc;
+          const q = mapFirestoreDocToQuestion(d);
+          syncQuestionToGoogleSheets(q, 'general', q.questionNumber || 1).then((res) => {
+            if (res.synced) onSyncEvent?.('Question Bank', d.id, 'synced');
+          });
+        }
+      });
+    });
+    unsubscribers.push(unsubQuestions);
+  } catch (e) {
+    console.warn('Realtime sync questions listener:', e);
+  }
+
+  return stopFirestoreRealtimeSheetsSync;
+}
+
+export function stopFirestoreRealtimeSheetsSync() {
+  unsubscribers.forEach((unsub) => {
+    try {
+      unsub();
+    } catch {}
+  });
+  unsubscribers = [];
 }

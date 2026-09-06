@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Sparkles,
   Flame,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Exam, ExamResult, UserProfile } from '../types';
 import { formatSafeDisplay } from '../lib/dateUtils';
+import ActivityHeatmap from './ActivityHeatmap';
 
 interface DashboardViewProps {
   user: UserProfile;
@@ -67,6 +68,8 @@ export default function DashboardView({
     );
   }, [results, user.id, user.email]);
 
+  const [heatmapStreak, setHeatmapStreak] = useState<number | null>(null);
+
   // Statistics calculation
   const stats = useMemo(() => {
     const totalTaken = userResults.length;
@@ -75,9 +78,9 @@ export default function DashboardView({
         ? Math.round((userResults.reduce((sum, r) => sum + r.score, 0) / userResults.reduce((sum, r) => sum + r.totalQuestions, 0)) * 100)
         : 0;
 
-    const streak = user.role === 'admin' ? 0 : 12; // Standard default streak for testing
+    const streak = heatmapStreak !== null ? heatmapStreak : (user.role === 'admin' ? 0 : 12);
     return { totalTaken, avgScore, streak };
-  }, [userResults, user.role]);
+  }, [userResults, user.role, heatmapStreak]);
 
   const handleStartExam = (exam: Exam) => {
     setSelectedExam(exam);
@@ -295,7 +298,17 @@ export default function DashboardView({
 
       </div>
 
-      {/* 3. Quick Action Buttons Row */}
+      {/* 3. 30-Day Activity Heatmap & Participation Frequency */}
+      <ActivityHeatmap
+        user={user}
+        results={userResults}
+        exams={exams}
+        onStartExam={handleStartExam}
+        onViewResult={handleViewResult}
+        onStreakCalculated={(s) => setHeatmapStreak(s)}
+      />
+
+      {/* 4. Quick Action Buttons Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <a
           href="#live-exams-sec"

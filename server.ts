@@ -386,6 +386,147 @@ async function startServer() {
     }
   });
 
+  // 3.5. Read and Validate Students from Google Sheets
+  app.post("/api/sheets/read-students", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ success: false, message: "Google অথেনটিকেশন টোকেন পাওয়া যায়নি।" });
+      }
+      const token = authHeader.split(" ")[1];
+      const { spreadsheetId, sheetName = "Students" } = req.body;
+
+      if (!spreadsheetId) {
+        return res.status(400).json({ success: false, message: "স্প্রেডশীট আইডি প্রদান করুন।" });
+      }
+
+      const cleanId = spreadsheetId.includes("/d/")
+        ? spreadsheetId.split("/d/")[1].split("/")[0]
+        : spreadsheetId.trim();
+
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(sheetName)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({
+          success: false,
+          message: data?.error?.message || `"${sheetName}" শিট পাওয়া যায়নি। স্প্রেডশীটে "${sheetName}" নামের ট্যাব রয়েছে কিনা পরীক্ষা করুন।`
+        });
+      }
+
+      const rawRows: string[][] = data.values || [];
+      if (rawRows.length <= 1) {
+        return res.json({
+          success: true,
+          data: {
+            totalRows: 0,
+            validCount: 0,
+            errorCount: 0,
+            errorRowNumbers: [],
+            rows: [],
+            validStudents: []
+          }
+        });
+      }
+
+      // Parse Header
+      const headerRow = rawRows[0].map(h => (h || "").trim().toLowerCase());
+      const getColIdx = (names: string[]) => {
+        return headerRow.findIndex(h => names.some(n => h.includes(n.toLowerCase())));
+      };
+
+      const uidIdx = getColIdx(["uid", "user_id", "userid"]);
+      const studentIdIdx = getColIdx(["studentid", "student_id", "id", "রোল"]);
+      const nameIdx = getColIdx(["fullname", "name", "studentname", "নাম", "শিক্ষার্থীর নাম"]);
+      const emailIdx = getColIdx(["email", "e-mail", "ইমেইল"]);
+      const phoneIdx = getColIdx(["phone", "mobile", "ফোন", "মোবাইল"]);
+      const batchIdx = getColIdx(["batch", "institution", "college", "ব্যাচ", "প্রতিষ্ঠান"]);
+      const statusIdx = getColIdx(["accountstatus", "status", "স্ট্যাটাস"]);
+      const regDateIdx = getColIdx(["registrationdate", "createdat", "date", "নিবন্ধন তারিখ", "তারিখ"]);
+
+      const rows: any[] = [];
+      const validStudents: any[] = [];
+      const errorRowNumbers: number[] = [];
+
+      for (let i = 1; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || row.every(cell => !cell || !String(cell).trim())) continue;
+
+        const rowErrors: string[] = [];
+        const rawUid = uidIdx >= 0 && row[uidIdx] ? String(row[uidIdx]).trim() : "";
+        const rawStudentId = studentIdIdx >= 0 && row[studentIdIdx] ? String(row[studentIdIdx]).trim() : "";
+        const rawName = nameIdx >= 0 && row[nameIdx] ? String(row[nameIdx]).trim() : "";
+        const rawEmail = emailIdx >= 0 && row[emailIdx] ? String(row[emailIdx]).trim() : "";
+        const rawPhone = phoneIdx >= 0 && row[phoneIdx] ? String(row[phoneIdx]).trim() : "";
+        const rawBatch = batchIdx >= 0 && row[batchIdx] ? String(row[batchIdx]).trim() : "";
+        const rawStatus = statusIdx >= 0 && row[statusIdx] ? String(row[statusIdx]).trim().toLowerCase() : "active";
+        const rawRegDate = regDateIdx >= 0 && row[regDateIdx] ? String(row[regDateIdx]).trim() : new Date().toISOString();
+
+        if (!rawEmail && !rawPhone && !rawName) {
+          rowErrors.push("নাম অথবা ইমেইল অনুপস্থিত");
+        }
+
+        const effectiveUid = rawUid || rawStudentId || (rawEmail ? `user_${btoa(rawEmail).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}` : `student_${Date.now()}_${i}`);
+        const effectiveName = rawName || (rawEmail ? rawEmail.split("@")[0] : `শিক্ষার্থী ${i}`);
+        const isValid = rowErrors.length === 0;
+
+        if (!isValid) {
+          errorRowNumbers.push(i + 1);
+        } else {
+          validStudents.push({
+            id: effectiveUid,
+            uid: effectiveUid,
+            studentId: rawStudentId || effectiveUid,
+            name: effectiveName,
+            fullName: effectiveName,
+            email: rawEmail,
+            phone: rawPhone,
+            batch: rawBatch || "সাধারণ ব্যাচ",
+            institution: rawBatch || "সাধারণ ব্যাচ",
+            accountStatus: rawStatus === "blocked" ? "blocked" : "active",
+            role: rawEmail?.toLowerCase() === "medha@admin.com" ? "admin" : "student",
+            createdAt: rawRegDate,
+            registrationDate: rawRegDate,
+            joinedDate: rawRegDate.split("T")[0],
+            isPremium: rawEmail?.toLowerCase() === "medha@admin.com" ? true : false,
+          });
+        }
+
+        rows.push({
+          rowNumber: i + 1,
+          uid: effectiveUid,
+          studentId: rawStudentId,
+          fullName: effectiveName,
+          email: rawEmail,
+          phone: rawPhone,
+          batch: rawBatch,
+          accountStatus: rawStatus,
+          registrationDate: rawRegDate,
+          isValid,
+          errors: rowErrors
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          totalRows: rows.length,
+          validCount: validStudents.length,
+          errorCount: errorRowNumbers.length,
+          errorRowNumbers,
+          rows,
+          validStudents
+        }
+      });
+    } catch (error: any) {
+      console.error("Read students API error:", error);
+      return res.status(500).json({ success: false, message: error?.message || "সার্ভার এরর" });
+    }
+  });
+
   // 4. Export single sheet data table to Google Sheets
   app.post("/api/sheets/export", async (req, res) => {
     try {
@@ -632,6 +773,277 @@ async function startServer() {
       });
     } catch (error: any) {
       console.error("Sync result API error:", error);
+      return res.status(500).json({ success: false, message: error?.message || "সার্ভার এরর" });
+    }
+  });
+
+  // Helper function: ensure a sheet tab exists with headers
+  async function ensureSheetExistsWithHeaders(cleanId: string, token: string, sheetName: string, headers: string[]) {
+    try {
+      const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!metaRes.ok) return;
+      const metaData = await metaRes.json();
+      const existingSheets = (metaData.sheets || []).map((s: any) => s.properties?.title);
+      if (!existingSheets.includes(sheetName)) {
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            requests: [{ addSheet: { properties: { title: sheetName, gridProperties: { frozenRowCount: 1 } } } }]
+          })
+        });
+        await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=USER_ENTERED`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              range: `${sheetName}!A1`,
+              majorDimension: "ROWS",
+              values: [headers]
+            })
+          }
+        );
+      }
+    } catch (e) {
+      console.warn(`ensureSheetExistsWithHeaders error for ${sheetName}:`, e);
+    }
+  }
+
+  // Helper function: update if matching key exists in colIndex, otherwise append
+  async function appendOrUpdateRow(
+    cleanId: string,
+    token: string,
+    sheetName: string,
+    matchColIndex: number,
+    matchVal: string,
+    row: any[],
+    headers: string[]
+  ) {
+    await ensureSheetExistsWithHeaders(cleanId, token, sheetName, headers);
+
+    if (matchVal) {
+      const readRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(sheetName)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (readRes.ok) {
+        const readData = await readRes.json();
+        const existingRows: any[][] = readData.values || [];
+        let foundRowIndex = -1;
+        for (let r = 1; r < existingRows.length; r++) {
+          const val = String(existingRows[r]?.[matchColIndex] || "").trim();
+          if (val && val.toLowerCase() === String(matchVal).trim().toLowerCase()) {
+            foundRowIndex = r + 1; // 1-based index in sheets
+            break;
+          }
+        }
+
+        if (foundRowIndex > 0) {
+          const updateRes = await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(sheetName)}!A${foundRowIndex}?valueInputOption=USER_ENTERED`,
+            {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                range: `${sheetName}!A${foundRowIndex}`,
+                majorDimension: "ROWS",
+                values: [row]
+              })
+            }
+          );
+          return { action: "updated", rowIndex: foundRowIndex, ok: updateRes.ok };
+        }
+      }
+    }
+
+    const appendRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=USER_ENTERED`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ values: [row] })
+      }
+    );
+    return { action: "appended", ok: appendRes.ok };
+  }
+
+  // 7. Auto-Sync Student Profile to Students sheet
+  app.post("/api/sheets/sync-student", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ success: false, message: "Google অথেনটিকেশন টোকেন পাওয়া যায়নি।" });
+      }
+      const token = authHeader.split(" ")[1];
+      const { spreadsheetId, student } = req.body;
+
+      if (!spreadsheetId || !student) {
+        return res.status(400).json({ success: false, message: "অবৈধ প্যারামিটার।" });
+      }
+
+      const cleanId = spreadsheetId.includes("/d/")
+        ? spreadsheetId.split("/d/")[1].split("/")[0]
+        : spreadsheetId.trim();
+
+      const headers = ["uid", "studentId", "fullName", "email", "phone", "batch", "accountStatus", "registrationDate"];
+      const effectiveId = student.uid || student.id || "";
+      const row = [
+        effectiveId,
+        student.studentId || student.id || student.uid || "",
+        student.fullName || student.name || "",
+        student.email || "",
+        student.phone || "",
+        student.batch || student.institution || "ঢাকা কলেজ",
+        student.accountStatus || "active",
+        student.registrationDate || student.createdAt || student.joinedDate || new Date().toISOString()
+      ];
+
+      const outcome = await appendOrUpdateRow(cleanId, token, "Students", 0, effectiveId, row, headers);
+      return res.json({ success: outcome.ok, action: outcome.action, message: `শিক্ষার্থী তথ্য গুগল শিটে ${outcome.action === 'updated' ? 'আপডেট' : 'যোগ'} হয়েছে।` });
+    } catch (error: any) {
+      console.error("Sync student API error:", error);
+      return res.status(500).json({ success: false, message: error?.message || "সার্ভার এরর" });
+    }
+  });
+
+  // 8. Auto-Sync Exam to Exams sheet
+  app.post("/api/sheets/sync-exam", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ success: false, message: "Google অথেনটিকেশন টোকেন পাওয়া যায়নি।" });
+      }
+      const token = authHeader.split(" ")[1];
+      const { spreadsheetId, exam } = req.body;
+
+      if (!spreadsheetId || !exam) {
+        return res.status(400).json({ success: false, message: "অবৈধ প্যারামিটার।" });
+      }
+
+      const cleanId = spreadsheetId.includes("/d/")
+        ? spreadsheetId.split("/d/")[1].split("/")[0]
+        : spreadsheetId.trim();
+
+      const headers = ["examId", "title", "category", "duration", "totalQuestions", "totalMarks", "passMarks", "price", "status", "createdAt"];
+      const examId = exam.id || "";
+      const totalMarks = Number(exam.totalMarks || exam.questions?.length || 0);
+      const row = [
+        examId,
+        exam.title || "",
+        exam.subject || "সাধারণ",
+        Number(exam.durationMinutes || 10),
+        Number(exam.totalQuestions || exam.questions?.length || 0),
+        totalMarks,
+        Math.ceil(totalMarks * 0.4),
+        exam.isPremium ? "৳ ২৪৯" : "ফ্রি",
+        exam.status || "live",
+        exam.dateCreated || new Date().toISOString().split("T")[0]
+      ];
+
+      const outcome = await appendOrUpdateRow(cleanId, token, "Exams", 0, examId, row, headers);
+      return res.json({ success: outcome.ok, action: outcome.action, message: `পরীক্ষা তথ্য গুগল শিটে ${outcome.action === 'updated' ? 'আপডেট' : 'যোগ'} হয়েছে।` });
+    } catch (error: any) {
+      console.error("Sync exam API error:", error);
+      return res.status(500).json({ success: false, message: error?.message || "সার্ভার এরর" });
+    }
+  });
+
+  // 9. Auto-Sync Question to Question Bank sheet
+  app.post("/api/sheets/sync-question", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ success: false, message: "Google অথেনটিকেশন টোকেন পাওয়া যায়নি।" });
+      }
+      const token = authHeader.split(" ")[1];
+      const { spreadsheetId, question, examId = "general", questionNumber = 1 } = req.body;
+
+      if (!spreadsheetId || !question) {
+        return res.status(400).json({ success: false, message: "অবৈধ প্যারামিটার।" });
+      }
+
+      const cleanId = spreadsheetId.includes("/d/")
+        ? spreadsheetId.split("/d/")[1].split("/")[0]
+        : spreadsheetId.trim();
+
+      const headers = ["questionId", "examId", "questionNumber", "questionText", "optionA", "optionB", "optionC", "optionD", "correctAnswer", "explanation", "marks"];
+      const qId = question.id || `q-${Date.now()}`;
+      const correctIdx = Number(question.correctAnswer || 0);
+      const correctLetter = correctIdx === 1 ? "B" : correctIdx === 2 ? "C" : correctIdx === 3 ? "D" : "A";
+
+      const row = [
+        qId,
+        examId,
+        question.questionNumber || questionNumber,
+        question.text || "",
+        question.options?.[0] || "",
+        question.options?.[1] || "",
+        question.options?.[2] || "",
+        question.options?.[3] || "",
+        correctLetter,
+        question.explanation || "",
+        Number(question.marks || 1)
+      ];
+
+      const outcome = await appendOrUpdateRow(cleanId, token, "Question Bank", 0, qId, row, headers);
+      return res.json({ success: outcome.ok, action: outcome.action, message: `প্রশ্ন গুগল শিটে ${outcome.action === 'updated' ? 'আপডেট' : 'যোগ'} হয়েছে।` });
+    } catch (error: any) {
+      console.error("Sync question API error:", error);
+      return res.status(500).json({ success: false, message: error?.message || "সার্ভার এরর" });
+    }
+  });
+
+  // 10. Auto-Sync Payment to Payments sheet
+  app.post("/api/sheets/sync-payment", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ success: false, message: "Google অথেনটিকেশন টোকেন পাওয়া যায়নি।" });
+      }
+      const token = authHeader.split(" ")[1];
+      const { spreadsheetId, payment } = req.body;
+
+      if (!spreadsheetId || !payment) {
+        return res.status(400).json({ success: false, message: "অবৈধ প্যারামিটার।" });
+      }
+
+      const cleanId = spreadsheetId.includes("/d/")
+        ? spreadsheetId.split("/d/")[1].split("/")[0]
+        : spreadsheetId.trim();
+
+      const headers = ["paymentId", "userId", "studentId", "transactionId", "gateway", "amount", "currency", "paymentStatus", "paidAt"];
+      const payId = payment.id || `pay-${Date.now()}`;
+      const row = [
+        payId,
+        payment.userId || "",
+        payment.studentId || payment.userId || "",
+        payment.transactionId || "",
+        payment.gateway || "bKash",
+        Number(payment.amount || 249),
+        "BDT",
+        payment.paymentStatus || "completed",
+        payment.createdAt || new Date().toISOString()
+      ];
+
+      const outcome = await appendOrUpdateRow(cleanId, token, "Payments", 0, payId, row, headers);
+      return res.json({ success: outcome.ok, action: outcome.action, message: `পেমেন্ট রেকর্ড গুগল শিটে সিঙ্ক হয়েছে।` });
+    } catch (error: any) {
+      console.error("Sync payment API error:", error);
       return res.status(500).json({ success: false, message: error?.message || "সার্ভার এরর" });
     }
   });

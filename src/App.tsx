@@ -27,7 +27,13 @@ import {
   safeTimestampToString,
   safeDateOnlyString,
 } from './services/firestoreService';
-import { syncResultToGoogleSheets } from './services/googleSheetsService';
+import {
+  syncResultToGoogleSheets,
+  syncStudentToGoogleSheets,
+  syncExamToGoogleSheets,
+  startFirestoreRealtimeSheetsSync
+} from './services/googleSheetsService';
+import { isGoogleConnected } from './lib/googleAuth';
 
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, getDocFromServer, onSnapshot, collection } from 'firebase/firestore';
@@ -210,29 +216,32 @@ export default function App() {
               // Initial profile creation if doc doesn't exist yet in Firestore
               const providerDisplayName = firebaseUser.providerData?.find(p => p.displayName)?.displayName || '';
               const defaultName = firebaseUser.displayName || providerDisplayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'শিক্ষার্থী');
-              const displayName = isAdminEmail ? 'মুহাম্মদ আশরাফুল ইসলাম' : defaultName;
+              const displayName = isAdminEmail ? 'Prosenjit' : defaultName;
               profileData = {
                 id: firebaseUser.uid,
                 uid: firebaseUser.uid,
+                studentId: isAdminEmail ? '2JDRuYTnWuXwQFVAefh1GP1gWcy1' : firebaseUser.uid,
                 name: displayName,
                 fullName: displayName,
                 displayName: displayName,
                 email: firebaseUser.email || '',
-                phone: isAdminEmail ? '+৮৮০ ১৭০০-১১২২৩৪' : '',
+                phone: isAdminEmail ? '০১৪৫৪৪৫৪৫' : '',
                 photoURL: firebaseUser.photoURL || '',
                 avatar: firebaseUser.photoURL || '',
                 role: isAdminEmail ? 'admin' : 'student',
                 accountStatus: 'active',
-                createdAt: nowIso,
+                createdAt: isAdminEmail ? '2026-08-05T17:05:59.331Z' : nowIso,
+                registrationDate: isAdminEmail ? '2026-08-05T17:05:59.331Z' : nowIso,
                 lastLogin: nowIso,
-                institution: isAdminEmail ? 'মেধা এক্সাম এডমিন সেল' : '',
-                joinedDate: new Date().toLocaleDateString('bn-BD'),
+                institution: isAdminEmail ? 'ঢাকা কলেজ' : '',
+                batch: isAdminEmail ? 'ঢাকা কলেজ' : '',
+                joinedDate: isAdminEmail ? '2026-08-05' : new Date().toLocaleDateString('bn-BD'),
                 earnedCertificates: [],
-                isPremium: false,
-                isPremiumDate: '',
-                isPremiumExpiryDate: '',
-                inPremiumDate: '',
-                inPremiumExpiryDate: '',
+                isPremium: isAdminEmail ? true : false,
+                isPremiumDate: isAdminEmail ? '2026-08-05' : '',
+                isPremiumExpiryDate: isAdminEmail ? '2099-12-31' : '',
+                inPremiumDate: isAdminEmail ? '2026-08-05' : '',
+                inPremiumExpiryDate: isAdminEmail ? '2099-12-31' : '',
               };
               try {
                 await setDoc(doc(db, 'users', firebaseUser.uid), profileData, { merge: true });
@@ -424,6 +433,14 @@ export default function App() {
     const intervalTimer = setInterval(checkAndTransitionExamsToLive, 10000);
     return () => clearInterval(intervalTimer);
   }, [exams]);
+
+  // Global automatic Firestore -> Google Sheets real-time synchronization
+  useEffect(() => {
+    if (isGoogleConnected()) {
+      const stop = startFirestoreRealtimeSheetsSync();
+      return () => stop();
+    }
+  }, []);
 
   useEffect(() => {
     // Load or initialize Ministry Question Banks
@@ -645,6 +662,13 @@ export default function App() {
         }
       }
     }
+
+    // Automatically sync student profile to Google Sheets
+    try {
+      syncStudentToGoogleSheets(updatedProfile).catch((err) => {
+        console.warn("Google Sheets auto-sync for student caught:", err);
+      });
+    } catch (e) {}
   };
 
   const handleCreateExam = async (newExam: Exam) => {
@@ -660,6 +684,13 @@ export default function App() {
     } catch (err) {
       console.warn("Failed to save exam to Firestore:", err);
     }
+
+    // Automatically sync exam to Google Sheets
+    try {
+      syncExamToGoogleSheets(newExam).catch((err) => {
+        console.warn("Google Sheets auto-sync for exam caught:", err);
+      });
+    } catch (e) {}
   };
 
   const handleUpdateExam = async (updatedExam: Exam) => {
@@ -669,6 +700,13 @@ export default function App() {
     } catch (err) {
       console.warn("Failed to update exam in Firestore:", err);
     }
+
+    // Automatically sync updated exam to Google Sheets
+    try {
+      syncExamToGoogleSheets(updatedExam).catch((err) => {
+        console.warn("Google Sheets auto-sync for exam caught:", err);
+      });
+    } catch (e) {}
   };
 
   const handleDeleteExam = async (examId: string) => {

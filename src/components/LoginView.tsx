@@ -223,32 +223,54 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
     }
 
     // Google reCAPTCHA Verification Check
-    if (HAS_CUSTOM_RECAPTCHA_KEY && !recaptchaToken) {
+    // Get fresh token directly from grecaptcha if available in DOM
+    let activeToken = recaptchaToken;
+    if (!activeToken && window.grecaptcha && typeof window.grecaptcha.getResponse === 'function') {
+      try {
+        const directToken = widgetIdRef.current !== null 
+          ? window.grecaptcha.getResponse(widgetIdRef.current) 
+          : window.grecaptcha.getResponse();
+        if (directToken) {
+          activeToken = directToken;
+          setRecaptchaToken(directToken);
+        }
+      } catch (err) {}
+    }
+
+    if (HAS_CUSTOM_RECAPTCHA_KEY && !activeToken) {
       setError('অনুগ্রহ করে "I\'m not a robot" (reCAPTCHA) নিরাপত্তা যাচাইকরণটি সম্পন্ন করুন।');
       setRecaptchaError('যাচাইকরণ সম্পন্ন করুন');
       setLoading(false);
       return;
     }
 
-    // Verify token with backend if token is present
-    if (recaptchaToken) {
+    // Verify token with backend if token is present and backend API is reachable
+    if (activeToken) {
       try {
         const verifyRes = await fetch('/api/verify-recaptcha', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: recaptchaToken })
+          body: JSON.stringify({ token: activeToken })
         });
-        const verifyData = await verifyRes.json();
-        if (!verifyData.success) {
-          setError('reCAPTCHA যাচাইকরণ সম্পন্ন হয়নি। অনুগ্রহ করে চেকবক্সে আবার ক্লিক করুন।');
-          if (widgetIdRef.current !== null && window.grecaptcha) {
-            try {
-              window.grecaptcha.reset(widgetIdRef.current);
-              setRecaptchaToken('');
-            } catch (e) {}
+        
+        // On static hosting (like Netlify/Vercel/SPA), /api routes return HTML or 404.
+        // Only reject if an active API explicitly responded with HTTP 200 JSON { success: false }.
+        if (verifyRes.ok) {
+          const contentType = verifyRes.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const verifyData = await verifyRes.json().catch(() => null);
+            if (verifyData && verifyData.success === false) {
+              setError('reCAPTCHA যাচাইকরণ সম্পন্ন হয়নি। অনুগ্রহ করে চেকবক্সে আবার ক্লিক করুন।');
+              if (widgetIdRef.current !== null && window.grecaptcha) {
+                try {
+                  window.grecaptcha.reset(widgetIdRef.current);
+                  setRecaptchaToken('');
+                } catch (e) {}
+              }
+              setLoading(false);
+              return;
+            }
           }
-          setLoading(false);
-          return;
         }
       } catch (verifyErr) {
         console.warn('reCAPTCHA backend call exception (proceeding gracefully):', verifyErr);
@@ -398,23 +420,26 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           const adminProfile: UserProfile = {
             id: fallbackUid,
             uid: fallbackUid,
-            name: 'মুহাম্মদ আশরাফুল ইসলাম',
-            fullName: 'মুহাম্মদ আশরাফুল ইসলাম',
+            studentId: fallbackUid,
+            name: 'Prosenjit',
+            fullName: 'Prosenjit',
             email: 'medha@admin.com',
-            phone: '+৮৮০ ১৭০০-১১২২৩৪',
+            phone: '০১৪৫৪৪৫৪৫',
             photoURL: '',
             avatar: '',
             role: 'admin',
             accountStatus: 'active',
-            createdAt: nowIso,
+            createdAt: '2026-08-05T17:05:59.331Z',
+            registrationDate: '2026-08-05T17:05:59.331Z',
             lastLogin: nowIso,
-            institution: 'মেধা এক্সাম এডমিন সেল',
-            joinedDate: '২০২৫-০১-১০',
+            institution: 'ঢাকা কলেজ',
+            batch: 'ঢাকা কলেজ',
+            joinedDate: '2026-08-05',
             earnedCertificates: [],
             isPremium: true,
-            isPremiumDate: '2025-01-01',
+            isPremiumDate: '2026-08-05',
             isPremiumExpiryDate: '2099-12-31',
-            inPremiumDate: '2025-01-01',
+            inPremiumDate: '2026-08-05',
             inPremiumExpiryDate: '2099-12-31',
           };
 
@@ -467,13 +492,20 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         if (profile) {
           profile.lastLogin = nowIso;
           profile.uid = uid;
-          profile.fullName = profile.fullName || profile.name || (isAdminEmail ? 'মুহাম্মদ আশরাফুল ইসলাম' : 'শিক্ষার্থী');
+          profile.fullName = profile.fullName || profile.name || (isAdminEmail ? 'Prosenjit' : 'শিক্ষার্থী');
           profile.photoURL = profile.photoURL || profile.avatar || '';
           profile.accountStatus = profile.accountStatus || 'active';
           profile.createdAt = profile.createdAt || nowIso;
 
           if (isAdminEmail) {
             profile.role = 'admin';
+            profile.name = 'Prosenjit';
+            profile.fullName = 'Prosenjit';
+            profile.phone = '০১৪৫৪৪৫৪৫';
+            profile.institution = 'ঢাকা কলেজ';
+            profile.batch = 'ঢাকা কলেজ';
+            profile.studentId = '2JDRuYTnWuXwQFVAefh1GP1gWcy1';
+            profile.registrationDate = '2026-08-05T17:05:59.331Z';
             profile.isPremium = true;
           } else if (profile.role === 'admin' && !isAdminEmail) {
             profile.role = 'student';
@@ -485,27 +517,30 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           }
         } else {
           const defaultStudentName = firebaseUser?.displayName || name || (email ? email.split('@')[0] : 'ইউজার');
-          const displayName = isAdminEmail ? 'মুহাম্মদ আশরাফুল ইসলাম' : defaultStudentName;
+          const displayName = isAdminEmail ? 'Prosenjit' : defaultStudentName;
           profile = {
             id: uid,
             uid: uid,
+            studentId: isAdminEmail ? '2JDRuYTnWuXwQFVAefh1GP1gWcy1' : uid,
             name: displayName,
             fullName: displayName,
             email: firebaseUser?.email || email,
-            phone: isAdminEmail ? '+৮৮০ ১৭০০-১১২২৩৪' : '',
+            phone: isAdminEmail ? '০১৪৫৪৪৫৪৫' : '',
             photoURL: firebaseUser?.photoURL || '',
             avatar: firebaseUser?.photoURL || '',
             role: isAdminEmail ? 'admin' : 'student',
             accountStatus: 'active',
-            createdAt: nowIso,
+            createdAt: isAdminEmail ? '2026-08-05T17:05:59.331Z' : nowIso,
+            registrationDate: isAdminEmail ? '2026-08-05T17:05:59.331Z' : nowIso,
             lastLogin: nowIso,
-            institution: isAdminEmail ? 'মেধা এক্সাম এডমিন সেল' : '',
-            joinedDate: isAdminEmail ? '২০২৫-০১-১০' : new Date().toLocaleDateString('bn-BD'),
+            institution: isAdminEmail ? 'ঢাকা কলেজ' : '',
+            batch: isAdminEmail ? 'ঢাকা কলেজ' : '',
+            joinedDate: isAdminEmail ? '2026-08-05' : new Date().toLocaleDateString('bn-BD'),
             earnedCertificates: [],
             isPremium: isAdminEmail ? true : false,
-            isPremiumDate: isAdminEmail ? '2025-01-01' : '',
+            isPremiumDate: isAdminEmail ? '2026-08-05' : '',
             isPremiumExpiryDate: isAdminEmail ? '2099-12-31' : '',
-            inPremiumDate: isAdminEmail ? '2025-01-01' : '',
+            inPremiumDate: isAdminEmail ? '2026-08-05' : '',
             inPremiumExpiryDate: isAdminEmail ? '2099-12-31' : '',
           };
           try {
@@ -533,23 +568,26 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         const fallbackProfile: UserProfile = {
           id: fallbackUid,
           uid: fallbackUid,
-          name: isAdmin ? 'মুহাম্মদ আশরাফুল ইসলাম' : (name || lowerEmail.split('@')[0]),
-          fullName: isAdmin ? 'মুহাম্মদ আশরাফুল ইসলাম' : (name || lowerEmail.split('@')[0]),
+          studentId: fallbackUid,
+          name: isAdmin ? 'Prosenjit' : (name || lowerEmail.split('@')[0]),
+          fullName: isAdmin ? 'Prosenjit' : (name || lowerEmail.split('@')[0]),
           email: lowerEmail,
-          phone: isAdmin ? '+৮৮০ ১৭০০-১১২২৩৪' : '',
+          phone: isAdmin ? '০১৪৫৪৪৫৪৫' : '',
           photoURL: '',
           avatar: '',
           role: isAdmin ? 'admin' : 'student',
           accountStatus: 'active',
-          createdAt: nowIso,
+          createdAt: isAdmin ? '2026-08-05T17:05:59.331Z' : nowIso,
+          registrationDate: isAdmin ? '2026-08-05T17:05:59.331Z' : nowIso,
           lastLogin: nowIso,
-          institution: isAdmin ? 'মেধা এক্সাম এডমিন সেল' : '',
-          joinedDate: new Date().toLocaleDateString('bn-BD'),
+          institution: isAdmin ? 'ঢাকা কলেজ' : '',
+          batch: isAdmin ? 'ঢাকা কলেজ' : '',
+          joinedDate: isAdmin ? '2026-08-05' : new Date().toLocaleDateString('bn-BD'),
           earnedCertificates: [],
           isPremium: isAdmin ? true : false,
-          isPremiumDate: isAdmin ? '2025-01-01' : '',
+          isPremiumDate: isAdmin ? '2026-08-05' : '',
           isPremiumExpiryDate: isAdmin ? '2099-12-31' : '',
-          inPremiumDate: isAdmin ? '2025-01-01' : '',
+          inPremiumDate: isAdmin ? '2026-08-05' : '',
           inPremiumExpiryDate: isAdmin ? '2099-12-31' : '',
         };
         try {

@@ -243,26 +243,28 @@ export async function saveUpcomingExamScheduleToFirestore(
     }, { merge: true });
 
     // 5. Update siteSettings/upcomingExam ONLY IF status is 'upcoming'
-    if (status === 'upcoming' && isPublished) {
-      const siteSettingsRef = doc(db, 'siteSettings', 'upcomingExam');
-      await setDoc(siteSettingsRef, {
-        title: examData.title.trim(),
-        description: (examData.description || '').trim(),
-        examId: targetExamId,
-        examDate: examDate || '',
-        startDate: startDate || '',
-        startTime: examDateTime || '',
-        duration: duration,
-        durationMinutes: duration,
-        isPublished: isPublished,
-        subject: subject,
-        totalQuestions: Number(examData.totalQuestions || examData.questions?.length || 0),
-        totalMarks: Number(examData.totalMarks || examData.questions?.length || 0),
-        isPremium: examType === 'premium',
-        updatedBy: createdBy,
-        updatedAt: serverTimestamp(),
-        lastUpdated: new Date().toISOString(),
-      }, { merge: true });
+    if (status === 'upcoming') {
+      try {
+        await saveUpcomingExamSettings({
+          examId: targetExamId,
+          title: examData.title.trim(),
+          description: (examData.description || '').trim(),
+          examDate: examDate || '',
+          startDate: startDate || '',
+          startTime: examDateTime || '',
+          archiveTime: archiveDateTime || '',
+          duration: duration,
+          durationMinutes: duration,
+          isPublished: isPublished,
+          subject: subject,
+          totalQuestions: Number(examData.totalQuestions || examData.questions?.length || 0),
+          totalMarks: Number(examData.totalMarks || examData.questions?.length || 0),
+          isPremium: examType === 'premium',
+          updatedBy: createdBy,
+        }, createdBy);
+      } catch (err) {
+        console.warn("Could not sync to siteSettings/upcomingExam:", err);
+      }
     } else if (status === 'live' || status === 'archive') {
       // Clear from upcoming exam siteSettings so it does not persist in upcoming banner
       await clearUpcomingExamSettings(targetExamId);
@@ -511,6 +513,36 @@ export async function clearUpcomingExamSettings(examIdToClear?: string): Promise
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const data = snap.data();
+        let items: any[] = Array.isArray(data.items) ? [...data.items] : [];
+        if (items.length > 0) {
+          items = items.filter(it => it.examId !== examIdToClear && it.id !== examIdToClear);
+          if (items.length > 0) {
+            const nextPrimary = items.find(it => it.isPublished !== false) || items[0];
+            await setDoc(docRef, {
+              title: nextPrimary.title,
+              description: nextPrimary.description || '',
+              examId: nextPrimary.examId || '',
+              examDate: nextPrimary.examDate || '',
+              startDate: nextPrimary.startDate || '',
+              startTime: nextPrimary.startTime || '',
+              archiveTime: nextPrimary.archiveTime || '',
+              duration: nextPrimary.duration || 30,
+              durationMinutes: nextPrimary.durationMinutes || 30,
+              isPublished: nextPrimary.isPublished !== false,
+              subject: nextPrimary.subject || 'BCS',
+              totalQuestions: nextPrimary.totalQuestions || 0,
+              totalMarks: nextPrimary.totalMarks || 0,
+              isPremium: !!nextPrimary.isPremium,
+              updatedAt: serverTimestamp(),
+              lastUpdated: new Date().toISOString(),
+              items: items,
+            });
+            try {
+              await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${examIdToClear}`));
+            } catch (e) {}
+            return;
+          }
+        }
         if (data.examId && data.examId !== examIdToClear) {
           // It's referencing a different upcoming exam, keep it intact
           return;
@@ -518,6 +550,11 @@ export async function clearUpcomingExamSettings(examIdToClear?: string): Promise
       }
     }
     await deleteDoc(docRef);
+    if (examIdToClear) {
+      try {
+        await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${examIdToClear}`));
+      } catch (e) {}
+    }
     try {
       localStorage.removeItem('cached_upcoming_exam_settings');
     } catch (e) {}
@@ -1179,6 +1216,36 @@ export function subscribeToUpcomingExamSettings(callback: (settings: UpcomingExa
         const startDate = data.startDate || (startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '');
         const examDate = data.examDate || startDate || '';
 
+        // Parse multiple upcoming exams from items array if present
+        let parsedItems: UpcomingExamSettings[] | undefined = undefined;
+        if (Array.isArray(data.items)) {
+          parsedItems = data.items.map((it: any) => {
+            const itRaw = it.startTime || it.startDate || it.examDate || '';
+            const itStart = itRaw ? itRaw.trim() : '';
+            const itDate = it.startDate || (itStart ? (itStart.includes('T') ? itStart.split('T')[0] : itStart) : (it.examDate || ''));
+            return {
+              id: it.id || it.examId || '',
+              examId: it.examId || it.id || '',
+              title: it.title || '',
+              description: it.description || '',
+              subject: it.subject || 'BCS',
+              duration: Number(it.duration || it.durationMinutes || 30),
+              durationMinutes: Number(it.durationMinutes || it.duration || 30),
+              startTime: itStart,
+              startDate: itDate,
+              examDate: itDate,
+              archiveTime: it.archiveTime || '',
+              isPublished: it.isPublished !== false,
+              isPremium: !!it.isPremium,
+              totalQuestions: Number(it.totalQuestions || 0),
+              totalMarks: Number(it.totalMarks || 0),
+              updatedBy: it.updatedBy || '',
+              updatedAt: it.updatedAt || '',
+              lastUpdated: it.lastUpdated || '',
+            };
+          });
+        }
+
         const settingsObj: UpcomingExamSettings = {
           id: docSnap.id,
           title: data.title || '',
@@ -1187,6 +1254,7 @@ export function subscribeToUpcomingExamSettings(callback: (settings: UpcomingExa
           examDate: examDate,
           startDate: startDate,
           startTime: startTime,
+          archiveTime: data.archiveTime || '',
           duration: Number(data.duration || data.durationMinutes || 15),
           durationMinutes: Number(data.durationMinutes || data.duration || 15),
           isPublished: data.isPublished !== false,
@@ -1197,6 +1265,7 @@ export function subscribeToUpcomingExamSettings(callback: (settings: UpcomingExa
           updatedBy: data.updatedBy || '',
           updatedAt: formattedUpdatedAt || data.lastUpdated || '',
           lastUpdated: data.lastUpdated || formattedUpdatedAt || '',
+          items: parsedItems,
         };
         try {
           localStorage.setItem('cached_upcoming_exam_settings', JSON.stringify(settingsObj));
@@ -1240,6 +1309,35 @@ export async function getUpcomingExamSettings(): Promise<UpcomingExamSettings | 
       const startDate = data.startDate || (startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '');
       const examDate = data.examDate || startDate || '';
 
+      let parsedItems: UpcomingExamSettings[] | undefined = undefined;
+      if (Array.isArray(data.items)) {
+        parsedItems = data.items.map((it: any) => {
+          const itRaw = it.startTime || it.startDate || it.examDate || '';
+          const itStart = itRaw ? itRaw.trim() : '';
+          const itDate = it.startDate || (itStart ? (itStart.includes('T') ? itStart.split('T')[0] : itStart) : (it.examDate || ''));
+          return {
+            id: it.id || it.examId || '',
+            examId: it.examId || it.id || '',
+            title: it.title || '',
+            description: it.description || '',
+            subject: it.subject || 'BCS',
+            duration: Number(it.duration || it.durationMinutes || 30),
+            durationMinutes: Number(it.durationMinutes || it.duration || 30),
+            startTime: itStart,
+            startDate: itDate,
+            examDate: itDate,
+            archiveTime: it.archiveTime || '',
+            isPublished: it.isPublished !== false,
+            isPremium: !!it.isPremium,
+            totalQuestions: Number(it.totalQuestions || 0),
+            totalMarks: Number(it.totalMarks || 0),
+            updatedBy: it.updatedBy || '',
+            updatedAt: it.updatedAt || '',
+            lastUpdated: it.lastUpdated || '',
+          };
+        });
+      }
+
       const settingsObj: UpcomingExamSettings = {
         id: docSnap.id,
         title: data.title || '',
@@ -1248,6 +1346,7 @@ export async function getUpcomingExamSettings(): Promise<UpcomingExamSettings | 
         examDate: examDate,
         startDate: startDate,
         startTime: startTime,
+        archiveTime: data.archiveTime || '',
         duration: Number(data.duration || data.durationMinutes || 15),
         durationMinutes: Number(data.durationMinutes || data.duration || 15),
         isPublished: data.isPublished !== false,
@@ -1258,6 +1357,7 @@ export async function getUpcomingExamSettings(): Promise<UpcomingExamSettings | 
         updatedBy: data.updatedBy || '',
         updatedAt: formattedUpdatedAt || data.lastUpdated || '',
         lastUpdated: data.lastUpdated || formattedUpdatedAt || '',
+        items: parsedItems,
       };
       try {
         localStorage.setItem('cached_upcoming_exam_settings', JSON.stringify(settingsObj));
@@ -1277,7 +1377,7 @@ export async function getUpcomingExamSettings(): Promise<UpcomingExamSettings | 
   }
 }
 
-// Save or Update Upcoming Exam settings in Firestore (siteSettings/upcomingExam)
+// Save or Update Upcoming Exam settings in Firestore (siteSettings/upcomingExam & siteSettings collection)
 export async function saveUpcomingExamSettings(settings: UpcomingExamSettings, updatedByUid: string = 'admin'): Promise<void> {
   const docRef = doc(db, 'siteSettings', 'upcomingExam');
   const nowIso = new Date().toISOString();
@@ -1286,14 +1386,17 @@ export async function saveUpcomingExamSettings(settings: UpcomingExamSettings, u
   const startTime = rawDateTime ? rawDateTime.trim() : '';
   const startDate = startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '';
   const examDate = startDate;
+  const examId = settings.examId || settings.id || `upcoming-exam-${Date.now()}`;
 
-  const payload = {
+  const currentItem: UpcomingExamSettings = {
+    id: examId,
+    examId: examId,
     title: (settings.title || '').trim(),
     description: (settings.description || '').trim(),
-    examId: settings.examId || '',
     examDate: examDate || '',
     startDate: startDate || '',
     startTime: startTime || '',
+    archiveTime: settings.archiveTime || '',
     duration: Number(settings.duration || settings.durationMinutes || 15),
     durationMinutes: Number(settings.durationMinutes || settings.duration || 15),
     isPublished: settings.isPublished !== false,
@@ -1302,8 +1405,80 @@ export async function saveUpcomingExamSettings(settings: UpcomingExamSettings, u
     totalMarks: Number(settings.totalMarks || 0),
     isPremium: !!settings.isPremium,
     updatedBy: settings.updatedBy || updatedByUid,
+    updatedAt: nowIso,
+    lastUpdated: nowIso,
+  };
+
+  // 1. Fetch existing siteSettings/upcomingExam to preserve and merge all upcoming exams in items list
+  let items: UpcomingExamSettings[] = [];
+  if (Array.isArray(settings.items) && settings.items.length > 0) {
+    items = [...settings.items];
+  } else {
+    try {
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const snapData = snap.data();
+        if (Array.isArray(snapData.items)) {
+          items = snapData.items.map((it: any) => ({ ...it }));
+        } else if (snapData.title && snapData.examId && snapData.examId !== examId) {
+          items.push({
+            id: snapData.examId,
+            examId: snapData.examId,
+            title: snapData.title,
+            description: snapData.description || '',
+            subject: snapData.subject || 'BCS',
+            duration: Number(snapData.duration || 30),
+            durationMinutes: Number(snapData.durationMinutes || snapData.duration || 30),
+            startTime: snapData.startTime || '',
+            startDate: snapData.startDate || '',
+            examDate: snapData.examDate || '',
+            archiveTime: snapData.archiveTime || '',
+            isPublished: snapData.isPublished !== false,
+            isPremium: !!snapData.isPremium,
+            totalQuestions: Number(snapData.totalQuestions || 0),
+            totalMarks: Number(snapData.totalMarks || 0),
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Could not read existing upcomingExam items:", e);
+    }
+  }
+
+  // Update or append currentItem into items
+  const existingIdx = items.findIndex(
+    it => (it.examId && it.examId === examId) ||
+          (it.id && it.id === examId) ||
+          (it.title && currentItem.title && it.title.trim().toLowerCase() === currentItem.title.trim().toLowerCase())
+  );
+  if (existingIdx >= 0) {
+    items[existingIdx] = { ...items[existingIdx], ...currentItem };
+  } else {
+    items.push(currentItem);
+  }
+
+  // Choose the first active/published item as top-level properties for backward compatibility
+  const primaryItem = items.find(it => it.isPublished !== false) || currentItem;
+
+  const payload = {
+    title: primaryItem.title,
+    description: primaryItem.description || '',
+    examId: primaryItem.examId || examId,
+    examDate: primaryItem.examDate || '',
+    startDate: primaryItem.startDate || '',
+    startTime: primaryItem.startTime || '',
+    archiveTime: primaryItem.archiveTime || '',
+    duration: primaryItem.duration || 30,
+    durationMinutes: primaryItem.durationMinutes || 30,
+    isPublished: primaryItem.isPublished !== false,
+    subject: primaryItem.subject || 'BCS',
+    totalQuestions: primaryItem.totalQuestions || 0,
+    totalMarks: primaryItem.totalMarks || 0,
+    isPremium: !!primaryItem.isPremium,
+    updatedBy: settings.updatedBy || updatedByUid,
     updatedAt: serverTimestamp(),
     lastUpdated: nowIso,
+    items: items,
   };
 
   try {
@@ -1311,8 +1486,65 @@ export async function saveUpcomingExamSettings(settings: UpcomingExamSettings, u
   } catch (e) {}
 
   try {
+    // 1. Write unified list in siteSettings/upcomingExam
     await setDoc(docRef, payload, { merge: true });
+
+    // 2. Also write individual document in siteSettings collection: siteSettings/upcomingExam_${examId}
+    const individualDocRef = doc(db, 'siteSettings', `upcomingExam_${examId}`);
+    await setDoc(individualDocRef, {
+      ...currentItem,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, 'siteSettings/upcomingExam');
+  }
+}
+
+// Delete an upcoming exam from siteSettings and associated collections
+export async function deleteUpcomingExamFromSiteSettings(examId: string): Promise<void> {
+  const docRef = doc(db, 'siteSettings', 'upcomingExam');
+  try {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      let items: UpcomingExamSettings[] = Array.isArray(data.items) ? [...data.items] : [];
+      items = items.filter(it => it.examId !== examId && it.id !== examId);
+      if (items.length > 0) {
+        const nextPrimary = items.find(it => it.isPublished !== false) || items[0];
+        await setDoc(docRef, {
+          title: nextPrimary.title,
+          description: nextPrimary.description || '',
+          examId: nextPrimary.examId || '',
+          examDate: nextPrimary.examDate || '',
+          startDate: nextPrimary.startDate || '',
+          startTime: nextPrimary.startTime || '',
+          archiveTime: nextPrimary.archiveTime || '',
+          duration: nextPrimary.duration || 30,
+          durationMinutes: nextPrimary.durationMinutes || 30,
+          isPublished: nextPrimary.isPublished !== false,
+          subject: nextPrimary.subject || 'BCS',
+          totalQuestions: nextPrimary.totalQuestions || 0,
+          totalMarks: nextPrimary.totalMarks || 0,
+          isPremium: !!nextPrimary.isPremium,
+          updatedAt: serverTimestamp(),
+          lastUpdated: new Date().toISOString(),
+          items: items,
+        });
+      } else {
+        await deleteDoc(docRef);
+      }
+    }
+    // Delete individual doc from siteSettings
+    try {
+      await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${examId}`));
+    } catch (e) {}
+    // Also delete from /exam, /Exam, /exams
+    try {
+      await deleteDoc(doc(db, 'exam', examId));
+      await deleteDoc(doc(db, 'Exam', examId));
+      await deleteDoc(doc(db, 'exams', examId));
+    } catch (e) {}
+  } catch (err) {
+    console.warn("Error deleting upcoming exam from siteSettings:", err);
   }
 }

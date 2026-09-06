@@ -35,6 +35,7 @@ import {
   X,
   ListPlus,
   Star,
+  Plus,
 } from 'lucide-react';
 import {
   Exam,
@@ -71,6 +72,7 @@ import {
   deleteQuestionFromExamContent,
   subscribeToExamQuestions,
   clearUpcomingExamSettings,
+  deleteUpcomingExamFromSiteSettings,
 } from '../services/firestoreService';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
@@ -438,21 +440,237 @@ export default function AdminView({
   const [upcomingErrorMsg, setUpcomingErrorMsg] = useState<string>('');
   const [selectedUpcomingExamForQuestions, setSelectedUpcomingExamForQuestions] = useState<Exam | null>(null);
 
-  // Dedicated Firestore siteSettings/upcomingExam persistent state
+  // Dedicated Firestore siteSettings/upcomingExam multi-exam persistent state
   const [isEditingFeatured, setIsEditingFeatured] = useState<boolean>(false);
-  const [settingTitle, setSettingTitle] = useState<string>(upcomingExamSettings?.title || '');
-  const [settingDesc, setSettingDesc] = useState<string>(upcomingExamSettings?.description || '');
-  const [settingSubject, setSettingSubject] = useState<string>(upcomingExamSettings?.subject || 'BCS');
-  const [settingDuration, setSettingDuration] = useState<number>(upcomingExamSettings?.duration || upcomingExamSettings?.durationMinutes || 30);
-  const [settingStartTime, setSettingStartTime] = useState<string>(upcomingExamSettings?.startTime || '');
-  const [settingDate, setSettingDate] = useState<string>(upcomingExamSettings?.examDate || '');
-  const [settingIsPublished, setSettingIsPublished] = useState<boolean>(upcomingExamSettings?.isPublished !== false);
-  const [settingIsPremium, setSettingIsPremium] = useState<boolean>(upcomingExamSettings?.isPremium || false);
-  const [settingExamId, setSettingExamId] = useState<string>(upcomingExamSettings?.examId || '');
+  const [isAddingNewUpcoming, setIsAddingNewUpcoming] = useState<boolean>(false);
+  const [settingTitle, setSettingTitle] = useState<string>('');
+  const [settingDesc, setSettingDesc] = useState<string>('');
+  const [settingSubject, setSettingSubject] = useState<string>('BCS');
+  const [settingDuration, setSettingDuration] = useState<number>(30);
+  const [settingStartTime, setSettingStartTime] = useState<string>('');
+  const [settingDate, setSettingDate] = useState<string>('');
+  const [settingIsPublished, setSettingIsPublished] = useState<boolean>(true);
+  const [settingIsPremium, setSettingIsPremium] = useState<boolean>(false);
+  const [settingExamId, setSettingExamId] = useState<string>('');
   const [settingSaving, setSettingSaving] = useState<boolean>(false);
   const [settingSuccessMsg, setSettingSuccessMsg] = useState<string>('');
   const [settingErrorMsg, setSettingErrorMsg] = useState<string>('');
   const [lastSavedUpcomingExam, setLastSavedUpcomingExam] = useState<Exam | null>(null);
+
+  // Combined multiple upcoming exams from siteSettings and exams collection
+  const combinedUpcomingExams = useMemo(() => {
+    const list: Array<{
+      id: string;
+      examId: string;
+      title: string;
+      subject: string;
+      description?: string;
+      durationMinutes: number;
+      startTime?: string;
+      startDate?: string;
+      examDate?: string;
+      isPublished: boolean;
+      isPremium: boolean;
+      totalQuestions: number;
+      totalMarks: number;
+      questions?: Question[];
+    }> = [];
+
+    const seenIds = new Set<string>();
+    const seenTitles = new Set<string>();
+
+    const itemsFromSettings = (upcomingExamSettings?.items && Array.isArray(upcomingExamSettings.items) && upcomingExamSettings.items.length > 0)
+      ? upcomingExamSettings.items
+      : (upcomingExamSettings && upcomingExamSettings.title ? [upcomingExamSettings] : []);
+
+    itemsFromSettings.forEach(item => {
+      if (!item || !item.title) return;
+      const tKey = item.title.trim().toLowerCase();
+      const examId = item.examId || item.id || `upcoming-${tKey}`;
+
+      const matchExam = exams.find(e => e.id === examId || e.title.trim().toLowerCase() === tKey);
+      const qCount = matchExam?.questions?.length || matchExam?.totalQuestions || item.totalQuestions || 0;
+
+      list.push({
+        id: examId,
+        examId: examId,
+        title: item.title,
+        subject: item.subject || matchExam?.subject || 'BCS',
+        description: item.description || (matchExam as any)?.description || '',
+        durationMinutes: item.durationMinutes || item.duration || matchExam?.durationMinutes || 30,
+        startTime: item.startTime || matchExam?.startTime || '',
+        startDate: item.startDate || matchExam?.startDate || '',
+        examDate: item.examDate || matchExam?.dateCreated || '',
+        isPublished: item.isPublished !== false,
+        isPremium: !!item.isPremium || !!matchExam?.isPremium,
+        totalQuestions: qCount,
+        totalMarks: qCount,
+        questions: matchExam?.questions || [],
+      });
+      seenIds.add(examId);
+      seenTitles.add(tKey);
+    });
+
+    exams.filter(e => e.status === 'upcoming').forEach(exam => {
+      const tKey = (exam.title || '').trim().toLowerCase();
+      if (!seenIds.has(exam.id) && !seenTitles.has(tKey)) {
+        const qCount = exam.questions?.length || exam.totalQuestions || 0;
+        list.push({
+          id: exam.id,
+          examId: exam.id,
+          title: exam.title,
+          subject: exam.subject || 'BCS',
+          description: (exam as any).description || '',
+          durationMinutes: exam.durationMinutes || 30,
+          startTime: exam.startTime || '',
+          startDate: exam.startDate || '',
+          examDate: (exam as any).examDate || exam.dateCreated || '',
+          isPublished: exam.isPublished !== false,
+          isPremium: !!exam.isPremium,
+          totalQuestions: qCount,
+          totalMarks: qCount,
+          questions: exam.questions || [],
+        });
+        seenIds.add(exam.id);
+        seenTitles.add(tKey);
+      }
+    });
+
+    return list;
+  }, [upcomingExamSettings, exams]);
+
+  const handleStartAddNewUpcoming = () => {
+    setSettingExamId(`upcoming-exam-${Date.now()}`);
+    setSettingTitle('');
+    setSettingDesc('');
+    setSettingSubject('BCS');
+    setSettingDuration(30);
+    setSettingStartTime('');
+    setSettingDate('');
+    setSettingIsPremium(false);
+    setSettingIsPublished(true);
+    setIsAddingNewUpcoming(true);
+    setEditingUpcomingExamId(null);
+    setIsEditingFeatured(false);
+    setSettingErrorMsg('');
+    setSettingSuccessMsg('');
+  };
+
+  const handleStartEditUpcoming = (item: any) => {
+    const examId = item.examId || item.id;
+    setSettingExamId(examId);
+    setSettingTitle(item.title || '');
+    setSettingDesc(item.description || '');
+    setSettingSubject(item.subject || 'BCS');
+    setSettingDuration(item.durationMinutes || item.duration || 30);
+    setSettingStartTime(item.startTime || '');
+    setSettingDate(item.examDate || item.startDate || '');
+    setSettingIsPremium(!!item.isPremium);
+    setSettingIsPublished(item.isPublished !== false);
+    setEditingUpcomingExamId(examId);
+    setIsAddingNewUpcoming(false);
+    setIsEditingFeatured(false);
+    setSettingErrorMsg('');
+    setSettingSuccessMsg('');
+  };
+
+  const handleCancelUpcomingForm = () => {
+    setIsAddingNewUpcoming(false);
+    setEditingUpcomingExamId(null);
+    setIsEditingFeatured(false);
+    setSettingErrorMsg('');
+  };
+
+  const handleDeleteUpcomingExamItem = async (examId: string, examTitle: string) => {
+    if (!window.confirm(`আপনি কি নিশ্চিত যে "${examTitle}" আপকামিং পরীক্ষাটি মুছে ফেলতে চান? এটি ডাটাবেজ থেকেও মুছে যাবে।`)) {
+      return;
+    }
+    try {
+      setSettingSaving(true);
+      await deleteUpcomingExamFromSiteSettings(examId);
+      await deleteUpcomingExamFromFirestore(examId);
+      if (onDeleteExam) {
+        onDeleteExam(examId);
+      }
+      setSettingSuccessMsg(`"${examTitle}" পরীক্ষাটি সফলভাবে মুছে ফেলা হয়েছে।`);
+      setTimeout(() => setSettingSuccessMsg(''), 5000);
+    } catch (err) {
+      console.error(err);
+      setSettingErrorMsg('পরীক্ষাটি মুছতে সমস্যা হয়েছে।');
+    } finally {
+      setSettingSaving(false);
+    }
+  };
+
+  const handleTogglePublishUpcomingExam = async (item: any) => {
+    const newStatus = item.isPublished === false;
+    const examId = item.examId || item.id;
+    try {
+      setSettingSaving(true);
+      const updatedItem: UpcomingExamSettings = {
+        title: item.title,
+        description: item.description,
+        subject: item.subject,
+        duration: item.durationMinutes || 30,
+        durationMinutes: item.durationMinutes || 30,
+        startTime: item.startTime,
+        examDate: item.examDate,
+        isPublished: newStatus,
+        isPremium: !!item.isPremium,
+        examId: examId,
+        updatedBy: currentUser?.email || 'medha@admin.com',
+      };
+      await saveUpcomingExamSettings(updatedItem, currentUser?.uid || 'admin');
+      if (onSaveUpcomingExamSettings) {
+        await onSaveUpcomingExamSettings(updatedItem);
+      }
+      setSettingSuccessMsg(newStatus ? `"${item.title}" পরীক্ষাটি হোম পেজে দৃশ্যমান করা হয়েছে।` : `"${item.title}" পরীক্ষাটি লুকানো হয়েছে (খসড়া)।`);
+      setTimeout(() => setSettingSuccessMsg(''), 4000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSettingSaving(false);
+    }
+  };
+
+  const handleMakeUpcomingExamLive = async (item: any) => {
+    const targetExamId = item.examId || item.id || `upcoming-exam-${Date.now()}`;
+    const existingExam = exams.find(e => e.id === targetExamId || e.title === item.title);
+    const qList = item.questions || existingExam?.questions || [];
+    const liveExam: Exam = {
+      id: targetExamId,
+      title: item.title,
+      subject: item.subject || 'BCS',
+      durationMinutes: item.durationMinutes || 30,
+      totalQuestions: qList.length,
+      totalMarks: qList.length,
+      status: 'live',
+      isPublished: true,
+      isPremium: !!item.isPremium,
+      startTime: item.startTime || undefined,
+      dateCreated: item.examDate || new Date().toISOString().split('T')[0],
+      questions: qList,
+    };
+
+    try {
+      await updateUpcomingExamInFirestore(targetExamId, {
+        status: 'live',
+        isPublished: true,
+        questions: qList,
+        totalQuestions: qList.length,
+        totalMarks: qList.length,
+      });
+      await clearUpcomingExamSettings(targetExamId);
+      if (onUpdateExam) {
+        onUpdateExam(liveExam);
+      }
+      setSettingSuccessMsg(`"${item.title}" পরীক্ষাটি সরাসরি লাইভ করা হয়েছে এবং চলমান পরীক্ষায় স্থানান্তরিত হয়েছে!`);
+      setTimeout(() => setSettingSuccessMsg(''), 6000);
+    } catch (err) {
+      console.error('Error making live:', err);
+      if (onUpdateExam) onUpdateExam(liveExam);
+    }
+  };
 
   // Real-time Firestore sync for questions of the selected upcoming exam
   useEffect(() => {
@@ -472,7 +690,7 @@ export default function AdminView({
   }, [selectedUpcomingExamForQuestions?.id]);
 
   useEffect(() => {
-    if (upcomingExamSettings) {
+    if (upcomingExamSettings && !editingUpcomingExamId && !isAddingNewUpcoming && !settingTitle) {
       if (upcomingExamSettings.title !== undefined) setSettingTitle(upcomingExamSettings.title);
       if (upcomingExamSettings.description !== undefined) setSettingDesc(upcomingExamSettings.description || '');
       if (upcomingExamSettings.subject !== undefined) setSettingSubject(upcomingExamSettings.subject || 'BCS');
@@ -485,7 +703,7 @@ export default function AdminView({
       if (upcomingExamSettings.isPremium !== undefined) setSettingIsPremium(!!upcomingExamSettings.isPremium);
       if (upcomingExamSettings.examId !== undefined) setSettingExamId(upcomingExamSettings.examId || '');
     }
-  }, [upcomingExamSettings]);
+  }, [upcomingExamSettings, editingUpcomingExamId, isAddingNewUpcoming, settingTitle]);
 
   const handleSaveUpcomingSettingsForm = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -568,7 +786,9 @@ export default function AdminView({
         await onSaveUpcomingExamSettings(payload);
       }
       setIsEditingFeatured(false);
-      setSettingSuccessMsg(`"${settingTitle.trim()}" পরীক্ষাটি ফায়ারস্টোরে সফলভাবে সংরক্ষিত ও হোম পেজের সাথে সিঙ্ক হয়েছে। আপনি এখনই "প্রশ্ন যুক্ত ও পরিচালনা করুন" বাটনে ক্লিক করে প্রশ্ন যুক্ত করতে পারেন!`);
+      setIsAddingNewUpcoming(false);
+      setEditingUpcomingExamId(null);
+      setSettingSuccessMsg(`"${settingTitle.trim()}" পরীক্ষাটি ফায়ারস্টোর siteSettings ও পরীক্ষা তালিকায় সফলভাবে সংরক্ষিত হয়েছে!`);
       setTimeout(() => setSettingSuccessMsg(''), 8000);
     } catch (err: any) {
       console.error('Failed to save upcoming exam settings:', err);
@@ -745,6 +965,7 @@ export default function AdminView({
 
     try {
       await deleteUpcomingExamFromFirestore(exam.id);
+      await deleteUpcomingExamFromSiteSettings(exam.id);
       if (onDeleteExam) {
         onDeleteExam(exam.id);
       }
@@ -2290,49 +2511,52 @@ export default function AdminView({
 
               {!selectedUpcomingExamForQuestions ? (
                 <div className="space-y-6">
-                  {/* FEATURED UPCOMING EXAM & HOMEPAGE HEADLINE SYNC CARD */}
-                  <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/40 dark:via-slate-900 dark:to-slate-900 border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-amber-500/20">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="px-3.5 py-1 bg-amber-500 text-white text-xs font-black rounded-xl shadow-sm flex items-center gap-1.5">
+                  {/* HEADER TOOLBAR FOR MULTI-UPCOMING EXAMS */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/40 dark:via-slate-900 dark:to-slate-900 border border-amber-500/30 rounded-3xl shadow-sm">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-3 py-1 bg-amber-500 text-white text-xs font-black rounded-xl shadow-sm flex items-center gap-1.5">
                           <Star className="h-3.5 w-3.5 fill-current" />
-                          হোম পেজ ফিচার্ড শিরোনাম ও আপকামিং পরীক্ষা পরিচালনা
+                          আসন্ন পরীক্ষা শিডিউল পরিচালনা
                         </span>
-                        <span className="text-[11px] text-slate-700 dark:text-slate-300 font-semibold">
-                          Firestore <code className="text-amber-700 dark:text-amber-300 font-mono">siteSettings/upcomingExam & /exam</code>
+                        <span className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 text-xs font-black rounded-lg border border-amber-300 dark:border-amber-800">
+                          মোট {combinedUpcomingExams.length}টি পরীক্ষা
+                        </span>
+                        <span className="text-[11px] text-slate-600 dark:text-slate-400 font-mono">
+                          Firestore: siteSettings/upcomingExam & /exam
                         </span>
                       </div>
-
-                      <div className="flex items-center gap-2">
-                        {upcomingExamSettings?.title && !isEditingFeatured && (
-                          <>
-                            {upcomingExamSettings?.isPublished !== false ? (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-xs font-bold rounded-xl">
-                                <Check className="h-3.5 w-3.5" /> হোম পেজে লাইভ প্রদর্শিত
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700 text-xs font-bold rounded-xl">
-                                <EyeOff className="h-3.5 w-3.5" /> হোম পেজে খসড়া (লুকানো)
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">
+                        এখানে একাধিক আসন্ন পরীক্ষা যুক্ত, সম্পাদনা, প্রশ্ন সংযোজন ও হোম পেজের সাথে রিয়েল-টাইম সিঙ্ক করতে পারবেন।
+                      </p>
                     </div>
 
-                    {isEditingFeatured || !upcomingExamSettings?.title ? (
-                      /* EDIT / CREATE FORM DIRECTLY SYNCED WITH FIRESTORE */
+                    {!isAddingNewUpcoming && !editingUpcomingExamId && (
+                      <button
+                        type="button"
+                        onClick={handleStartAddNewUpcoming}
+                        className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer hover:shadow-lg shrink-0"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>নতুন আপকামিং পরীক্ষা যুক্ত করুন</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* EDIT / CREATE FORM DIRECTLY SYNCED WITH FIRESTORE */}
+                  {(isAddingNewUpcoming || !!editingUpcomingExamId || combinedUpcomingExams.length === 0) && (
+                    <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent dark:from-amber-950/40 dark:via-slate-900 dark:to-slate-900 border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
                       <form onSubmit={handleSaveUpcomingSettingsForm} className="space-y-5">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between pb-3 border-b border-amber-500/20">
                           <h4 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                             <Edit3 className="h-4 w-4 text-amber-500" />
-                            <span>{upcomingExamSettings?.title ? 'আসন্ন পরীক্ষার তথ্য সম্পাদনা করুন' : 'নতুন আসন্ন পরীক্ষার সময়সূচি ও শিরোনাম যুক্ত করুন'}</span>
+                            <span>{editingUpcomingExamId ? 'আসন্ন পরীক্ষার তথ্য সম্পাদনা করুন' : 'নতুন আসন্ন পরীক্ষার সময়সূচি ও শিরোনাম যুক্ত করুন'}</span>
                           </h4>
-                          {upcomingExamSettings?.title && (
+                          {combinedUpcomingExams.length > 0 && (
                             <button
                               type="button"
-                              onClick={() => setIsEditingFeatured(false)}
-                              className="px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-all"
+                              onClick={handleCancelUpcomingForm}
+                              className="px-3 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-all border border-slate-200 dark:border-slate-700"
                             >
                               বাতিল
                             </button>
@@ -2461,11 +2685,11 @@ export default function AdminView({
                           </label>
 
                           <div className="flex items-center gap-2.5">
-                            {upcomingExamSettings?.title && (
+                            {combinedUpcomingExams.length > 0 && (
                               <button
                                 type="button"
-                                onClick={() => setIsEditingFeatured(false)}
-                                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-all"
+                                onClick={handleCancelUpcomingForm}
+                                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-all cursor-pointer"
                               >
                                 বাতিল
                               </button>
@@ -2484,195 +2708,201 @@ export default function AdminView({
                               ) : (
                                 <>
                                   <Check className="h-4 w-4" />
-                                  <span>ফায়ারস্টোরে সেভ ও সিঙ্ক করুন</span>
+                                  <span>{editingUpcomingExamId ? 'পরিবর্তন সংরক্ষণ করুন' : 'ফায়ারস্টোরে সেভ ও সিঙ্ক করুন'}</span>
                                 </>
                               )}
                             </button>
                           </div>
                         </div>
                       </form>
+                    </div>
+                  )}
+
+                  {/* LIST OF ALL UPCOMING EXAMS */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                        <Layers className="h-4 w-4 text-amber-500" />
+                        <span>সকল শিডিউলকৃত আপকামিং পরীক্ষা ({combinedUpcomingExams.length}টি)</span>
+                      </h4>
+                      {combinedUpcomingExams.length > 0 && !isAddingNewUpcoming && !editingUpcomingExamId && (
+                        <button
+                          type="button"
+                          onClick={handleStartAddNewUpcoming}
+                          className="text-xs text-amber-600 dark:text-amber-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>আরেকটি পরীক্ষা যোগ করুন</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {combinedUpcomingExams.length === 0 ? (
+                      <div className="text-center py-12 px-4 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-300 dark:border-slate-800 space-y-3">
+                        <Calendar className="h-10 w-10 text-amber-500/60 mx-auto" />
+                        <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                          বর্তমানে কোনো আপকামিং পরীক্ষা শিডিউল করা নেই
+                        </h4>
+                        <p className="text-xs text-slate-500 max-w-md mx-auto">
+                          উপরের ফর্মটি পূরণ করে নতুন আসন্ন পরীক্ষার শিরোনাম ও শিডিউল যুক্ত করুন। এটি স্বয়ংক্রিয়ভাবে ডাটাবেজ ও হোম পেজে প্রদর্শিত হবে।
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleStartAddNewUpcoming}
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-all inline-flex items-center gap-1.5"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>প্রথম আপকামিং পরীক্ষা তৈরি করুন</span>
+                        </button>
+                      </div>
                     ) : (
-                      /* DISPLAY VIEW OF THE FEATURED SYNCED EXAM */
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-                        <div className="lg:col-span-8 space-y-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-extrabold text-amber-700 bg-amber-100/80 dark:bg-amber-900/60 dark:text-amber-300 px-3 py-1 rounded-lg border border-amber-300 dark:border-amber-800">
-                              {upcomingExamSettings.subject || 'BCS'}
-                            </span>
-                            {upcomingExamSettings.isPremium && (
-                              <span className="text-xs font-extrabold text-amber-600 bg-amber-50 dark:bg-amber-950 px-3 py-1 rounded-lg border border-amber-200 dark:border-amber-800 flex items-center gap-1">
-                                <Crown className="h-3 w-3 fill-current" />
-                                প্রিমিয়াম
-                              </span>
-                            )}
-                            {upcomingExamSettings.startTime && (
-                              <span className="text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 font-semibold">
-                                <Calendar className="h-3.5 w-3.5 text-amber-500" />
-                                লাইভ শুরু: {formatBanglaDateTime(upcomingExamSettings.startTime)}
-                              </span>
-                            )}
-                            <span className="text-xs text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-medium">
-                              ⏱️ {upcomingExamSettings.duration || upcomingExamSettings.durationMinutes || 30} মিনিট
-                            </span>
-                          </div>
-
-                          <h4 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white leading-tight">
-                            {upcomingExamSettings.title}
-                          </h4>
-
-                          {upcomingExamSettings.description && (
-                            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-w-2xl">
-                              {upcomingExamSettings.description}
-                            </p>
-                          )}
-
-                          <div className="flex items-center gap-3 pt-1 text-xs text-slate-500 font-mono">
-                            <span>Firestore ID: <code className="text-amber-600 dark:text-amber-400">{upcomingExamSettings.examId || 'upcoming-exam'}</code></span>
-                          </div>
-                        </div>
-
-                        <div className="lg:col-span-4 flex flex-col items-stretch justify-center gap-2.5">
-                          {/* Manage Questions Button */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const targetExam = exams.find(e => e.id === upcomingExamSettings.examId || e.title.trim().toLowerCase() === upcomingExamSettings.title?.trim().toLowerCase()) || {
-                                id: upcomingExamSettings.examId || `upcoming-exam-${Date.now()}`,
-                                title: upcomingExamSettings.title,
-                                subject: upcomingExamSettings.subject || 'BCS',
-                                durationMinutes: upcomingExamSettings.duration || upcomingExamSettings.durationMinutes || 30,
-                                totalQuestions: 0,
-                                totalMarks: 0,
-                                status: 'upcoming',
-                                isPublished: upcomingExamSettings.isPublished !== false,
-                                isPremium: !!upcomingExamSettings.isPremium,
-                                startTime: upcomingExamSettings.startTime || undefined,
-                                dateCreated: upcomingExamSettings.examDate || new Date().toISOString().split('T')[0],
-                                questions: [],
-                              };
-                              setSelectedUpcomingExamForQuestions(targetExam);
-                              setNewQuestText('');
-                              setNewQuestOptions(['', '', '', '']);
-                              setNewQuestCorrect(0);
-                              setNewQuestExplanation('');
-                              setNewQuestMarks(1);
-                            }}
-                            className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer hover:shadow-lg"
-                          >
-                            <ListPlus className="h-4 w-4" />
-                            <span>প্রশ্ন যুক্ত ও পরিচালনা করুন</span>
-                          </button>
-
-                          <div className="grid grid-cols-2 gap-2">
-                            {/* Edit Button */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSettingTitle(upcomingExamSettings.title || '');
-                                setSettingDesc(upcomingExamSettings.description || '');
-                                setSettingSubject(upcomingExamSettings.subject || 'BCS');
-                                setSettingDuration(upcomingExamSettings.duration || upcomingExamSettings.durationMinutes || 30);
-                                setSettingStartTime(upcomingExamSettings.startTime || '');
-                                setSettingIsPremium(!!upcomingExamSettings.isPremium);
-                                setSettingIsPublished(upcomingExamSettings.isPublished !== false);
-                                setIsEditingFeatured(true);
-                              }}
-                              className="px-3 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-white rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                      <div className="space-y-4">
+                        {combinedUpcomingExams.map((item, idx) => {
+                          const examKey = item.examId || item.id || `upcoming-exam-${idx}`;
+                          return (
+                            <div
+                              key={examKey}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-6 shadow-sm hover:border-amber-500/40 transition-all space-y-4"
                             >
-                              <Edit3 className="h-3.5 w-3.5 text-amber-500" />
-                              <span>সম্পাদনা</span>
-                            </button>
+                              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+                                <div className="lg:col-span-8 space-y-2.5">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-extrabold text-amber-700 bg-amber-100/80 dark:bg-amber-900/60 dark:text-amber-300 px-3 py-1 rounded-lg border border-amber-300 dark:border-amber-800">
+                                      {item.subject || 'BCS'}
+                                    </span>
+                                    {item.isPremium && (
+                                      <span className="text-xs font-extrabold text-amber-600 bg-amber-50 dark:bg-amber-950 px-3 py-1 rounded-lg border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                                        <Crown className="h-3 w-3 fill-current" />
+                                        প্রিমিয়াম
+                                      </span>
+                                    )}
+                                    {item.isPublished !== false ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-[11px] font-bold rounded-lg">
+                                        <Check className="h-3 w-3" /> হোম পেজে দৃশ্যমান
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700 text-[11px] font-bold rounded-lg">
+                                        <EyeOff className="h-3 w-3" /> খসড়া (লুকানো)
+                                      </span>
+                                    )}
+                                    {item.startTime && (
+                                      <span className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 font-semibold">
+                                        <Calendar className="h-3.5 w-3.5 text-amber-500" />
+                                        লাইভ শুরু: {formatBanglaDateTime(item.startTime)}
+                                      </span>
+                                    )}
+                                    <span className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-medium">
+                                      ⏱️ {item.durationMinutes} মিনিট
+                                    </span>
+                                    <span className="text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 font-bold flex items-center gap-1">
+                                      <ListPlus className="h-3 w-3" /> {item.totalQuestions} টি প্রশ্ন
+                                    </span>
+                                  </div>
 
-                            {/* Toggle Publish / Draft */}
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const newStatus = upcomingExamSettings.isPublished === false;
-                                const updatedPayload: UpcomingExamSettings = {
-                                  ...upcomingExamSettings,
-                                  isPublished: newStatus,
-                                };
-                                setSettingSaving(true);
-                                try {
-                                  await saveUpcomingExamSettings(updatedPayload, currentUser?.uid || 'admin');
-                                  if (onSaveUpcomingExamSettings) {
-                                    await onSaveUpcomingExamSettings(updatedPayload);
-                                  }
-                                  setSettingSuccessMsg(
-                                    newStatus
-                                      ? 'হোম পেজে ফিচার্ড শিরোনাম সফলভাবে দৃশ্যমান করা হয়েছে।'
-                                      : 'হোম পেজ থেকে ফিচার্ড শিরোনাম লুকানো হয়েছে (খসড়া)।'
-                                  );
-                                  setTimeout(() => setSettingSuccessMsg(''), 4000);
-                                } catch (e) {
-                                  console.error(e);
-                                } finally {
-                                  setSettingSaving(false);
-                                }
-                              }}
-                              className="px-3 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-bold border border-amber-500/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                            >
-                              {upcomingExamSettings.isPublished !== false ? (
-                                <>
-                                  <EyeOff className="h-3.5 w-3.5 text-amber-600" />
-                                  <span>লুকান</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Eye className="h-3.5 w-3.5 text-amber-600" />
-                                  <span>প্রকাশ</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
+                                  <h4 className="text-lg font-black text-slate-900 dark:text-white leading-snug">
+                                    {item.title}
+                                  </h4>
 
-                          {/* Make Live Button */}
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const targetExamId = upcomingExamSettings.examId || `upcoming-exam-${Date.now()}`;
-                              const existingExam = exams.find(e => e.id === targetExamId || e.title === upcomingExamSettings.title);
-                              const qList = existingExam?.questions || [];
-                              const liveExam: Exam = {
-                                id: targetExamId,
-                                title: upcomingExamSettings.title,
-                                subject: upcomingExamSettings.subject || 'BCS',
-                                durationMinutes: upcomingExamSettings.duration || upcomingExamSettings.durationMinutes || 30,
-                                totalQuestions: qList.length,
-                                totalMarks: qList.length,
-                                status: 'live',
-                                isPublished: true,
-                                isPremium: !!upcomingExamSettings.isPremium,
-                                startTime: upcomingExamSettings.startTime || undefined,
-                                dateCreated: upcomingExamSettings.examDate || new Date().toISOString().split('T')[0],
-                                questions: qList,
-                              };
+                                  {item.description && (
+                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-w-2xl">
+                                      {item.description}
+                                    </p>
+                                  )}
 
-                              try {
-                                await updateUpcomingExamInFirestore(targetExamId, {
-                                  status: 'live',
-                                  isPublished: true,
-                                  questions: qList,
-                                  totalQuestions: qList.length,
-                                  totalMarks: qList.length,
-                                });
-                                await clearUpcomingExamSettings(targetExamId);
-                                if (onUpdateExam) {
-                                  onUpdateExam(liveExam);
-                                }
-                                setSettingSuccessMsg(`"${upcomingExamSettings.title}" পরীক্ষাটি সরাসরি লাইভ করা হয়েছে এবং চলমান পরীক্ষায় স্থানান্তরিত হয়েছে!`);
-                                setTimeout(() => setSettingSuccessMsg(''), 6000);
-                              } catch (err) {
-                                console.error('Error making live:', err);
-                                if (onUpdateExam) onUpdateExam(liveExam);
-                              }
-                            }}
-                            className="w-full px-3 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                          >
-                            <Play className="h-3.5 w-3.5 fill-current" />
-                            <span>এখনই লাইভ করুন</span>
-                          </button>
-                        </div>
+                                  <div className="flex items-center gap-3 pt-0.5 text-xs text-slate-400 font-mono">
+                                    <span>ID: <code className="text-amber-600 dark:text-amber-400">{examKey}</code></span>
+                                  </div>
+                                </div>
+
+                                <div className="lg:col-span-4 flex flex-col items-stretch justify-center gap-2">
+                                  {/* Manage Questions Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const targetExam: Exam = {
+                                        id: examKey,
+                                        title: item.title,
+                                        subject: item.subject || 'BCS',
+                                        durationMinutes: item.durationMinutes || 30,
+                                        totalQuestions: item.totalQuestions || 0,
+                                        totalMarks: item.totalMarks || 0,
+                                        status: 'upcoming',
+                                        isPublished: item.isPublished !== false,
+                                        isPremium: !!item.isPremium,
+                                        startTime: item.startTime || undefined,
+                                        dateCreated: item.examDate || new Date().toISOString().split('T')[0],
+                                        questions: item.questions || [],
+                                      };
+                                      setSelectedUpcomingExamForQuestions(targetExam);
+                                      setNewQuestText('');
+                                      setNewQuestOptions(['', '', '', '']);
+                                      setNewQuestCorrect(0);
+                                      setNewQuestExplanation('');
+                                      setNewQuestMarks(1);
+                                    }}
+                                    className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer hover:shadow-md"
+                                  >
+                                    <ListPlus className="h-4 w-4" />
+                                    <span>প্রশ্ন পরিচালনা ({item.totalQuestions}টি)</span>
+                                  </button>
+
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {/* Edit Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditUpcoming(item)}
+                                      className="px-3 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-white rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5 text-amber-500" />
+                                      <span>সম্পাদনা</span>
+                                    </button>
+
+                                    {/* Toggle Publish / Draft */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTogglePublishUpcomingExam(item)}
+                                      className="px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 rounded-xl text-xs font-bold border border-amber-500/30 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                    >
+                                      {item.isPublished !== false ? (
+                                        <>
+                                          <EyeOff className="h-3.5 w-3.5 text-amber-600" />
+                                          <span>লুকান</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Eye className="h-3.5 w-3.5 text-amber-600" />
+                                          <span>প্রকাশ</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {/* Make Live Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMakeUpcomingExamLive(item)}
+                                      className="px-3 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-extrabold shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                    >
+                                      <Play className="h-3 w-3 fill-current" />
+                                      <span>লাইভ করুন</span>
+                                    </button>
+
+                                    {/* Delete Button */}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteUpcomingExamItem(examKey, item.title)}
+                                      className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-800 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                      <span>মুছুন</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

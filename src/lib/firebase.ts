@@ -11,11 +11,12 @@ export const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-// Critical: named database ID must be passed to getFirestore
-export const db = getFirestore(
-  app,
-  (firebaseConfig as any).firestoreDatabaseId || undefined
-);
+
+// Use named database if specified and not (default), otherwise standard default database
+const configuredDbId = (firebaseConfig as any).firestoreDatabaseId;
+export const db = (configuredDbId && configuredDbId !== '(default)')
+  ? getFirestore(app, configuredDbId)
+  : getFirestore(app);
 
 // Operational Error Handling for Firebase Integration Skill compliance
 export enum OperationType {

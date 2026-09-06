@@ -64,10 +64,15 @@ import {
   getSpreadsheetMetadata,
   importQuestionsToFirestore,
   readAndValidateQuestionsFromSheet,
+  readAndValidateStudentsFromSheet,
+  saveStudentsToFirestore,
   retryPendingResultSyncs,
   saveSpreadsheetId,
   SheetQuestionsParseResult,
-  SheetRowValidation
+  SheetRowValidation,
+  exportExistingFirestoreDataToGoogleSheets,
+  startFirestoreRealtimeSheetsSync,
+  stopFirestoreRealtimeSheetsSync
 } from '../services/googleSheetsService';
 
 export interface OperationLog {
@@ -211,6 +216,16 @@ export default function SheetsSync({
     }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Automatic real-time background sync from Firestore to Google Sheets
+  useEffect(() => {
+    if (isConnected && spreadsheetId && autoSyncEnabled) {
+      const stopSync = startFirestoreRealtimeSheetsSync((coll, docId) => {
+        addLog('sync', coll, 'success', `স্বয়ংক্রিয় সিঙ্ক: ${coll} (${docId}) গুগল শিটে সিঙ্ক হয়েছে`);
+      });
+      return () => stopSync();
+    }
+  }, [isConnected, spreadsheetId, autoSyncEnabled]);
 
   // Handle Google Login / Connect
   const handleConnectGoogle = async () => {
@@ -481,6 +496,43 @@ export default function SheetsSync({
     }
   };
 
+  const [importingStudents, setImportingStudents] = useState(false);
+  const [studentSyncMsg, setStudentSyncMsg] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleImportStudents = async () => {
+    if (!spreadsheetId.trim()) {
+      alert('অনুগ্রহ করে একটি স্প্রেডশীট আইডি প্রদান করুন।');
+      return;
+    }
+    if (!isGoogleConnected()) {
+      alert('শিক্ষার্থী তালিকা পড়তে প্রথমে Google একাউন্ট কানেক্ট করুন।');
+      return;
+    }
+
+    setImportingStudents(true);
+    setStudentSyncMsg(null);
+
+    try {
+      const parsed = await readAndValidateStudentsFromSheet(spreadsheetId, 'Students');
+      if (parsed.totalRows === 0) {
+        setStudentSyncMsg({ type: 'error', message: '"Students" শিটে কোনো শিক্ষার্থীর তথ্য পাওয়া যায়নি।' });
+        addLog('import', 'Students', 'error', '"Students" ট্যাবে কোনো শিক্ষার্থী পাওয়া যায়নি');
+      } else if (parsed.validStudents.length > 0) {
+        const saveRes = await saveStudentsToFirestore(parsed.validStudents);
+        const msg = `🎉 মোট ${saveRes.successCount} জন শিক্ষার্থীর তথ্য স্প্রেডশীট থেকে মেধা এক্সাম সিস্টেমে সিঙ্ক ও সংরক্ষিত হয়েছে।`;
+        setStudentSyncMsg({ type: 'success', message: msg });
+        addLog('import', 'Students', 'success', msg, saveRes.successCount);
+      }
+    } catch (err: any) {
+      console.error('Import students error:', err);
+      const msg = err?.message || 'গুগল শিট থেকে শিক্ষার্থী সিঙ্ক করতে সমস্যা হয়েছে।';
+      setStudentSyncMsg({ type: 'error', message: msg });
+      addLog('import', 'Students', 'error', msg);
+    } finally {
+      setImportingStudents(false);
+    }
+  };
+
   const handleExportAll = async () => {
     if (!spreadsheetId) {
       alert('অনুগ্রহ করে স্প্রেডশীট আইডি প্রদান করুন।');
@@ -505,25 +557,22 @@ export default function SheetsSync({
     });
 
     try {
-      const res = await exportAllDataToGoogleSheets(spreadsheetId, {
-        students,
-        exams,
-        results
-      });
+      // Export all live collections from Firestore safely without modifying Firestore
+      const res = await exportExistingFirestoreDataToGoogleSheets(spreadsheetId);
       const now = new Date();
       setTableExportStatus({
-        Students: { status: 'success', lastExported: now, count: students.length },
-        Exams: { status: 'success', lastExported: now, count: exams.length },
-        'Question Bank': { status: 'success', lastExported: now, count: exams.reduce((a, e) => a + (e.questions?.length || 0), 0) },
-        Results: { status: 'success', lastExported: now, count: results.length },
-        Payments: { status: 'success', lastExported: now, count: 0 },
+        Students: { status: 'success', lastExported: now, count: res.counts.students },
+        Exams: { status: 'success', lastExported: now, count: res.counts.exams },
+        'Question Bank': { status: 'success', lastExported: now, count: res.counts.questions },
+        Results: { status: 'success', lastExported: now, count: res.counts.results },
+        Payments: { status: 'success', lastExported: now, count: res.counts.payments },
         Downloads: { status: 'success', lastExported: now, count: 0 },
       });
       setExportStatusMsg({
         type: 'success',
         message: `🎉 ${res.message}`
       });
-      addLog('export', 'All Tables (Master Sync)', 'success', 'সকল ৬টি টেবিল একযোগে গুগল শিটে এক্সপোর্ট সম্পন্ন');
+      addLog('export', 'All Tables (Firestore Live)', 'success', `বিদ্যমান সকল Firestore ডেটা (${res.counts.students} জন শিক্ষার্থী, ${res.counts.exams} টি পরীক্ষা, ${res.counts.questions} টি প্রশ্ন) গুগল শিটে সফলভাবে এক্সপোর্ট সম্পন্ন`);
     } catch (err: any) {
       console.error('Export all error:', err);
       const msg = err?.message || 'সকল ডেটা এক্সপোর্ট করতে সমস্যা হয়েছে।';
@@ -905,6 +954,50 @@ export default function SheetsSync({
               <span>{syncStatusMsg}</span>
             </div>
           )}
+
+          {/* Real-time Sync & Existing Firestore Sync Banner */}
+          <div className="p-6 bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-indigo-500/10 dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-indigo-950/30 border border-emerald-200/80 dark:border-emerald-800/80 rounded-2xl shadow-sm space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                  </span>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    স্বয়ংক্রিয় রিয়েল-টাইম গুগল শিট সিঙ্ক (Auto Sync Active)
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
+                  ওয়েবসাইটের মাধ্যমে যখনই কোনো শিক্ষার্থী রেজিস্ট্রেশন, নতুন পরীক্ষা তৈরি, প্রশ্ন ব্যাংক আপডেট বা পরীক্ষার ফলাফল ডেটাবেসে যুক্ত হবে, তা সাথে সাথে গুগল স্প্রেডশীটেও স্বয়ংক্রিয়ভাবে সিঙ্ক ও আপডেট হয়ে যাবে।
+                </p>
+                <div className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-800 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-900/50 px-2.5 py-1 rounded-full">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>ফায়ারস্টোর ডেটাবেজ সংরক্ষিত (Read-Only sync, no DB modification)</span>
+                </div>
+              </div>
+
+              <div className="shrink-0 flex items-center gap-2">
+                <button
+                  onClick={() => handleExportAll()}
+                  disabled={exportingType === 'all' || !isConnected || !spreadsheetId}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {exportingType === 'all' ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>গুগল শিটে যোগ হচ্ছে...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Database className="h-4 w-4" />
+                      <span>বিদ্যমান Firestore ডেটা গুগল শীটে যোগ করুন</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
 
           {/* Quick Action Bento Grid */}
           <div className="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
@@ -1328,17 +1421,32 @@ export default function SheetsSync({
                   মোট শিক্ষার্থী: {students.length} জন
                 </h4>
                 <p className="text-[11px] text-slate-400 font-mono">
-                  uid, studentId, fullName, email, phone, batch, status
+                  uid, studentId, fullName, email, phone, batch, status, registrationDate
                 </p>
+                {studentSyncMsg && (
+                  <p className={`text-[11px] font-medium p-1.5 rounded-lg ${studentSyncMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'}`}>
+                    {studentSyncMsg.message}
+                  </p>
+                )}
               </div>
-              <button
-                onClick={() => handleExportIndividual('Students')}
-                disabled={exportingType === 'Students' || !isConnected || !spreadsheetId}
-                className="w-full py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
-              >
-                <Download className="h-3.5 w-3.5" />
-                <span>Export Students to Sheets</span>
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => handleExportIndividual('Students')}
+                  disabled={exportingType === 'Students' || !isConnected || !spreadsheetId}
+                  className="w-full py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Export Students to Sheets</span>
+                </button>
+                <button
+                  onClick={handleImportStudents}
+                  disabled={importingStudents || !isConnected || !spreadsheetId}
+                  className="w-full py-2 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {importingStudents ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  <span>{importingStudents ? 'সিঙ্ক হচ্ছে...' : 'Import Students from Sheets'}</span>
+                </button>
+              </div>
             </div>
 
             {/* Card 2: Exams */}
