@@ -32,6 +32,7 @@ import {
   updateExamArchiveStatus,
   updateExamArchiveDateTime,
   deleteExamPermanently,
+  updateExamToUpcoming,
 } from '../services/firestoreService';
 import {
   safeTimestampToString,
@@ -68,7 +69,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
   const [modalDateTime, setModalDateTime] = useState<string>('');
   
   const [statusModalExam, setStatusModalExam] = useState<Exam | null>(null);
-  const [targetStatus, setTargetStatus] = useState<'live' | 'archive'>('archive');
+  const [targetStatus, setTargetStatus] = useState<'live' | 'archive' | 'upcoming'>('archive');
   const [restoreDateTime, setRestoreDateTime] = useState<string>('');
 
   const [deleteModalExam, setDeleteModalExam] = useState<Exam | null>(null);
@@ -201,8 +202,8 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
     setModalDateTime(localISOTime);
   };
 
-  // Open Status Modal (Archive or Live)
-  const handleOpenStatusModal = (exam: Exam, target: 'live' | 'archive') => {
+  // Open Status Modal (Archive, Live, or Upcoming)
+  const handleOpenStatusModal = (exam: Exam, target: 'live' | 'archive' | 'upcoming') => {
     setStatusModalExam(exam);
     setTargetStatus(target);
     const existing = exam.archiveDateTime || exam.archiveTime || '';
@@ -225,6 +226,15 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
           });
         }
         showNotification(`"${statusModalExam.title}" পরীক্ষাটি সফলভাবে আর্কাইভে পাঠানো হয়েছে!`);
+      } else if (targetStatus === 'upcoming') {
+        await updateExamToUpcoming(statusModalExam.id, statusModalExam);
+        if (onUpdateExam) {
+          onUpdateExam({
+            ...statusModalExam,
+            status: 'upcoming',
+          });
+        }
+        showNotification(`"${statusModalExam.title}" পরীক্ষাটি সফলভাবে আসন্ন (Upcoming) সেকশনে স্থানান্তর করা হয়েছে!`);
       } else {
         // Restore to Live
         await updateExamArchiveStatus(statusModalExam.id, 'live', restoreDateTime || undefined);
@@ -572,6 +582,15 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                     {subTab === 'live' ? (
                       <>
                         <button
+                          onClick={() => handleOpenStatusModal(exam, 'upcoming')}
+                          className="px-3 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 transition-all cursor-pointer"
+                          title="পরীক্ষাটি আসন্ন (Upcoming) সেকশনে স্থানান্তর করুন"
+                        >
+                          <Clock className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                          <span>আসন্ন (Upcoming) করুন</span>
+                        </button>
+
+                        <button
                           onClick={() => handleOpenStatusModal(exam, 'archive')}
                           className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1.5 transition-all cursor-pointer"
                         >
@@ -746,13 +765,27 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
           <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
             <div className="flex items-center gap-3">
               <div className={`p-3 rounded-2xl ${
-                targetStatus === 'archive' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
+                targetStatus === 'archive'
+                  ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400'
+                  : targetStatus === 'upcoming'
+                  ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400'
+                  : 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
               }`}>
-                {targetStatus === 'archive' ? <Archive className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+                {targetStatus === 'archive' ? (
+                  <Archive className="h-6 w-6" />
+                ) : targetStatus === 'upcoming' ? (
+                  <Clock className="h-6 w-6" />
+                ) : (
+                  <Play className="h-6 w-6" />
+                )}
               </div>
               <div>
                 <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
-                  {targetStatus === 'archive' ? 'পরীক্ষাটি আর্কাইভ করবেন?' : 'পরীক্ষাটি পুনরায় লাইভ চালু করবেন?'}
+                  {targetStatus === 'archive'
+                    ? 'পরীক্ষাটি আর্কাইভ করবেন?'
+                    : targetStatus === 'upcoming'
+                    ? 'পরীক্ষাটি আসন্ন (Upcoming) সেকশনে স্থানান্তর করবেন?'
+                    : 'পরীক্ষাটি পুনরায় লাইভ চালু করবেন?'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{statusModalExam.title}</p>
               </div>
@@ -763,6 +796,15 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                 <p className="leading-relaxed">
                   এই পরীক্ষাটি আর্কাইভ করলে এটি হোম পেজের <strong>"আর্কাইভ পরীক্ষা"</strong> সেকশনে চলে যাবে। এর প্রশ্ন এবং অতীত রেজাল্টসমূহ সম্পূর্ণ অক্ষত থাকবে।
                 </p>
+              ) : targetStatus === 'upcoming' ? (
+                <div className="space-y-2">
+                  <p className="leading-relaxed">
+                    এই পরীক্ষাটি চলমান (Live) সেকশন থেকে সরিয়ে <strong>"আসন্ন পরীক্ষা (Upcoming)"</strong>-তে ফিরিয়ে নেওয়া হবে। 
+                  </p>
+                  <p className="text-slate-500 dark:text-slate-400 text-[11px] leading-relaxed">
+                    এডমিন প্যানেলে আপনি এতে আরও প্রশ্ন যুক্ত করতে পারবেন, শিডিউল টাইম নির্ধারণ করতে পারবেন এবং পরবর্তীতে আপনার ইচ্ছানুযায়ী <strong>"লাইভ করুন"</strong> বাটনে ক্লিক করে লাইভ পেজে প্রকাশ করতে পারবেন।
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-2">
                   <p className="leading-relaxed">
@@ -798,11 +840,17 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                 className={`px-5 py-2 text-xs font-bold rounded-xl text-white shadow-md flex items-center gap-1.5 disabled:opacity-50 cursor-pointer ${
                   targetStatus === 'archive'
                     ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
+                    : targetStatus === 'upcoming'
+                    ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'
                     : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
                 }`}
               >
                 {isProcessing && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-                {targetStatus === 'archive' ? 'আর্কাইভ নিশ্চিত করুন' : 'লাইভ চালু নিশ্চিত করুন'}
+                {targetStatus === 'archive'
+                  ? 'আর্কাইভ নিশ্চিত করুন'
+                  : targetStatus === 'upcoming'
+                  ? 'আসন্ন করুন নিশ্চিত করুন'
+                  : 'লাইভ চালু নিশ্চিত করুন'}
               </button>
             </div>
           </div>

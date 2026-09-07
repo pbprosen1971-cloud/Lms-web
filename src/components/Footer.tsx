@@ -4,10 +4,11 @@
  */
 
 import React from 'react';
-import { BookOpen, Mail, Phone, MapPin, Facebook, Youtube, ShieldCheck, CreditCard } from 'lucide-react';
+import { Mail, Phone, MapPin, Facebook, Youtube, ShieldCheck, CreditCard } from 'lucide-react';
 import { Exam } from '../types';
 import { INITIAL_EXAMS } from '../data';
 import PaymentPartnersBar from './PaymentLogos';
+import MedhaLogo from './MedhaLogo';
 
 interface FooterProps {
   setView: (view: string) => void;
@@ -201,8 +202,8 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
           {/* Brand Column */}
           <div className="space-y-4 md:col-span-1">
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
-              <div className="p-2 rounded-xl bg-primary text-white">
-                <BookOpen className="h-5 w-5" />
+              <div className="p-2 rounded-xl bg-[#38B262] text-white shadow-md shadow-[#38B262]/20">
+                <MedhaLogo className="h-5 w-5" />
               </div>
               <span className="font-bold text-lg text-white">মেধা এক্সাম</span>
             </div>

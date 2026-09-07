@@ -10,6 +10,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { formatSafeDisplay, safeTimestampToString } from '../lib/dateUtils';
+import ReferralDashboard from './ReferralDashboard';
 
 interface ProfileViewProps {
   user: UserProfile;
@@ -424,8 +425,11 @@ export default function ProfileView({
         </div>
 
       </div>
+ 
+      {/* 3. Referral & Earn Dashboard */}
+      <ReferralDashboard user={user} />
 
-      {/* 3. Detailed Tabular Exam History Log */}
+      {/* 4. Detailed Tabular Exam History Log */}
       <div className="bg-white dark:bg-slate-800 p-6 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-sm space-y-4">
         <h3 className="font-bold text-base flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
           <Calendar className="h-4.5 w-4.5 text-primary" />

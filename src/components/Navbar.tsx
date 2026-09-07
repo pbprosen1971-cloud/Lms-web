@@ -4,8 +4,9 @@
  */
 
 import React, { useState } from 'react';
-import { BookOpen, Moon, Sun, Menu, X, LogOut, User, LayoutDashboard, Settings } from 'lucide-react';
+import { Moon, Sun, Menu, X, LogOut, User, LayoutDashboard, Settings } from 'lucide-react';
 import { UserProfile } from '../types';
+import MedhaLogo from './MedhaLogo';
 
 interface NavbarProps {
   currentView: string;
@@ -43,8 +44,8 @@ export default function Navbar({
         <div className="flex items-center justify-between h-16">
           {/* Logo Section */}
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
-            <div className="p-2 rounded-xl bg-primary text-white shadow-md shadow-primary/20">
-              <BookOpen className="h-6 w-6" />
+            <div className="p-2 rounded-xl bg-[#38B262] text-white shadow-md shadow-[#38B262]/20">
+              <MedhaLogo className="h-6 w-6" />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-lg text-slate-800 dark:text-white leading-tight tracking-tight">

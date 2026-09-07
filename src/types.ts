@@ -97,6 +97,20 @@ export interface UserProfile {
   isPremiumExpiryDate?: string;
   inPremiumDate?: string;
   inPremiumExpiryDate?: string;
+  referralCode?: string;
+  referralCount?: number;
+  referredBy?: string;
+  referredAt?: string;
+}
+
+export interface ReferralRecord {
+  id: string;
+  referrerId: string;
+  referrerCode: string;
+  referredUserId: string;
+  referredUserName: string;
+  referredUserEmail: string;
+  createdAt: string;
 }
 
 export interface PaymentRecord {

@@ -4,9 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, User, GraduationCap, ShieldAlert, ArrowRight, Chrome, ArrowLeft, KeyRound, Eye, EyeOff, Sparkles, X, CheckCircle2, ShieldCheck, RefreshCw, LogIn, UserPlus } from 'lucide-react';
+import { Mail, Lock, User, GraduationCap, ShieldAlert, ArrowRight, Chrome, ArrowLeft, KeyRound, Eye, EyeOff, Sparkles, X, CheckCircle2, ShieldCheck, RefreshCw, LogIn, UserPlus, Gift } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile } from '../types';
+import MedhaLogo from './MedhaLogo';
+import { generateReferralCode, findUserByReferralCode, recordReferral } from '../services/firestoreService';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -53,6 +55,27 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
+
+  // Referral code state captured from URL (?ref=...) or pending storage
+  const [referralCodeInput, setReferralCodeInput] = useState<string>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ref = urlParams.get('ref') || localStorage.getItem('pending_referral_code') || '';
+      return ref.trim().toUpperCase();
+    } catch {
+      return '';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ref = urlParams.get('ref') || localStorage.getItem('pending_referral_code') || '';
+      if (ref) {
+        setReferralCodeInput(ref.trim().toUpperCase());
+      }
+    } catch {}
+  }, []);
 
   // Google reCAPTCHA state & references
   const [recaptchaToken, setRecaptchaToken] = useState('');
@@ -320,6 +343,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
         // 4. Prepare Profile Shape conforming to users/{uid} collection schema
         const nowIso = new Date().toISOString();
+        const myReferralCode = generateReferralCode(trimmedName);
         const newUserProfile: UserProfile = {
           id: uid,
           uid: uid,
@@ -342,7 +366,25 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           isPremiumExpiryDate: '',
           inPremiumDate: '',
           inPremiumExpiryDate: '',
+          referralCode: myReferralCode,
+          referralCount: 0,
         };
+
+        // Check if valid referral code was entered or present in URL
+        const cleanRefCode = referralCodeInput.trim().toUpperCase();
+        if (cleanRefCode) {
+          try {
+            const referrer = await findUserByReferralCode(cleanRefCode);
+            if (referrer && referrer.id !== uid && referrer.email?.toLowerCase() !== email.trim().toLowerCase()) {
+              newUserProfile.referredBy = referrer.id;
+              newUserProfile.referredAt = nowIso;
+              await recordReferral(referrer, { uid, name: trimmedName, email: email.trim() });
+              localStorage.removeItem('pending_referral_code');
+            }
+          } catch (refErr) {
+            console.warn("Referral processing on registration caught:", refErr);
+          }
+        }
 
         // 5. Store Profile in Firestore (degrades gracefully)
         try {
@@ -645,6 +687,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
       // Create new profile if not found, or update lastLogin & keep Google display name perfectly synced
       if (!profile) {
+        const myReferralCode = generateReferralCode(googleDisplayName);
         profile = {
           id: uid,
           uid: uid,
@@ -667,7 +710,26 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           isPremiumExpiryDate: '',
           inPremiumDate: '',
           inPremiumExpiryDate: '',
+          referralCode: myReferralCode,
+          referralCount: 0,
         };
+
+        // Check for pending referral code from URL or storage for Google registration
+        const pendingRefCode = (new URLSearchParams(window.location.search).get('ref') || localStorage.getItem('pending_referral_code') || '').trim().toUpperCase();
+        if (pendingRefCode) {
+          try {
+            const referrer = await findUserByReferralCode(pendingRefCode);
+            if (referrer && referrer.id !== uid && referrer.email?.toLowerCase() !== (result.user.email || '').toLowerCase()) {
+              profile.referredBy = referrer.id;
+              profile.referredAt = nowIso;
+              await recordReferral(referrer, { uid, name: googleDisplayName, email: result.user.email || '' });
+              localStorage.removeItem('pending_referral_code');
+            }
+          } catch (refErr) {
+            console.warn("Referral processing for google login caught:", refErr);
+          }
+        }
+
         try {
           await setDoc(doc(db, 'users', uid), profile, { merge: true });
         } catch (dbErr) {
@@ -680,6 +742,15 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
       } else {
         profile.lastLogin = nowIso;
         const updates: any = { lastLogin: nowIso };
+
+        // Ensure user has a referral code
+        if (!profile.referralCode) {
+          const generatedCode = generateReferralCode(profile.name || googleDisplayName);
+          profile.referralCode = generatedCode;
+          profile.referralCount = Number(profile.referralCount || 0);
+          updates.referralCode = generatedCode;
+          updates.referralCount = profile.referralCount;
+        }
 
         // Always sync the chosen Google Account's display name and photo
         if (googleDisplayName && (googleDisplayName !== 'User' || !profile.name)) {
@@ -795,8 +866,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
           {/* Logo / Header */}
           <div className="flex items-center gap-2 relative z-10 cursor-pointer" onClick={() => setView('home')}>
-            <div className="p-2.5 rounded-xl bg-white text-emerald-700 shadow-md">
-              <GraduationCap className="h-6 w-6" />
+            <div className="p-2.5 rounded-xl bg-white text-[#38B262] shadow-md">
+              <MedhaLogo className="h-6 w-6" />
             </div>
             <span className="font-bold text-xl tracking-wide">মেধা এক্সাম</span>
           </div>
@@ -959,6 +1030,33 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                           onChange={(e) => setInstitution(e.target.value)}
                           placeholder="আপনার শিক্ষা প্রতিষ্ঠানের নাম লিখুন"
                           className="block w-full pl-10 pr-3.5 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Referral Code Field (Optional) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                          <Gift className="h-3.5 w-3.5 text-primary" />
+                          <span>রেফারেল কোড (ঐচ্ছিক)</span>
+                        </label>
+                        {referralCodeInput && (
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> কোড প্রয়োগকৃত
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                          <Gift className="h-4.5 w-4.5" />
+                        </div>
+                        <input
+                          type="text"
+                          value={referralCodeInput}
+                          onChange={(e) => setReferralCodeInput(e.target.value.toUpperCase())}
+                          placeholder="রেফারেল কোড থাকলে লিখুন (যেমন: PROS1234)"
+                          className="block w-full pl-10 pr-3.5 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 text-sm uppercase tracking-wider font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                         />
                       </div>
                     </div>

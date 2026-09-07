@@ -17,7 +17,8 @@ import {
   orderBy,
   serverTimestamp,
   Unsubscribe,
-  writeBatch
+  writeBatch,
+  runTransaction
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import {
@@ -34,7 +35,8 @@ import {
   UpcomingExamSettings,
   UpcomingExamDoc,
   ExamContentDoc,
-  ExamQuestionDoc
+  ExamQuestionDoc,
+  ReferralRecord
 } from '../types';
 
 export interface FirestoreQuestion {
@@ -137,9 +139,12 @@ export async function saveUpcomingExamScheduleToFirestore(
     }
   } catch (e) {}
 
-  const rawDateTime = examData.examDateTime || examData.startTime || examData.startDate || examData.examDate || '';
+  // CRITICAL: Scheduled start time must ONLY come from explicit examDateTime or startTime.
+  // NEVER fall back to startDate or examDate, because a creation date is NOT a scheduled live time!
+  const rawDateTime = examData.examDateTime || examData.startTime || '';
   const examDateTime = rawDateTime ? rawDateTime.trim() : '';
-  const startDate = examDateTime ? (examDateTime.includes('T') ? examDateTime.split('T')[0] : examDateTime) : '';
+  const rawDate = examData.startDate || examData.examDate || (examDateTime ? (examDateTime.includes('T') ? examDateTime.split('T')[0] : examDateTime) : '');
+  const startDate = rawDate ? rawDate.trim() : '';
   const examDate = startDate;
 
   const rawArchive = examData.archiveDateTime || examData.archiveTime || examData.archiveDate || '';
@@ -328,13 +333,15 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       });
     });
 
-    // Finally merge /Exam (capital - authoritative exam container)
-    capitalDocsMap.forEach((v, k) => {
+    // Finally merge /exam (dedicated upcoming/scheduled collection)
+    // CRITICAL: Upcoming status in /exam MUST be preserved so exams aren't prematurely marked live
+    examDocsMap.forEach((v, k) => {
       const existing = combinedMap.get(k);
       combinedMap.set(k, {
         ...(existing || {}),
         ...v,
-        questions: (v.questions && v.questions.length > 0) ? v.questions : (existing?.questions || []),
+        status: v.status === 'upcoming' ? 'upcoming' : (existing?.status || v.status),
+        questions: (existing?.questions && existing.questions.length > 0) ? existing.questions : (v.questions || []),
         description: v.description || existing?.description,
       });
     });
@@ -353,7 +360,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       const totalQ = qList.length > 0 ? qList.length : (typeof data.totalQuestions === 'number' ? data.totalQuestions : Number(data.totalQuestions || 0));
       const totalM = typeof data.totalMarks === 'number' && data.totalMarks > 0 ? data.totalMarks : (totalQ > 0 ? totalQ : 0);
 
-      const startTimeStr = safeTimestampToString(data.examDateTime || data.startTime || data.startDate || undefined);
+      const startTimeStr = safeTimestampToString(data.examDateTime || data.startTime || undefined);
       const archiveTimeStr = safeTimestampToString(data.archiveDateTime || data.archiveTime || undefined);
       const rawDateStr = data.startDate || data.examDate || data.createdAt || data.dateCreated;
       const dateCreatedStr = rawDateStr ? safeDateOnlyString(rawDateStr) : '';
@@ -371,7 +378,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         createdBy: String(data.createdBy || ''),
         questions: qList,
         startTime: startTimeStr || undefined,
-        startDate: data.startDate || (startTimeStr ? startTimeStr.split('T')[0] : '') || undefined,
+        startDate: data.startDate || (startTimeStr ? (startTimeStr.includes('T') ? startTimeStr.split('T')[0] : startTimeStr) : '') || undefined,
         archiveTime: archiveTimeStr || undefined,
         dateCreated: dateCreatedStr,
         isPremium: data.examType === 'premium' || !!data.isPremium,
@@ -391,7 +398,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       const totalQ = qList.length > 0 ? qList.length : (typeof data.totalQuestions === 'number' ? data.totalQuestions : Number(data.totalQuestions || 0));
       const totalM = typeof data.totalMarks === 'number' && data.totalMarks > 0 ? data.totalMarks : (totalQ > 0 ? totalQ : 0);
 
-      const startTimeStr = safeTimestampToString(data.examDateTime || data.startTime || data.startDate || undefined);
+      const startTimeStr = safeTimestampToString(data.examDateTime || data.startTime || undefined);
       const archiveTimeStr = safeTimestampToString(data.archiveDateTime || data.archiveTime || undefined);
       const rawDateStr = data.startDate || data.examDate || data.createdAt || data.dateCreated;
       const dateCreatedStr = rawDateStr ? safeDateOnlyString(rawDateStr) : '';
@@ -405,12 +412,12 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         durationMinutes: Number(data.durationMinutes || data.duration || 30),
         totalQuestions: totalQ,
         totalMarks: totalM,
-        status: (data.status as any) || 'live',
+        status: (data.status as any) || 'upcoming',
         isPublished: data.isPublished !== false,
         createdBy: String(data.createdBy || ''),
         questions: qList,
         startTime: startTimeStr || undefined,
-        startDate: data.startDate || (startTimeStr ? startTimeStr.split('T')[0] : '') || undefined,
+        startDate: data.startDate || (startTimeStr ? (startTimeStr.includes('T') ? startTimeStr.split('T')[0] : startTimeStr) : '') || undefined,
         archiveTime: archiveTimeStr || undefined,
         archiveDateTime: archiveTimeStr || undefined,
         dateCreated: dateCreatedStr,
@@ -431,7 +438,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       const totalQ = qList.length > 0 ? qList.length : (typeof data.totalQuestions === 'number' ? data.totalQuestions : Number(data.totalQuestions || 0));
       const totalM = typeof data.totalMarks === 'number' && data.totalMarks > 0 ? data.totalMarks : (totalQ > 0 ? totalQ : 0);
 
-      const startTimeStr = safeTimestampToString(data.startTime || data.examDateTime || data.startDate || undefined);
+      const startTimeStr = safeTimestampToString(data.startTime || data.examDateTime || undefined);
       const archiveTimeStr = safeTimestampToString(data.archiveTime || data.archiveDateTime || undefined);
       const rawDateStr = data.startDate || data.examDate || data.createdAt || data.dateCreated;
       const dateCreatedStr = rawDateStr ? safeDateOnlyString(rawDateStr) : '';
@@ -444,12 +451,12 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         durationMinutes: Number(data.duration || data.durationMinutes || 10),
         totalQuestions: totalQ,
         totalMarks: totalM,
-        status: (data.status as any) || 'live',
+        status: (data.status as any) || 'upcoming',
         isPublished: data.isPublished !== false,
         createdBy: String(data.createdBy || ''),
         questions: qList,
         startTime: startTimeStr || undefined,
-        startDate: data.startDate || (startTimeStr ? startTimeStr.split('T')[0] : '') || undefined,
+        startDate: data.startDate || (startTimeStr ? (startTimeStr.includes('T') ? startTimeStr.split('T')[0] : startTimeStr) : '') || undefined,
         archiveTime: archiveTimeStr || undefined,
         dateCreated: dateCreatedStr,
         isPremium: !!data.isPremium,
@@ -991,6 +998,36 @@ export async function updateExamArchiveStatus(
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, `Exam/${examId}`);
     throw err;
+  }
+}
+
+/**
+ * Moves an exam back to 'upcoming' status across /Exam, /exam, and /exams
+ * and synchronizes it into siteSettings/upcomingExam items so it is fully managed as an upcoming exam.
+ */
+export async function updateExamToUpcoming(examId: string, examData?: Partial<Exam>): Promise<void> {
+  await updateExamArchiveStatus(examId, 'upcoming');
+  if (examData) {
+    try {
+      await saveUpcomingExamSettings({
+        examId: examId,
+        title: examData.title || '',
+        description: examData.description || '',
+        subject: examData.subject || 'BCS',
+        durationMinutes: examData.durationMinutes || 30,
+        duration: examData.durationMinutes || 30,
+        isPublished: examData.isPublished !== false,
+        isPremium: !!examData.isPremium,
+        totalQuestions: examData.totalQuestions || examData.questions?.length || 0,
+        totalMarks: examData.totalMarks || examData.questions?.length || 0,
+        startTime: examData.startTime || '',
+        startDate: examData.startDate || '',
+        examDate: (examData as any).examDate || examData.startDate || '',
+        archiveTime: examData.archiveTime || '',
+      });
+    } catch (err) {
+      console.warn("Could not sync to upcoming settings:", err);
+    }
   }
 }
 
@@ -1547,4 +1584,243 @@ export async function deleteUpcomingExamFromSiteSettings(examId: string): Promis
   } catch (err) {
     console.warn("Error deleting upcoming exam from siteSettings:", err);
   }
+}
+
+// ========================================================
+//               REFERRAL SYSTEM SERVICES
+// ========================================================
+
+/**
+ * Generates a clean, unique alphanumeric referral code (e.g. PROS1234, MEDH5678)
+ */
+export function generateReferralCode(seedName?: string): string {
+  let prefix = 'MEDHA';
+  if (seedName) {
+    const cleaned = seedName.trim().replace(/[^a-zA-Z]/g, '').toUpperCase();
+    if (cleaned.length >= 3) {
+      prefix = cleaned.slice(0, 4);
+    }
+  }
+  const randomDigits = Math.floor(1000 + Math.random() * 9000);
+  return `${prefix}${randomDigits}`;
+}
+
+/**
+ * Searches users collection for an existing user with the given referralCode
+ */
+export async function findUserByReferralCode(code: string): Promise<UserProfile | null> {
+  if (!code || !code.trim()) return null;
+  const cleanCode = code.trim().toUpperCase();
+  try {
+    const q = query(collection(db, 'users'), where('referralCode', '==', cleanCode));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const docSnap = snap.docs[0];
+      return { id: docSnap.id, ...docSnap.data() } as UserProfile;
+    }
+  } catch (err) {
+    console.warn("Error looking up referral code:", err);
+  }
+  return null;
+}
+
+/**
+ * Records a referral atomically in Firestore:
+ * 1. Checks against self-referral and duplicate referral
+ * 2. Writes to /referrals/{referredUserId}
+ * 3. Increments referrer's referralCount atomically
+ * 4. Updates referred user's doc with referredBy and referredAt
+ */
+export async function recordReferral(
+  referrer: UserProfile,
+  referredUser: { uid: string; name: string; email: string }
+): Promise<{ success: boolean; message?: string }> {
+  const referrerUid = referrer.id || referrer.uid;
+  const targetUid = referredUser.uid;
+
+  if (!referrerUid || !targetUid) {
+    return { success: false, message: 'অকার্যকর ব্যবহারকারী আইডি।' };
+  }
+
+  // Self-referral protection
+  if (referrerUid === targetUid) {
+    return { success: false, message: 'নিজের রেফারেল কোড নিজে ব্যবহার করা যাবে না।' };
+  }
+
+  if (referrer.email && referredUser.email && referrer.email.trim().toLowerCase() === referredUser.email.trim().toLowerCase()) {
+    return { success: false, message: 'একই ইমেইল দিয়ে নিজের অ্যাকাউন্টে রেফার নেওয়া যাবে না।' };
+  }
+
+  const referrerRef = doc(db, 'users', referrerUid);
+  const referredUserRef = doc(db, 'users', targetUid);
+  const referralRef = doc(db, 'referrals', targetUid);
+
+  try {
+    const result = await runTransaction(db, async (transaction) => {
+      // 1. Check if referral record already exists
+      const referralSnap = await transaction.get(referralRef);
+      if (referralSnap.exists()) {
+        return { success: false, message: 'এই অ্যাকাউন্টটি ইতোমধ্যে রেফার হিসেবে নথিভুক্ত রয়েছে।' };
+      }
+
+      // 2. Check if the referred user already has referredBy
+      const referredUserSnap = await transaction.get(referredUserRef);
+      if (referredUserSnap.exists()) {
+        const data = referredUserSnap.data();
+        if (data?.referredBy) {
+          return { success: false, message: 'এই শিক্ষার্থী ইতোমধ্যে একজন রেফারারের অধীনে নিবন্ধিত।' };
+        }
+      }
+
+      // 3. Read current referrer count
+      const referrerSnap = await transaction.get(referrerRef);
+      let currentCount = 0;
+      if (referrerSnap.exists()) {
+        currentCount = Number(referrerSnap.data()?.referralCount || 0);
+      } else {
+        currentCount = Number(referrer.referralCount || 0);
+      }
+      const newCount = currentCount + 1;
+      const nowIso = new Date().toISOString();
+
+      // 4. Create referral document
+      const referralRecord: ReferralRecord = {
+        id: targetUid,
+        referrerId: referrerUid,
+        referrerCode: referrer.referralCode || '',
+        referredUserId: targetUid,
+        referredUserName: referredUser.name || 'শিক্ষার্থী',
+        referredUserEmail: referredUser.email || '',
+        createdAt: nowIso,
+      };
+      transaction.set(referralRef, referralRecord);
+
+      // 5. Update referrer count
+      transaction.set(referrerRef, {
+        referralCount: newCount,
+        lastReferralAt: nowIso,
+      }, { merge: true });
+
+      // 6. Update referred user doc
+      transaction.set(referredUserRef, {
+        referredBy: referrerUid,
+        referredByCode: referrer.referralCode || '',
+        referredAt: nowIso,
+      }, { merge: true });
+
+      return { success: true };
+    });
+
+    return result;
+  } catch (err) {
+    console.warn("Transaction failed, trying direct setDoc fallback:", err);
+    try {
+      const nowIso = new Date().toISOString();
+      const referralRecord: ReferralRecord = {
+        id: targetUid,
+        referrerId: referrerUid,
+        referrerCode: referrer.referralCode || '',
+        referredUserId: targetUid,
+        referredUserName: referredUser.name || 'শিক্ষার্থী',
+        referredUserEmail: referredUser.email || '',
+        createdAt: nowIso,
+      };
+      await setDoc(referralRef, referralRecord);
+      await setDoc(referrerRef, {
+        referralCount: (referrer.referralCount || 0) + 1,
+        lastReferralAt: nowIso,
+      }, { merge: true });
+      await setDoc(referredUserRef, {
+        referredBy: referrerUid,
+        referredByCode: referrer.referralCode || '',
+        referredAt: nowIso,
+      }, { merge: true });
+      return { success: true };
+    } catch (fallbackErr) {
+      console.warn("Fallback referral record error:", fallbackErr);
+      return { success: false, message: 'রেফারেল সংরক্ষণে সমস্যা হয়েছে।' };
+    }
+  }
+}
+
+/**
+ * Get all referrals made by a specific referrer
+ */
+export async function getReferralsForUser(userId: string): Promise<ReferralRecord[]> {
+  if (!userId) return [];
+  try {
+    const q = query(collection(db, 'referrals'), where('referrerId', '==', userId));
+    const snap = await getDocs(q);
+    const records: ReferralRecord[] = [];
+    snap.forEach((d) => {
+      records.push({ id: d.id, ...d.data() } as ReferralRecord);
+    });
+    records.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return records;
+  } catch (err) {
+    console.warn("Error fetching referrals for user:", err);
+    return [];
+  }
+}
+
+/**
+ * Realtime subscription to referrals made by a specific user
+ */
+export function subscribeToReferralsForUser(
+  userId: string,
+  callback: (referrals: ReferralRecord[]) => void
+): Unsubscribe {
+  const q = query(collection(db, 'referrals'), where('referrerId', '==', userId));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const records: ReferralRecord[] = [];
+      snap.forEach((d) => {
+        records.push({ id: d.id, ...d.data() } as ReferralRecord);
+      });
+      records.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      callback(records);
+    },
+    (err) => {
+      console.warn("Subscription error for user referrals:", err);
+    }
+  );
+}
+
+/**
+ * Get all referrals on platform (for Admin)
+ */
+export async function getAllReferrals(): Promise<ReferralRecord[]> {
+  try {
+    const snap = await getDocs(collection(db, 'referrals'));
+    const records: ReferralRecord[] = [];
+    snap.forEach((d) => {
+      records.push({ id: d.id, ...d.data() } as ReferralRecord);
+    });
+    records.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return records;
+  } catch (err) {
+    console.warn("Error fetching all referrals:", err);
+    return [];
+  }
+}
+
+/**
+ * Realtime subscription to all referrals on platform (for Admin)
+ */
+export function subscribeToAllReferrals(callback: (referrals: ReferralRecord[]) => void): Unsubscribe {
+  return onSnapshot(
+    collection(db, 'referrals'),
+    (snap) => {
+      const records: ReferralRecord[] = [];
+      snap.forEach((d) => {
+        records.push({ id: d.id, ...d.data() } as ReferralRecord);
+      });
+      records.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      callback(records);
+    },
+    (err) => {
+      console.warn("Subscription error for all referrals:", err);
+    }
+  );
 }

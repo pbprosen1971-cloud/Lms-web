@@ -105,3 +105,33 @@ export const formatBengaliDateTimeSafe = (dateVal?: any): string => {
     return isoOrStr;
   }
 };
+
+/**
+ * Checks whether an upcoming exam has an explicit, valid scheduled live start time,
+ * and whether the current time has actually reached or passed that scheduled time.
+ * 
+ * CRITICAL REQUIREMENTS:
+ * 1. Plain creation dates or bare dates (like '2026-09-06' or YYYY-MM-DD) do NOT count as scheduled live times.
+ *    Only timestamps with explicit hours and minutes (containing 'T' or ':') qualify.
+ * 2. If no valid explicit time is specified, returns FALSE. The exam MUST remain upcoming until admin clicks "Make Live".
+ * 3. If a valid schedule time is specified, returns TRUE only if Date.now() >= scheduledTimeMs.
+ */
+export function isScheduledLiveTimeReached(startTimeStr?: string, examDateTimeStr?: string): boolean {
+  const timeCandidate = (startTimeStr && startTimeStr.trim()) || (examDateTimeStr && examDateTimeStr.trim()) || '';
+  if (!timeCandidate) return false;
+
+  // Must not be just a bare date (e.g. YYYY-MM-DD) without time of day
+  // If it's only 10 chars (YYYY-MM-DD) or doesn't have ':' or 'T' with time, it's just a date, not a scheduled time!
+  if (!timeCandidate.includes(':') && !timeCandidate.includes('T')) {
+    return false;
+  }
+  // If it has 'T' but no ':' after it
+  if (timeCandidate.includes('T') && !timeCandidate.split('T')[1]?.includes(':')) {
+    return false;
+  }
+
+  const parsedMs = new Date(timeCandidate).getTime();
+  if (isNaN(parsedMs)) return false;
+
+  return Date.now() >= parsedMs;
+}

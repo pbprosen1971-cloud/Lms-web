@@ -55,6 +55,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Referrals Collection
+    match /referrals/{referralId} {
+      allow read, write: if true;
+    }
+
     // Default catch-all rule
     match /{document=**} {
       allow read, write: if true;

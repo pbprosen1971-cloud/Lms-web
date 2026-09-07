@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import HomeView from './components/HomeView';
@@ -24,9 +25,12 @@ import {
   subscribeToUpcomingExamSettings,
   saveUpcomingExamSettings,
   updateExamArchiveStatus,
+  updateExamToUpcoming,
   safeTimestampToString,
   safeDateOnlyString,
+  generateReferralCode,
 } from './services/firestoreService';
+import { isScheduledLiveTimeReached } from './lib/dateUtils';
 import {
   syncResultToGoogleSheets,
   syncStudentToGoogleSheets,
@@ -49,9 +53,57 @@ async function testConnection() {
 }
 testConnection();
 
+const pathToView = (pathname: string): string => {
+  const p = pathname.toLowerCase().replace(/\/$/, '') || '/';
+  if (p === '/registration' || p === '/register') return 'register';
+  if (p === '/login') return 'login';
+  if (p === '/exam') return 'exam';
+  if (p === '/result') return 'result';
+  if (p === '/profile') return 'profile';
+  if (p === '/admin') return 'admin';
+  if (p === '/dashboard') return 'dashboard';
+  return 'home';
+};
+
+const viewToPath = (view: string): string => {
+  switch (view) {
+    case 'register':
+      return '/registration';
+    case 'login':
+      return '/login';
+    case 'exam':
+      return '/exam';
+    case 'result':
+      return '/result';
+    case 'profile':
+      return '/profile';
+    case 'admin':
+      return '/admin';
+    case 'dashboard':
+      return '/dashboard';
+    case 'home':
+    default:
+      return '/';
+  }
+};
+
 export default function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   // Global States
-  const [currentView, setView] = useState<string>('home');
+  const [currentView, setCurrentView] = useState<string>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const ref = urlParams.get('ref');
+      if (ref) {
+        localStorage.setItem('pending_referral_code', ref.trim().toUpperCase());
+      }
+      return pathToView(window.location.pathname);
+    } catch {
+      return 'home';
+    }
+  });
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('theme_mode');
@@ -211,12 +263,27 @@ export default function App() {
                 isPremiumExpiryDate: safeTimestampToString(isPremExpiryDate, ''),
                 inPremiumDate: safeTimestampToString(isPremDate, ''),
                 inPremiumExpiryDate: safeTimestampToString(isPremExpiryDate, ''),
+                referralCode: data.referralCode || '',
+                referralCount: Number(data.referralCount || 0),
+                referredBy: data.referredBy || '',
+                referredAt: safeTimestampToString(data.referredAt, ''),
               };
+
+              // Auto-generate referral code if not present yet
+              if (!profileData.referralCode) {
+                const generatedCode = generateReferralCode(resolvedName);
+                profileData.referralCode = generatedCode;
+                setDoc(doc(db, 'users', firebaseUser.uid), {
+                  referralCode: generatedCode,
+                  referralCount: Number(data.referralCount || 0)
+                }, { merge: true }).catch(() => {});
+              }
             } else {
               // Initial profile creation if doc doesn't exist yet in Firestore
               const providerDisplayName = firebaseUser.providerData?.find(p => p.displayName)?.displayName || '';
               const defaultName = firebaseUser.displayName || providerDisplayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'শিক্ষার্থী');
               const displayName = isAdminEmail ? 'Prosenjit' : defaultName;
+              const generatedCode = generateReferralCode(displayName);
               profileData = {
                 id: firebaseUser.uid,
                 uid: firebaseUser.uid,
@@ -242,6 +309,10 @@ export default function App() {
                 isPremiumExpiryDate: isAdminEmail ? '2099-12-31' : '',
                 inPremiumDate: isAdminEmail ? '2026-08-05' : '',
                 inPremiumExpiryDate: isAdminEmail ? '2099-12-31' : '',
+                referralCode: generatedCode,
+                referralCount: 0,
+                referredBy: '',
+                referredAt: '',
               };
               try {
                 await setDoc(doc(db, 'users', firebaseUser.uid), profileData, { merge: true });
@@ -408,21 +479,17 @@ export default function App() {
     return () => unsubscribeUpcoming();
   }, []);
 
-  // 2.6 Automatically transition upcoming exams to 'live' when their start date/time arrives
+  // 2.6 Automatically transition upcoming exams to 'live' ONLY when an explicit scheduled start time (with hours and minutes) has arrived
   useEffect(() => {
     const checkAndTransitionExamsToLive = async () => {
-      const now = Date.now();
       for (const exam of exams) {
-        if (exam.status === 'upcoming') {
-          const rawStart = exam.startTime || (exam as any).examDateTime || exam.startDate || (exam as any).examDate;
-          if (rawStart && rawStart.trim()) {
-            const startTimeMs = new Date(rawStart).getTime();
-            if (!isNaN(startTimeMs) && now >= startTimeMs) {
-              try {
-                await updateExamArchiveStatus(exam.id, 'live');
-              } catch (err) {
-                console.warn(`Error auto-transitioning exam ${exam.id} to live:`, err);
-              }
+        if (exam.status === 'upcoming' && exam.isPublished !== false) {
+          // CRITICAL: Must have an explicit scheduled time (hours and minutes), never bare creation date!
+          if (isScheduledLiveTimeReached(exam.startTime, (exam as any).examDateTime)) {
+            try {
+              await updateExamArchiveStatus(exam.id, 'live');
+            } catch (err) {
+              console.warn(`Error auto-transitioning exam ${exam.id} to live:`, err);
             }
           }
         }
@@ -430,8 +497,28 @@ export default function App() {
     };
 
     checkAndTransitionExamsToLive();
-    const intervalTimer = setInterval(checkAndTransitionExamsToLive, 10000);
+    const intervalTimer = setInterval(checkAndTransitionExamsToLive, 15000);
     return () => clearInterval(intervalTimer);
+  }, [exams]);
+
+  // One-time repair for exams prematurely marked live (specifically "অফিস সহায়ক পদে পরিক্ষা -বাংলা" or similar upcoming exams with no valid reached schedule)
+  const repairedExamIdsRef = React.useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (exams.length > 0) {
+      exams.forEach(async (exam) => {
+        const title = (exam.title || '').trim();
+        const isTarget = title.includes('অফিস সহায়ক');
+        if (isTarget && exam.status === 'live' && !repairedExamIdsRef.current.has(exam.id)) {
+          repairedExamIdsRef.current.add(exam.id);
+          console.log(`[Auto-Repair] Resetting "${exam.title}" back to upcoming status...`);
+          try {
+            await updateExamToUpcoming(exam.id, exam);
+          } catch (err) {
+            console.warn("Could not repair exam to upcoming:", err);
+          }
+        }
+      });
+    }
   }, [exams]);
 
   // Global automatic Firestore -> Google Sheets real-time synchronization
@@ -767,6 +854,70 @@ export default function App() {
       await saveUpcomingExamSettings(settings, user?.uid || user?.id || 'admin');
     } catch (err) {
       console.warn("Failed to save upcoming exam settings to Firestore:", err);
+    }
+  };
+
+  // Synchronize React Router URL with App view and enforce Route Protection
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const ref = searchParams.get('ref');
+    if (ref) {
+      localStorage.setItem('pending_referral_code', ref.trim().toUpperCase());
+    }
+
+    const matchedView = pathToView(location.pathname);
+
+    // Protected Route: /profile requires authenticated user
+    if (matchedView === 'profile' && !user) {
+      setCurrentView('login');
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Protected Route: /admin requires admin privileges
+    if (matchedView === 'admin') {
+      const isAdmin = user?.role === 'admin' && user?.email?.toLowerCase() === 'medha@admin.com';
+      if (!isAdmin) {
+        setCurrentView('home');
+        navigate('/', { replace: true });
+        return;
+      }
+    }
+
+    // Route Guard: /exam requires selected exam
+    if (matchedView === 'exam' && !selectedExam) {
+      setCurrentView('home');
+      navigate('/', { replace: true });
+      return;
+    }
+
+    // Route Guard: /result requires selected result
+    if (matchedView === 'result' && !selectedResult) {
+      if (user) {
+        setCurrentView('profile');
+        navigate('/profile', { replace: true });
+      } else {
+        setCurrentView('home');
+        navigate('/', { replace: true });
+      }
+      return;
+    }
+
+    setCurrentView(matchedView);
+  }, [location.pathname, location.search, user, selectedExam, selectedResult, navigate]);
+
+  const setView = (nextView: string) => {
+    setCurrentView(nextView);
+    const targetPath = viewToPath(nextView);
+    if (location.pathname !== targetPath) {
+      if (nextView === 'register') {
+        const storedRef = localStorage.getItem('pending_referral_code');
+        if (storedRef && !location.search.includes('ref=')) {
+          navigate(`/registration?ref=${encodeURIComponent(storedRef)}`);
+          return;
+        }
+      }
+      navigate(targetPath);
     }
   };
 

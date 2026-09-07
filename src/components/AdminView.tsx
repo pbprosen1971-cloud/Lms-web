@@ -36,6 +36,7 @@ import {
   ListPlus,
   Star,
   Plus,
+  Trophy,
 } from 'lucide-react';
 import {
   Exam,
@@ -58,6 +59,7 @@ import {
 import SheetsSync from './SheetsSync';
 import AdminGoogleSheetsTab from './AdminGoogleSheetsTab';
 import { AdminLiveArchivedExamTab } from './AdminLiveArchivedExamTab';
+import AdminReferralLeaderboard from './AdminReferralLeaderboard';
 import {
   saveQuestionToFirestore,
   deleteQuestionFromFirestore,
@@ -127,7 +129,7 @@ export default function AdminView({
   upcomingExamSettings,
   onSaveUpcomingExamSettings,
 }: AdminViewProps) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard'>('analytics');
 
   // Ministry Question Bank Admin Form State
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
@@ -401,7 +403,7 @@ export default function AdminView({
   const [newTitle, setNewTitle] = useState('');
   const [newSubject, setNewSubject] = useState('বাংলা');
   const [newDuration, setNewDuration] = useState(15);
-  const [newStatus, setNewStatus] = useState<'live' | 'upcoming'>('live');
+  const [newStatus, setNewStatus] = useState<'live' | 'upcoming'>('upcoming');
   const [newQuestions, setNewQuestions] = useState<Omit<Question, 'id'>[]>([
     { text: '', options: ['', '', '', ''], correctAnswer: 0, subject: '' },
   ]);
@@ -1516,6 +1518,17 @@ export default function AdminView({
           </button>
 
           <button
+            onClick={() => { setActiveTab('referral_leaderboard'); setSearchQuery(''); }}
+            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+              activeTab === 'referral_leaderboard'
+                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/25'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
+            }`}
+          >
+            <Trophy className="h-4.5 w-4.5" /> রেফারেল লিডারবোর্ড
+          </button>
+
+          <button
             onClick={() => { setActiveTab('settings'); setSearchQuery(''); }}
             className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
               activeTab === 'settings'
@@ -1973,6 +1986,39 @@ export default function AdminView({
                         <option value="Bank">Bank (ব্যাংক চাকরি)</option>
                         <option value="11th - 20th Grade Job">11th - 20th Grade (১১তম-২০তম গ্রেড)</option>
                       </select>
+                    </div>
+                  </div>
+
+                  {/* Exam Status Selector: Upcoming vs Live */}
+                  <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/30 rounded-xl border border-indigo-200/80 dark:border-indigo-900/60 space-y-2">
+                    <label className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                      <span>পরীক্ষার প্রাথমিক অবস্থা (Status)</span>
+                    </label>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-slate-900 px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 text-xs font-medium">
+                        <input
+                          type="radio"
+                          name="createExamStatus"
+                          value="upcoming"
+                          checked={newStatus === 'upcoming'}
+                          onChange={() => setNewStatus('upcoming')}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="font-bold text-indigo-700 dark:text-indigo-300">আসন্ন পরীক্ষা (Upcoming - ডিফল্ট)</span>
+                        <span className="text-[10px] text-slate-500">(এডমিন পরবর্তীতে শিডিউল বা লাইভ করতে পারবেন)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-slate-900 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium">
+                        <input
+                          type="radio"
+                          name="createExamStatus"
+                          value="live"
+                          checked={newStatus === 'live'}
+                          onChange={() => setNewStatus('live')}
+                          className="text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="text-emerald-700 dark:text-emerald-400 font-bold">সরাসরি লাইভ প্রকাশ করুন (Live)</span>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -3213,6 +3259,11 @@ export default function AdminView({
               onUpdateExam={onUpdateExam}
               onRefreshData={() => {}}
             />
+          )}
+
+          {/* TAB 9: REFERRAL LEADERBOARD */}
+          {activeTab === 'referral_leaderboard' && (
+            <AdminReferralLeaderboard students={students} />
           )}
 
         </div>

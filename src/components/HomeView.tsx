@@ -44,7 +44,7 @@ import { SUBJECTS, MOCK_REVIEWS, MOCK_LEADERBOARD, INITIAL_STATS, INITIAL_MINIST
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { subscribeToUpcomingExamSettings } from '../services/firestoreService';
-import { formatSafeDisplay, formatBengaliDateTimeSafe, toBengaliDigits } from '../lib/dateUtils';
+import { formatSafeDisplay, formatBengaliDateTimeSafe, toBengaliDigits, isScheduledLiveTimeReached } from '../lib/dateUtils';
 import heroExamPrepBg from '../assets/images/hero_exam_prep_1786609165056.jpg';
 
 const FALLBACK_SUBJECT_QUESTIONS: Record<string, Question[]> = {
@@ -850,21 +850,19 @@ export default function HomeView({
       if (exam.status === 'archive' || exam.status === 'archived') return false;
 
       // Check if this upcoming exam's scheduled time has arrived -> auto-transition to live
+      // CRITICAL: Must have an explicit scheduled timestamp with hours:minutes, never bare creation dates
       if (exam.status === 'upcoming') {
-        const rawStart = exam.startTime || (exam as any).examDateTime || exam.startDate || (exam as any).examDate;
-        if (rawStart && rawStart.trim()) {
-          const startTimeMs = new Date(rawStart).getTime();
-          if (!isNaN(startTimeMs) && now >= startTimeMs) {
-            // Check if it also passed archive time
-            const archStr = exam.archiveDateTime || exam.archiveTime || (exam as any).archiveDate;
-            if (archStr && archStr.trim()) {
-              const archDate = new Date(archStr);
-              if (!isNaN(archDate.getTime()) && now >= archDate.getTime()) {
-                return false;
-              }
+        const hasReachedSchedule = isScheduledLiveTimeReached(exam.startTime, (exam as any).examDateTime);
+        if (hasReachedSchedule) {
+          // Check if it also passed archive time
+          const archStr = exam.archiveDateTime || exam.archiveTime || (exam as any).archiveDate;
+          if (archStr && archStr.trim()) {
+            const archDate = new Date(archStr);
+            if (!isNaN(archDate.getTime()) && now >= archDate.getTime()) {
+              return false;
             }
-            return true; // Auto-transitioned to Live section!
           }
+          return true; // Scheduled time reached, allowed in Live section
         }
         return false;
       }
@@ -886,10 +884,8 @@ export default function HomeView({
       if (exam.status === 'archive' || exam.status === 'archived') return true;
 
       if (exam.status === 'upcoming') {
-        const rawStart = exam.startTime || (exam as any).examDateTime || exam.startDate || (exam as any).examDate;
-        if (!rawStart || !rawStart.trim()) return false;
-        const startTimeMs = new Date(rawStart).getTime();
-        if (isNaN(startTimeMs) || now < startTimeMs) return false;
+        const hasReachedSchedule = isScheduledLiveTimeReached(exam.startTime, (exam as any).examDateTime);
+        if (!hasReachedSchedule) return false;
       }
 
       const archStr = exam.archiveDateTime || exam.archiveTime || (exam as any).archiveDate;
@@ -904,15 +900,11 @@ export default function HomeView({
   }, [filteredExams]);
 
   const upcomingExams = useMemo(() => {
-    const now = Date.now();
     return exams.filter((exam) => {
       if (exam.status !== 'upcoming') return false;
-      const rawStart = exam.startTime || (exam as any).examDateTime || exam.startDate || (exam as any).examDate;
-      if (rawStart && rawStart.trim()) {
-        const startTimeMs = new Date(rawStart).getTime();
-        if (!isNaN(startTimeMs) && now >= startTimeMs) {
-          return false; // Already reached start time, automatically in Live section
-        }
+      // An upcoming exam stays in Upcoming UNLESS it has a real scheduled timestamp with hours:minutes that arrived
+      if (isScheduledLiveTimeReached(exam.startTime, (exam as any).examDateTime)) {
+        return false; // Reached schedule, moves to Live
       }
       return true;
     });

@@ -17,7 +17,11 @@
         "lastLogin": { "type": "string", "format": "date-time" },
         "isPremium": { "type": "boolean" },
         "inPremiumDate": { "type": "string" },
-        "inPremiumExpiryDate": { "type": "string" }
+        "inPremiumExpiryDate": { "type": "string" },
+        "referralCode": { "type": "string" },
+        "referralCount": { "type": "number" },
+        "referredBy": { "type": "string" },
+        "referredAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "role", "accountStatus"]
     },
@@ -149,6 +153,20 @@
         "createdBy": { "type": "string" }
       },
       "required": ["examId", "title"]
+    },
+    "referrals": {
+      "title": "referrals",
+      "description": "Referral tracking collection",
+      "type": "object",
+      "properties": {
+        "referrerId": { "type": "string" },
+        "referrerCode": { "type": "string" },
+        "referredUserId": { "type": "string" },
+        "referredUserName": { "type": "string" },
+        "referredUserEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["referrerId", "referredUserId", "referrerCode"]
     }
   }
 }
