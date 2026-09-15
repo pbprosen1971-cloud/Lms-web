@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Clock, ShieldAlert, ChevronLeft, ChevronRight, CheckCircle, HelpCircle, Eye, CornerDownRight } from 'lucide-react';
 import { Exam, ExamResult, Question } from '../types';
-import { subscribeToQuestionsByExamId } from '../services/firestoreService';
+import { subscribeToQuestionsByExamId, recordWrongQuestions } from '../services/firestoreService';
 
 interface ExamViewProps {
   exam: Exam;
@@ -157,6 +157,26 @@ export default function ExamView({ exam, user, onExamSubmit, setView }: ExamView
     };
 
     onExamSubmit(resultRecord);
+
+    // Record incorrect answers in Wrong Question Practice bank for authenticated user
+    if (currentUid && currentUid !== 'guest') {
+      const wrongList = questionsList
+        .filter((q) => {
+          const ans = answers[q.id];
+          return ans !== undefined && ans !== q.correctAnswer;
+        })
+        .map((q) => ({
+          question: q,
+          subject: q.subject || exam.subject,
+        }));
+
+      if (wrongList.length > 0) {
+        recordWrongQuestions(currentUid, wrongList).catch((err) => {
+          console.warn('Could not record wrong questions to repository:', err);
+        });
+      }
+    }
+
     setView('result');
   };
 

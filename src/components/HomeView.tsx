@@ -46,6 +46,8 @@ import { db } from '../lib/firebase';
 import { subscribeToUpcomingExamSettings } from '../services/firestoreService';
 import { formatSafeDisplay, formatBengaliDateTimeSafe, toBengaliDigits, isScheduledLiveTimeReached } from '../lib/dateUtils';
 import heroExamPrepBg from '../assets/images/hero_exam_prep_1786609165056.jpg';
+import DailyChallengeWidget from './DailyChallengeWidget';
+import { PlexusHeroBackground } from './PlexusHeroBackground';
 
 const FALLBACK_SUBJECT_QUESTIONS: Record<string, Question[]> = {
   'বাংলা': [
@@ -411,13 +413,14 @@ export default function HomeView({
     if (sExamId) {
       const matchExam = exams.find(e => e.id === sExamId);
       if (matchExam && (matchExam.status === 'live' || matchExam.status === 'archive' || matchExam.status === 'archived')) {
-        return null;
+        if (!activeUpcomingSetting.items || activeUpcomingSetting.items.length <= 1) {
+          return null;
+        }
       }
     }
-    const rawStart = activeUpcomingSetting.startTime || (activeUpcomingSetting as any).startDate;
-    if (rawStart && rawStart.trim()) {
-      const startTimeMs = new Date(rawStart).getTime();
-      if (!isNaN(startTimeMs) && Date.now() >= startTimeMs) {
+    const rawStart = activeUpcomingSetting.startTime;
+    if (rawStart && rawStart.trim() && isScheduledLiveTimeReached(rawStart)) {
+      if (!activeUpcomingSetting.items || activeUpcomingSetting.items.length <= 1) {
         return null;
       }
     }
@@ -429,9 +432,6 @@ export default function HomeView({
   const [mbPracticeTab, setMbPracticeTab] = useState<'qa' | 'interactive'>('qa');
   const [mbUserAnswers, setMbUserAnswers] = useState<Record<string, number>>({});
   const [selectedMinistryFilter, setSelectedMinistryFilter] = useState<string>('ALL');
-
-  // Hero Quick Bengali Quiz State
-  const [heroQuizSelectedOption, setHeroQuizSelectedOption] = useState<number | null>(null);
 
   const publishedMinistryBanks = useMemo(() => {
     const raw = ministryBanks && ministryBanks.length > 0 ? ministryBanks : INITIAL_MINISTRY_BANKS;
@@ -850,9 +850,12 @@ export default function HomeView({
       if (exam.status === 'archive' || exam.status === 'archived') return false;
 
       // Check if this upcoming exam's scheduled time has arrived -> auto-transition to live
-      // CRITICAL: Must have an explicit scheduled timestamp with hours:minutes, never bare creation dates
+      // CRITICAL: Must have an explicit scheduled timestamp with hours:minutes set by admin
       if (exam.status === 'upcoming') {
-        const hasReachedSchedule = isScheduledLiveTimeReached(exam.startTime, (exam as any).examDateTime);
+        const hasReachedSchedule = isScheduledLiveTimeReached(
+          exam.startTime, 
+          (exam as any).examDateTime
+        );
         if (hasReachedSchedule) {
           // Check if it also passed archive time
           const archStr = exam.archiveDateTime || exam.archiveTime || (exam as any).archiveDate;
@@ -884,7 +887,10 @@ export default function HomeView({
       if (exam.status === 'archive' || exam.status === 'archived') return true;
 
       if (exam.status === 'upcoming') {
-        const hasReachedSchedule = isScheduledLiveTimeReached(exam.startTime, (exam as any).examDateTime);
+        const hasReachedSchedule = isScheduledLiveTimeReached(
+          exam.startTime, 
+          (exam as any).examDateTime
+        );
         if (!hasReachedSchedule) return false;
       }
 
@@ -902,8 +908,11 @@ export default function HomeView({
   const upcomingExams = useMemo(() => {
     return exams.filter((exam) => {
       if (exam.status !== 'upcoming') return false;
-      // An upcoming exam stays in Upcoming UNLESS it has a real scheduled timestamp with hours:minutes that arrived
-      if (isScheduledLiveTimeReached(exam.startTime, (exam as any).examDateTime)) {
+      // An upcoming exam stays in Upcoming UNLESS it has an explicit scheduled date/time set by admin that arrived
+      if (isScheduledLiveTimeReached(
+        exam.startTime, 
+        (exam as any).examDateTime
+      )) {
         return false; // Reached schedule, moves to Live
       }
       return true;
@@ -941,23 +950,18 @@ export default function HomeView({
     <div className="space-y-16 pb-16 bg-brand-bg dark:bg-slate-900 text-slate-800 dark:text-slate-100 theme-transition">
       {/* 1. Hero Section (Welcome + Start Exam CTA) */}
       <section className="relative overflow-hidden py-16 sm:py-24 min-h-[460px] flex items-center bg-slate-900 text-white shadow-2xl rounded-b-3xl">
-        {/* Background Image with Readability Overlays */}
-        <div className="absolute inset-0 z-0">
-          <img
-            src={heroExamPrepBg}
-            alt="Exam Preparation Background"
-            className="w-full h-full object-cover object-center opacity-35 dark:opacity-25 mix-blend-luminosity scale-105 filter contrast-110"
-            referrerPolicy="no-referrer"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/90 to-slate-900/60 dark:from-slate-950 dark:via-slate-950/95 dark:to-slate-950/80" />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/40" />
+        {/* Background Plexus Video & Image with Readability Overlays */}
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          <PlexusHeroBackground opacity={0.88} />
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-slate-950/40 to-slate-950/20 dark:from-slate-950/85 dark:via-slate-950/45 dark:to-slate-950/25 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/20 pointer-events-none" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            <div className="lg:col-span-8 space-y-6 text-left">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full transition-transform duration-300 ease-out hover:-translate-y-1">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
+            <div className="lg:col-span-7 space-y-6 text-left">
               
-              <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-emerald-950/80 text-emerald-300 backdrop-blur-md text-xs sm:text-sm font-bold border border-emerald-400/40 shadow-lg shadow-emerald-950/50">
+              <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-emerald-950/80 text-emerald-300 backdrop-blur-md text-xs sm:text-sm font-bold border border-emerald-400/40 shadow-lg shadow-emerald-950/50 animate-pulse-heartbeat animate-pulse-glow-primary">
                 <Trophy className="h-4 w-4 text-emerald-400 shrink-0" />
                 <span className="flex items-center gap-1.5 font-bold tracking-normal">
                   <span className="font-extrabold text-white bg-emerald-600/80 px-2 py-0.5 rounded-md text-xs tracking-wider shadow-sm">১০০%</span>
@@ -974,6 +978,11 @@ export default function HomeView({
                 মেধা এক্সাম পোর্টালের মাধ্যমে BCS, ব্যাংক, আইসিটি ও সাধারণ জ্ঞানের রিয়েল-টাইম পরীক্ষা দিন। নিজেকে যাচাই করুন এবং লিডারবোর্ডে এগিয়ে থাকুন।
               </p>
 
+              {/* Subtle decorative gradient divider separating top hero content */}
+              <div className="pt-2 w-full max-w-md">
+                <div className="h-px bg-gradient-to-r from-emerald-500/60 via-teal-400/40 to-transparent" />
+              </div>
+
               {/* CTA Buttons & Navigation */}
               <div className="flex flex-wrap items-center justify-start gap-4 pt-2">
                 <a
@@ -987,124 +996,37 @@ export default function HomeView({
 
             </div>
 
-            {/* Hero Feature Card Showcase - Interactive Bangla Question Widget */}
-            <div className="hidden lg:block lg:col-span-4">
-              <div className="animated-mixing-border animated-mixing-border-dark rounded-2xl p-5 shadow-2xl space-y-4">
-                
-                {/* Badge Header */}
-                <div className="flex items-center justify-between border-b border-emerald-500/30 pb-3">
-                  <span className="flex items-center gap-2 text-xs font-bold text-emerald-300 bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-400/40 shadow-sm">
-                    <Sparkles className="h-4 w-4 text-emerald-400" />
-                    কুইক টেস্ট (বাংলা সাহিত্য)
-                  </span>
-                  <span className="text-xs text-slate-300 font-semibold bg-slate-800/80 px-2 py-0.5 rounded-md">১টি প্রশ্ন</span>
-                </div>
-
-                {/* Question Text */}
-                <div className="space-y-1.5 text-left">
-                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">প্রশ্ন:</span>
-                  <p className="text-base sm:text-lg font-bold text-white leading-snug drop-shadow-sm">
-                    বাংলা সাহিত্যের প্রথম সার্থক উপন্যাস কোনটি?
-                  </p>
-                </div>
-
-                {/* 2 Options */}
-                <div className="space-y-2.5 pt-1">
-                  {[
-                    { text: 'দুর্গেশনন্দিনী', isCorrect: true },
-                    { text: 'আলালের ঘরের দুলাল', isCorrect: false }
-                  ].map((option, idx) => {
-                    const isSelected = heroQuizSelectedOption === idx;
-                    let btnStyle = "border-slate-700/90 bg-slate-900/90 text-slate-100 hover:border-emerald-400 hover:bg-slate-800 hover:text-white hover:shadow-lg hover:shadow-emerald-500/20 hover:-translate-y-0.5 hover:scale-[1.02]";
-                    if (isSelected) {
-                      btnStyle = option.isCorrect
-                        ? "border-emerald-400 bg-emerald-900/80 text-emerald-100 ring-2 ring-emerald-400/60 shadow-lg shadow-emerald-500/30 scale-[1.01]"
-                        : "border-red-400 bg-red-900/80 text-red-100 ring-2 ring-red-400/60 shadow-lg shadow-red-500/30 scale-[1.01]";
+            {/* Daily Challenge Widget - Fetches live random question from Firebase */}
+            <div className="lg:col-span-5 w-full mt-4 lg:mt-0">
+              <DailyChallengeWidget
+                onStartExam={(examId) => {
+                  if (examId) {
+                    const match = exams.find(e => e.id === examId);
+                    if (match) {
+                      handleStartExam(match);
+                      return;
                     }
-
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => setHeroQuizSelectedOption(idx)}
-                        className={`w-full text-left p-3.5 rounded-xl border font-semibold text-sm transition-all duration-300 ease-out active:scale-95 flex items-center justify-between group cursor-pointer ${btnStyle}`}
-                      >
-                        <span className="flex items-center gap-3">
-                          <span className={`w-6 h-6 rounded-full border flex items-center justify-center text-xs font-extrabold transition-all duration-300 ${
-                            isSelected && option.isCorrect
-                              ? 'border-emerald-300 bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/50 scale-110'
-                              : isSelected && !option.isCorrect
-                              ? 'border-red-300 bg-red-500 text-white shadow-md shadow-red-500/50 scale-110'
-                              : 'border-slate-600 bg-slate-950 text-white group-hover:border-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 group-hover:scale-110'
-                          }`}>
-                            {idx === 0 ? 'ক' : 'খ'}
-                          </span>
-                          <span className="transition-colors duration-200 group-hover:text-white font-bold text-white">
-                            {option.text}
-                          </span>
-                        </span>
-                        {isSelected ? (
-                          option.isCorrect ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 animate-in zoom-in duration-200" />
-                          ) : (
-                            <XCircle className="h-5 w-5 text-red-400 shrink-0 animate-in zoom-in duration-200" />
-                          )
-                        ) : (
-                          <div className="w-2 h-2 rounded-full bg-emerald-400/0 group-hover:bg-emerald-400 transition-all duration-300 group-hover:scale-125" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Answer Feedback / Encouraging Text */}
-                {heroQuizSelectedOption !== null && (
-                  <div className={`p-3.5 rounded-xl text-xs sm:text-sm font-medium leading-relaxed border transition-all duration-300 text-left ${
-                    heroQuizSelectedOption === 0
-                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200'
-                      : 'bg-red-500/15 border-red-500/40 text-red-200'
-                  }`}>
-                    {heroQuizSelectedOption === 0 ? (
-                      <div className="space-y-1.5">
-                        <p className="font-bold flex items-center gap-1.5 text-emerald-300">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                          অভিনন্দন! আপনার উত্তরটি একদম সঠিক!
-                        </p>
-                        <p className="text-emerald-100/90 text-xs">
-                          🎉 দারুণ প্রস্তুতি! বঙ্কিমচন্দ্র চট্টোপাধ্যায় রচিত &quot;দুর্গেশনন্দিনী&quot; (১৮৬৫) বাংলা সাহিত্যের প্রথম সার্থক উপন্যাস। মেধা পোর্টালে প্রতিদিন এরকম হাজারো প্রশ্ন অনুশীলন করে নিজেকে সেরা রাখুন! 🌟
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <p className="font-bold flex items-center gap-1.5 text-red-300">
-                          <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-                          উত্তরটি সঠিক নয়।
-                        </p>
-                        <p className="text-red-100/90 text-xs">
-                          সঠিক উত্তর হলো: &quot;দুর্গেশনন্দিনী&quot; (১৮৬৫ সালে বঙ্কিমচন্দ্র চট্টোপাধ্যায় রচিত)। মেধা পোর্টালে নিয়মিত মডেল টেস্ট দিন।
-                        </p>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => setHeroQuizSelectedOption(null)}
-                      className="mt-2 text-xs font-semibold underline hover:text-white flex items-center gap-1 transition-colors"
-                    >
-                      <RotateCcw className="h-3 w-3" /> আবার চেষ্টা করুন
-                    </button>
-                  </div>
-                )}
-
-                {/* Card Footer */}
-                <div className="pt-1 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800">
-                  <span className="flex items-center gap-1"><Trophy className="h-3.5 w-3.5 text-emerald-400" /> বিসিএস ও ব্যাংক স্পেশাল</span>
-                  <span className="text-emerald-400 font-semibold">ক্লিক করে উত্তর দিন</span>
-                </div>
-
-              </div>
+                  }
+                  const live = exams.find(e => e.status === 'live');
+                  if (live) {
+                    handleStartExam(live);
+                  } else if (exams.length > 0) {
+                    handleStartExam(exams[0]);
+                  } else {
+                    setView('exams');
+                  }
+                }}
+              />
             </div>
 
           </div>
         </div>
       </section>
+
+      {/* Decorative Subtle Gradient Divider */}
+      <div className="relative -mt-10 mb-2 flex items-center justify-center px-4">
+        <div className="w-full max-w-5xl h-px bg-gradient-to-r from-transparent via-emerald-500/30 dark:via-emerald-400/25 to-transparent" />
+      </div>
 
       {/* 2. Search & Subject Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
@@ -1407,6 +1329,8 @@ export default function HomeView({
                   description?: string;
                   startTime?: string;
                   examDate?: string;
+                  startDate?: string;
+                  dateCreated?: string;
                   durationMinutes?: number;
                   totalQuestions?: number;
                   totalMarks?: number;
@@ -1422,6 +1346,14 @@ export default function HomeView({
 
                 itemsToProcess.forEach(item => {
                   if (item && item.title && item.isPublished !== false) {
+                    // If scheduled time has already arrived, this exam is live, not upcoming
+                    if (isScheduledLiveTimeReached(
+                      item.startTime, 
+                      (item as any).examDateTime
+                    )) {
+                      return;
+                    }
+
                     const titleKey = item.title.trim().toLowerCase();
                     const itemId = item.examId || item.id || `featured-${titleKey}`;
                     if (!seenIds.has(itemId) && !seenTitles.has(titleKey)) {
@@ -1432,6 +1364,8 @@ export default function HomeView({
                         description: item.description || '',
                         startTime: item.startTime || '',
                         examDate: item.examDate || '',
+                        startDate: (item as any).startDate || '',
+                        dateCreated: (item as any).dateCreated || '',
                         durationMinutes: item.durationMinutes || (item as any).duration || 30,
                         totalQuestions: item.totalQuestions || 0,
                         totalMarks: item.totalMarks || 0,
@@ -1456,6 +1390,8 @@ export default function HomeView({
                       description: exam.description || '',
                       startTime: exam.startTime || '',
                       examDate: (exam as any).examDate || '',
+                      startDate: (exam as any).startDate || '',
+                      dateCreated: exam.dateCreated || '',
                       durationMinutes: exam.durationMinutes || 30,
                       totalQuestions: qCount,
                       totalMarks: exam.totalMarks || qCount,
@@ -1511,27 +1447,34 @@ export default function HomeView({
                           </p>
                         )}
 
-                        {item.totalQuestions && item.totalQuestions > 0 ? (
-                          <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-400 font-medium">
-                            <span className="flex items-center gap-1">
-                              <FileText className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                              <span className="text-slate-700 dark:text-slate-300 font-bold">{item.totalQuestions}</span> টি প্রশ্ন
-                            </span>
-                          </div>
-                        ) : null}
+                        {/* প্রশ্ন সংখ্যা দেখানো যাবে না: user explicitly requested to hide question count from upcoming exams */}
 
-                        {Boolean((item.startTime && item.startTime.trim()) || (item.examDate && item.examDate.trim())) && (
-                          <div className="p-2.5 bg-amber-100/80 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-300 flex items-center gap-1.5 font-medium leading-relaxed">
-                            <Calendar className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
-                            <span>
-                              শুরু হবে: <strong className="font-extrabold">
-                                {item.startTime && item.startTime.trim() 
-                                  ? formatBanglaDateTime(item.startTime) 
-                                  : item.examDate}
-                              </strong>
-                            </span>
-                          </div>
-                        )}
+                        {/* এডমিন প্যানেল থেকে নির্দিষ্ট কোন তারিখ ও সময় না দেয়া থাকলে তারিখ শো করানো যাবে না। এডমিন নিজে লাইভের জন্য সুনির্দিষ্ট তারিখ ও সময় (startTime) সেট করলেই কেবল শুরু হওয়ার তারিখ দেখা যাবে */}
+                        {(() => {
+                          const rawStart = (item.startTime && item.startTime.trim() !== 'নির্ধারিত নেই') ? item.startTime.trim() : '';
+                          const creationDate = ((item as any).dateCreated || '').trim();
+                          const createdAt = ((item as any).createdAt || '').trim();
+
+                          // Scheduled live time MUST be an explicit schedule with a specific time or distinct future timestamp set by admin.
+                          // It must not equal the creation date, dateCreated, or creation timestamp.
+                          if (!rawStart) return null;
+                          if (creationDate && (rawStart === creationDate || rawStart.startsWith(creationDate))) return null;
+                          if (createdAt && rawStart.startsWith(createdAt.substring(0, 10))) return null;
+                          
+                          // A valid admin-set schedule contains a specific time component ('T' or ':')
+                          if (!rawStart.includes('T') && !rawStart.includes(':')) return null;
+
+                          return (
+                            <div className="p-2.5 bg-amber-100/80 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-300 flex items-center gap-1.5 font-medium leading-relaxed">
+                              <Calendar className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
+                              <span>
+                                শুরু হবে: <strong className="font-extrabold">
+                                  {formatBanglaDateTime(rawStart)}
+                                </strong>
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

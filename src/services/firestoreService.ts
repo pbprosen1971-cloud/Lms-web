@@ -36,8 +36,13 @@ import {
   UpcomingExamDoc,
   ExamContentDoc,
   ExamQuestionDoc,
-  ReferralRecord
+  ReferralRecord,
+  StudyMaterial,
+  MaterialAccessRecord,
+  DailyPracticeSession,
+  WrongQuestionRecord
 } from '../types';
+import { INITIAL_EXAMS, INITIAL_MINISTRY_BANKS } from '../data';
 
 export interface FirestoreQuestion {
   id: string;
@@ -140,12 +145,20 @@ export async function saveUpcomingExamScheduleToFirestore(
   } catch (e) {}
 
   // CRITICAL: Scheduled start time must ONLY come from explicit examDateTime or startTime.
-  // NEVER fall back to startDate or examDate, because a creation date is NOT a scheduled live time!
-  const rawDateTime = examData.examDateTime || examData.startTime || '';
-  const examDateTime = rawDateTime ? rawDateTime.trim() : '';
-  const rawDate = examData.startDate || examData.examDate || (examDateTime ? (examDateTime.includes('T') ? examDateTime.split('T')[0] : examDateTime) : '');
-  const startDate = rawDate ? rawDate.trim() : '';
-  const examDate = startDate;
+  // NEVER fall back to dateCreated, creation date, or today's date!
+  const creationDateStr = ((examData as any).dateCreated || '').trim();
+  const rawDateTime = (examData.examDateTime || examData.startTime || '').trim();
+  const examDateTime = (rawDateTime && rawDateTime !== 'নির্ধারিত নেই' && rawDateTime !== creationDateStr) ? rawDateTime : '';
+
+  const rawStartDate = (examData.startDate || '').trim();
+  const startDate = (rawStartDate && rawStartDate !== 'নির্ধারিত নেই' && rawStartDate !== creationDateStr) 
+    ? rawStartDate 
+    : (examDateTime ? (examDateTime.includes('T') ? examDateTime.split('T')[0] : examDateTime) : '');
+
+  const rawExamDate = (examData.examDate || '').trim();
+  const examDate = (rawExamDate && rawExamDate !== 'নির্ধারিত নেই' && rawExamDate !== creationDateStr) 
+    ? rawExamDate 
+    : startDate;
 
   const rawArchive = examData.archiveDateTime || examData.archiveTime || examData.archiveDate || '';
   const archiveDateTime = rawArchive ? rawArchive.trim() : '';
@@ -227,6 +240,7 @@ export async function saveUpcomingExamScheduleToFirestore(
     await setDoc(legacyExamRef, {
       id: targetExamId,
       title: examData.title.trim(),
+      description: (examData.description || '').trim(),
       category: subject,
       subject: subject,
       duration: duration,
@@ -243,8 +257,8 @@ export async function saveUpcomingExamScheduleToFirestore(
       examDate: examDate || '',
       archiveTime: archiveDateTime || '',
       archiveDateTime: archiveDateTime || '',
-      dateCreated: startDate || '',
-      createdAt: startDate || '',
+      dateCreated: (examData as any).dateCreated || new Date().toISOString().split('T')[0],
+      createdAt: (examData as any).createdAt || serverTimestamp(),
     }, { merge: true });
 
     // 5. Update siteSettings/upcomingExam ONLY IF status is 'upcoming'
@@ -579,9 +593,9 @@ export async function updateUpcomingExamInFirestore(
 ): Promise<void> {
   try {
     const examRef = doc(db, 'exam', examId);
-    const rawDateTime = updates.examDateTime || updates.startTime || updates.startDate || updates.examDate;
+    const rawDateTime = updates.examDateTime !== undefined ? updates.examDateTime : updates.startTime;
     const examDateTime = rawDateTime !== undefined ? (rawDateTime ? rawDateTime.trim() : '') : undefined;
-    const startDate = examDateTime !== undefined ? (examDateTime ? (examDateTime.includes('T') ? examDateTime.split('T')[0] : examDateTime) : '') : undefined;
+    const startDate = examDateTime !== undefined ? (examDateTime ? (examDateTime.includes('T') ? examDateTime.split('T')[0] : examDateTime) : '') : (updates.startDate !== undefined ? updates.startDate : undefined);
 
     const payload: any = {
       ...updates,
@@ -617,7 +631,7 @@ export async function updateUpcomingExamInFirestore(
       ...(updates.status && { status: updates.status }),
       ...(updates.isPublished !== undefined && { isPublished: updates.isPublished }),
       ...(updates.examType && { isPremium: updates.examType === 'premium' }),
-      ...(examDateTime !== undefined && { startTime: examDateTime, startDate: startDate, examDateTime: examDateTime, examDate: startDate, dateCreated: startDate, createdAt: startDate }),
+      ...(examDateTime !== undefined && { startTime: examDateTime, startDate: startDate, examDateTime: examDateTime, examDate: startDate }),
       ...(updates.archiveDateTime && { archiveTime: updates.archiveDateTime, archiveDateTime: updates.archiveDateTime }),
       ...(updates.totalQuestions !== undefined && { totalQuestions: updates.totalQuestions }),
       ...(updates.totalMarks !== undefined && { totalMarks: updates.totalMarks }),
@@ -778,13 +792,22 @@ export async function saveQuestionToExamContent(
       const siteSnap = await getDoc(siteSettingsRef);
       if (siteSnap.exists()) {
         const siteData = siteSnap.data();
-        if (siteData.examId === examId) {
-          await setDoc(siteSettingsRef, {
-            totalQuestions: count,
-            totalMarks: count,
-            updatedAt: serverTimestamp(),
-          }, { merge: true });
+        let itemsUpdated = false;
+        let newItems = siteData.items;
+        if (Array.isArray(siteData.items)) {
+          newItems = siteData.items.map((it: any) => {
+            if (it.id === examId || it.examId === examId) {
+              itemsUpdated = true;
+              return { ...it, totalQuestions: count, totalMarks: count };
+            }
+            return it;
+          });
         }
+        await setDoc(siteSettingsRef, {
+          ...(siteData.examId === examId ? { totalQuestions: count, totalMarks: count } : {}),
+          ...(itemsUpdated ? { items: newItems } : {}),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
       }
     } catch (e) {}
   } catch (err) {
@@ -928,14 +951,25 @@ export function subscribeToExamQuestions(examId: string, callback: (questions: Q
 
 // Save or Update Exam in Firestore
 export async function saveExamToFirestore(exam: Exam, createdByUid: string = 'admin'): Promise<void> {
+  const cleanStartTime = (exam.startTime && exam.startTime.trim() !== 'নির্ধারিত নেই' && exam.startTime.trim() !== exam.dateCreated) 
+    ? exam.startTime.trim() 
+    : '';
+  const cleanStartDate = (exam.startDate && exam.startDate.trim() !== 'নির্ধারিত নেই' && exam.startDate.trim() !== exam.dateCreated) 
+    ? exam.startDate.trim() 
+    : (cleanStartTime ? (cleanStartTime.includes('T') ? cleanStartTime.split('T')[0] : cleanStartTime) : '');
+  const cleanExamDate = ((exam as any).examDate && (exam as any).examDate.trim() !== 'নির্ধারিত নেই' && (exam as any).examDate.trim() !== exam.dateCreated) 
+    ? (exam as any).examDate.trim() 
+    : cleanStartDate;
+
   // Delegate to saveUpcomingExamScheduleToFirestore
   await saveUpcomingExamScheduleToFirestore({
     examId: exam.id,
     title: exam.title,
     description: (exam as any).description || '',
-    examDateTime: exam.startTime,
-    archiveDateTime: exam.archiveTime,
-    examDate: exam.dateCreated,
+    examDateTime: cleanStartTime || '',
+    archiveDateTime: exam.archiveTime || '',
+    examDate: cleanExamDate || '',
+    startDate: cleanStartDate || '',
     archiveDate: exam.archiveTime ? exam.archiveTime.split('T')[0] : '',
     examType: exam.isPremium ? 'premium' : 'free',
     status: exam.status,
@@ -1112,6 +1146,117 @@ export function subscribeToQuestionsByExamId(examId: string, callback: (question
   return subscribeToExamQuestions(examId, callback);
 }
 
+/**
+ * Fetch a single random question from the Firebase database to encourage daily user engagement.
+ * Can be seeded by a date string (e.g. 'YYYY-MM-DD') for daily consistency, or unseeded for next/random challenge.
+ */
+export async function fetchDailyChallengeQuestion(seedDate?: string): Promise<{ question: Question; sourceExamTitle?: string } | null> {
+  try {
+    const qCol = collection(db, 'questions');
+    const qSnap = await getDocs(qCol);
+
+    const allQuestions: Array<{ q: Question; examId?: string; subject?: string }> = [];
+
+    if (!qSnap.empty) {
+      qSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        const mapped = mapFirestoreDocToQuestion(docSnap);
+        const validOptions = mapped.options ? mapped.options.filter(o => o && o.trim()) : [];
+        if (mapped.text && mapped.text.trim() && validOptions.length >= 2) {
+          allQuestions.push({
+            q: { ...mapped, options: validOptions },
+            examId: data.examId,
+            subject: data.subject || mapped.subject
+          });
+        }
+      });
+    }
+
+    // Fallback: If root questions is empty, try /Exam subcollections
+    if (allQuestions.length === 0) {
+      const examSnap = await getDocs(collection(db, 'Exam'));
+      for (const examDoc of examSnap.docs) {
+        const subSnap = await getDocs(collection(db, 'Exam', examDoc.id, 'questions'));
+        subSnap.forEach((subDoc) => {
+          const mapped = mapFirestoreDocToQuestion(subDoc);
+          const validOptions = mapped.options ? mapped.options.filter(o => o && o.trim()) : [];
+          if (mapped.text && mapped.text.trim() && validOptions.length >= 2) {
+            allQuestions.push({
+              q: { ...mapped, options: validOptions },
+              examId: examDoc.id,
+              subject: mapped.subject
+            });
+          }
+        });
+        if (allQuestions.length >= 25) break;
+      }
+    }
+
+    if (allQuestions.length === 0) {
+      return null;
+    }
+
+    // Deterministic selection based on seedDate, or random
+    let selectedItem: { q: Question; examId?: string; subject?: string };
+    if (seedDate) {
+      let hash = 0;
+      for (let i = 0; i < seedDate.length; i++) {
+        hash = (hash * 31 + seedDate.charCodeAt(i)) & 0xffffffff;
+      }
+      const index = Math.abs(hash) % allQuestions.length;
+      selectedItem = allQuestions[index];
+    } else {
+      const index = Math.floor(Math.random() * allQuestions.length);
+      selectedItem = allQuestions[index];
+    }
+
+    // Resolve source exam title and subject if available
+    let sourceExamTitle: string | undefined = undefined;
+    if (selectedItem.examId) {
+      try {
+        const eDoc = await getDoc(doc(db, 'Exam', selectedItem.examId));
+        if (eDoc.exists()) {
+          sourceExamTitle = eDoc.data()?.title;
+          if (!selectedItem.q.subject && eDoc.data()?.subject) {
+            selectedItem.q.subject = eDoc.data()?.subject;
+          }
+        } else {
+          const eDoc2 = await getDoc(doc(db, 'exams', selectedItem.examId));
+          if (eDoc2.exists()) {
+            sourceExamTitle = eDoc2.data()?.title;
+            if (!selectedItem.q.subject && eDoc2.data()?.subject) {
+              selectedItem.q.subject = eDoc2.data()?.subject;
+            }
+          }
+        }
+      } catch {
+        // Non-blocking
+      }
+    }
+
+    // If subject is still empty, infer from title
+    if (!selectedItem.q.subject && sourceExamTitle) {
+      const t = sourceExamTitle.toLowerCase();
+      if (t.includes('বাংলা')) selectedItem.q.subject = 'বাংলা';
+      else if (t.includes('english') || t.includes('ইংরেজি')) selectedItem.q.subject = 'ইংরেজি';
+      else if (t.includes('গণিত') || t.includes('math')) selectedItem.q.subject = 'গণিত';
+      else if (t.includes('জ্ঞান') || t.includes('মুক্তিযুদ্ধ') || t.includes('gk')) selectedItem.q.subject = 'সাধারণ জ্ঞান';
+      else if (t.includes('সমাজসেবা') || t.includes('অফিস সহায়ক')) selectedItem.q.subject = 'চাকরি প্রস্তুতি';
+      else selectedItem.q.subject = 'বিসিএস ও চাকরি পরীক্ষা';
+    } else if (!selectedItem.q.subject) {
+      selectedItem.q.subject = 'বিসিএস ও চাকরি পরীক্ষা';
+    }
+
+    return {
+      question: selectedItem.q,
+      sourceExamTitle
+    };
+  } catch (err) {
+    console.error('Error in fetchDailyChallengeQuestion from Firestore:', err);
+    return null;
+  }
+}
+
 // Save single Question to Firestore questions collection
 export async function saveQuestionToFirestore(q: Question, examId: string, questionNum?: number): Promise<void> {
   const qId = q.id || `q-${examId}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -1248,18 +1393,19 @@ export function subscribeToUpcomingExamSettings(callback: (settings: UpcomingExa
           }
         }
 
-        const rawDateTime = data.startTime || data.startDate || data.examDate || '';
-        const startTime = rawDateTime ? rawDateTime.trim() : '';
-        const startDate = data.startDate || (startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '');
-        const examDate = data.examDate || startDate || '';
+        // CRITICAL: startTime must ONLY come from data.startTime. Never fall back to startDate or examDate!
+        const startTime = (data.startTime && typeof data.startTime === 'string' && data.startTime.trim() !== 'নির্ধারিত নেই') ? data.startTime.trim() : '';
+        const startDate = (data.startDate && typeof data.startDate === 'string' && data.startDate.trim() !== 'নির্ধারিত নেই') ? data.startDate.trim() : '';
+        const examDate = (data.examDate && typeof data.examDate === 'string' && data.examDate.trim() !== 'নির্ধারিত নেই') ? data.examDate.trim() : startDate;
 
         // Parse multiple upcoming exams from items array if present
         let parsedItems: UpcomingExamSettings[] | undefined = undefined;
         if (Array.isArray(data.items)) {
           parsedItems = data.items.map((it: any) => {
-            const itRaw = it.startTime || it.startDate || it.examDate || '';
-            const itStart = itRaw ? itRaw.trim() : '';
-            const itDate = it.startDate || (itStart ? (itStart.includes('T') ? itStart.split('T')[0] : itStart) : (it.examDate || ''));
+            const itStart = (it.startTime && typeof it.startTime === 'string' && it.startTime.trim() !== 'নির্ধারিত নেই') ? it.startTime.trim() : '';
+            const itDate = (it.startDate && typeof it.startDate === 'string' && it.startDate.trim() !== 'নির্ধারিত নেই') 
+              ? it.startDate.trim() 
+              : ((it.examDate && typeof it.examDate === 'string' && it.examDate.trim() !== 'নির্ধারিত নেই') ? it.examDate.trim() : '');
             return {
               id: it.id || it.examId || '',
               examId: it.examId || it.id || '',
@@ -1341,17 +1487,18 @@ export async function getUpcomingExamSettings(): Promise<UpcomingExamSettings | 
         }
       }
 
-      const rawDateTime = data.startTime || data.startDate || data.examDate || '';
-      const startTime = rawDateTime ? rawDateTime.trim() : '';
-      const startDate = data.startDate || (startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '');
-      const examDate = data.examDate || startDate || '';
+      // CRITICAL: startTime must ONLY come from data.startTime. Never fall back to startDate or examDate!
+      const startTime = (data.startTime && typeof data.startTime === 'string' && data.startTime.trim() !== 'নির্ধারিত নেই') ? data.startTime.trim() : '';
+      const startDate = (data.startDate && typeof data.startDate === 'string' && data.startDate.trim() !== 'নির্ধারিত নেই') ? data.startDate.trim() : '';
+      const examDate = (data.examDate && typeof data.examDate === 'string' && data.examDate.trim() !== 'নির্ধারিত নেই') ? data.examDate.trim() : startDate;
 
       let parsedItems: UpcomingExamSettings[] | undefined = undefined;
       if (Array.isArray(data.items)) {
         parsedItems = data.items.map((it: any) => {
-          const itRaw = it.startTime || it.startDate || it.examDate || '';
-          const itStart = itRaw ? itRaw.trim() : '';
-          const itDate = it.startDate || (itStart ? (itStart.includes('T') ? itStart.split('T')[0] : itStart) : (it.examDate || ''));
+          const itStart = (it.startTime && typeof it.startTime === 'string' && it.startTime.trim() !== 'নির্ধারিত নেই') ? it.startTime.trim() : '';
+          const itDate = (it.startDate && typeof it.startDate === 'string' && it.startDate.trim() !== 'নির্ধারিত নেই') 
+            ? it.startDate.trim() 
+            : ((it.examDate && typeof it.examDate === 'string' && it.examDate.trim() !== 'নির্ধারিত নেই') ? it.examDate.trim() : '');
           return {
             id: it.id || it.examId || '',
             examId: it.examId || it.id || '',
@@ -1419,10 +1566,16 @@ export async function saveUpcomingExamSettings(settings: UpcomingExamSettings, u
   const docRef = doc(db, 'siteSettings', 'upcomingExam');
   const nowIso = new Date().toISOString();
   
-  const rawDateTime = settings.startTime || settings.startDate || settings.examDate || '';
+  // CRITICAL: startTime must ONLY come from explicit settings.startTime.
+  // NEVER fall back to startDate or examDate or creation dates! If admin didn't set a live time, it MUST be empty!
+  const rawDateTime = (settings.startTime && typeof settings.startTime === 'string' && settings.startTime.trim() !== 'নির্ধারিত নেই') ? settings.startTime.trim() : '';
   const startTime = rawDateTime ? rawDateTime.trim() : '';
-  const startDate = startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '';
-  const examDate = startDate;
+  const startDate = (settings.startDate && typeof settings.startDate === 'string' && settings.startDate.trim() !== 'নির্ধারিত নেই') 
+    ? settings.startDate.trim() 
+    : (startTime ? (startTime.includes('T') ? startTime.split('T')[0] : startTime) : '');
+  const examDate = (settings.examDate && typeof settings.examDate === 'string' && settings.examDate.trim() !== 'নির্ধারিত নেই') 
+    ? settings.examDate.trim() 
+    : startDate;
   const examId = settings.examId || settings.id || `upcoming-exam-${Date.now()}`;
 
   const currentItem: UpcomingExamSettings = {
@@ -1823,4 +1976,667 @@ export function subscribeToAllReferrals(callback: (referrals: ReferralRecord[]) 
       console.warn("Subscription error for all referrals:", err);
     }
   );
+}
+
+/* ==========================================================================
+   STUDY MATERIALS & PDF RESOURCES SERVICE (GOOGLE DRIVE INTEGRATION)
+   ========================================================================== */
+
+/**
+ * Robust Google Drive File ID extraction utility.
+ * Supports /file/d/{id}, ?id={id}, /open?id={id}, /uc?id={id}, and direct ID strings.
+ */
+export function extractDriveFileId(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+
+  // Pattern 1: https://drive.google.com/file/d/{id}/view...
+  const match1 = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]{15,})/);
+  if (match1 && match1[1]) return match1[1];
+
+  // Pattern 2: https://drive.google.com/open?id={id} or /uc?id={id}
+  const match2 = trimmed.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+  if (match2 && match2[1]) return match2[1];
+
+  // Pattern 3: /d/{id} general match
+  const match3 = trimmed.match(/\/d\/([a-zA-Z0-9_-]{15,})/);
+  if (match3 && match3[1]) return match3[1];
+
+  // Pattern 4: direct ID alphanumeric string of standard Google Drive token length
+  if (/^[a-zA-Z0-9_-]{20,60}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  return '';
+}
+
+/**
+ * Builds standard Google Drive PDF Preview / Embed URL.
+ */
+export function buildDrivePreviewUrl(fileIdOrUrl: string): string {
+  const fileId = extractDriveFileId(fileIdOrUrl);
+  if (fileId) {
+    return `https://drive.google.com/file/d/${fileId}/preview`;
+  }
+  return fileIdOrUrl;
+}
+
+/**
+ * Builds Google Drive Direct Download / Open URL.
+ */
+export function buildDriveDownloadUrl(fileIdOrUrl: string): string {
+  const fileId = extractDriveFileId(fileIdOrUrl);
+  if (fileId) {
+    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+  }
+  return fileIdOrUrl;
+}
+
+/**
+ * Builds Google Drive External View URL.
+ */
+export function buildDriveViewUrl(fileIdOrUrl: string): string {
+  const fileId = extractDriveFileId(fileIdOrUrl);
+  if (fileId) {
+    return `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
+  }
+  return fileIdOrUrl;
+}
+
+/**
+ * Fetch Study Materials from Firestore with optional status filter.
+ */
+export async function fetchStudyMaterials(publishedOnly: boolean = false): Promise<StudyMaterial[]> {
+  try {
+    const collRef = collection(db, 'studyMaterials');
+    let q = query(collRef);
+    if (publishedOnly) {
+      q = query(collRef, where('status', '==', 'published'));
+    }
+
+    const snap = await getDocs(q);
+    const materials: StudyMaterial[] = [];
+    snap.forEach((d) => {
+      materials.push({ id: d.id, ...d.data() } as StudyMaterial);
+    });
+
+    // Sort by displayOrder ascending, then createdAt descending
+    materials.sort((a, b) => {
+      const orderA = typeof a.displayOrder === 'number' ? a.displayOrder : 9999;
+      const orderB = typeof b.displayOrder === 'number' ? b.displayOrder : 9999;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+
+    return materials;
+  } catch (err) {
+    console.warn("Error fetching study materials:", err);
+    return [];
+  }
+}
+
+/**
+ * Realtime subscription to study materials.
+ */
+export function subscribeToStudyMaterials(
+  callback: (materials: StudyMaterial[]) => void,
+  publishedOnly: boolean = false
+): Unsubscribe {
+  const collRef = collection(db, 'studyMaterials');
+  const q = publishedOnly
+    ? query(collRef, where('status', '==', 'published'))
+    : collRef;
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const materials: StudyMaterial[] = [];
+      snap.forEach((d) => {
+        materials.push({ id: d.id, ...d.data() } as StudyMaterial);
+      });
+
+      materials.sort((a, b) => {
+        const orderA = typeof a.displayOrder === 'number' ? a.displayOrder : 9999;
+        const orderB = typeof b.displayOrder === 'number' ? b.displayOrder : 9999;
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      });
+
+      callback(materials);
+    },
+    (err) => {
+      console.warn("Subscription error for study materials:", err);
+    }
+  );
+}
+
+/**
+ * Create or update a Study Material document in /studyMaterials.
+ */
+export async function saveStudyMaterial(
+  materialData: Partial<StudyMaterial>,
+  adminUid: string = 'admin'
+): Promise<string> {
+  const materialId = materialData.id || `mat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const driveFileId = materialData.driveFileId || extractDriveFileId(materialData.driveUrl || '');
+  const nowStr = new Date().toISOString();
+
+  const payload: Record<string, any> = {
+    title: materialData.title?.trim() || 'Untitled Material',
+    description: materialData.description?.trim() || '',
+    category: materialData.category || 'Other',
+    driveUrl: materialData.driveUrl?.trim() || '',
+    driveFileId: driveFileId,
+    accessType: materialData.accessType === 'premium' ? 'premium' : 'free',
+    status: materialData.status || 'published',
+    displayOrder: typeof materialData.displayOrder === 'number' ? materialData.displayOrder : 0,
+    thumbnailUrl: materialData.thumbnailUrl?.trim() || '',
+    updatedAt: nowStr,
+    updatedAtServer: serverTimestamp(),
+  };
+
+  if (!materialData.id) {
+    payload.createdAt = nowStr;
+    payload.createdAtServer = serverTimestamp();
+    payload.createdBy = adminUid;
+  }
+
+  const docRef = doc(db, 'studyMaterials', materialId);
+  await setDoc(docRef, payload, { merge: true });
+  return materialId;
+}
+
+/**
+ * Delete a Study Material document from /studyMaterials.
+ */
+export async function deleteStudyMaterial(materialId: string): Promise<void> {
+  if (!materialId) return;
+  const docRef = doc(db, 'studyMaterials', materialId);
+  await deleteDoc(docRef);
+}
+
+/**
+ * Quick toggle status (published, draft, hidden).
+ */
+export async function updateStudyMaterialStatus(
+  materialId: string,
+  status: 'published' | 'draft' | 'hidden'
+): Promise<void> {
+  if (!materialId) return;
+  const docRef = doc(db, 'studyMaterials', materialId);
+  await updateDoc(docRef, {
+    status,
+    updatedAt: new Date().toISOString(),
+    updatedAtServer: serverTimestamp(),
+  });
+}
+
+/**
+ * Record user access/download history.
+ * Uses composite doc ID `${userId}_${materialId}` to prevent excessive duplicate documents.
+ */
+export async function recordMaterialAccess(
+  userId: string,
+  material: {
+    id: string;
+    title: string;
+    category?: string;
+    accessType: 'free' | 'premium';
+    driveUrl?: string;
+    driveFileId?: string;
+  }
+): Promise<void> {
+  if (!userId || !material.id) return;
+  try {
+    const accessId = `${userId}_${material.id}`;
+    const docRef = doc(db, 'materialAccess', accessId);
+    await setDoc(
+      docRef,
+      {
+        userId,
+        materialId: material.id,
+        materialTitle: material.title,
+        category: material.category || 'Other',
+        accessType: material.accessType,
+        driveUrl: material.driveUrl || '',
+        driveFileId: material.driveFileId || '',
+        accessedAt: new Date().toISOString(),
+        accessedAtServer: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn("Error logging material access:", err);
+  }
+}
+
+/**
+ * Fetch a specific user's study material access history.
+ */
+export async function fetchUserMaterialAccess(userId: string): Promise<MaterialAccessRecord[]> {
+  if (!userId) return [];
+  try {
+    const collRef = collection(db, 'materialAccess');
+    const q = query(collRef, where('userId', '==', userId));
+    const snap = await getDocs(q);
+    const records: MaterialAccessRecord[] = [];
+    snap.forEach((d) => {
+      records.push({ id: d.id, ...d.data() } as MaterialAccessRecord);
+    });
+
+    records.sort((a, b) => (b.accessedAt || '').localeCompare(a.accessedAt || ''));
+    return records;
+  } catch (err) {
+    console.warn("Error fetching user material access history:", err);
+    return [];
+  }
+}
+
+/**
+ * Realtime subscription to user's study material access history.
+ */
+export function subscribeToUserMaterialAccess(
+  userId: string,
+  callback: (records: MaterialAccessRecord[]) => void
+): Unsubscribe {
+  if (!userId) return () => {};
+  const collRef = collection(db, 'materialAccess');
+  const q = query(collRef, where('userId', '==', userId));
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const records: MaterialAccessRecord[] = [];
+      snap.forEach((d) => {
+        records.push({ id: d.id, ...d.data() } as MaterialAccessRecord);
+      });
+      records.sort((a, b) => (b.accessedAt || '').localeCompare(a.accessedAt || ''));
+      callback(records);
+    },
+    (err) => {
+      console.warn("Subscription error for user material access:", err);
+    }
+  );
+}
+
+// ==========================================
+// 12. DAILY PRACTICE SERVICE (10 MCQ / DAY)
+// ==========================================
+
+/**
+ * Get the standardized date key for Daily Practice (YYYY-MM-DD)
+ * Format: "2026-09-14"
+ */
+export function getDailyPracticeDateKey(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Fetches all available questions from the question bank across Firestore,
+ * Ministry question banks, live/archived exams, and system base banks.
+ */
+export async function fetchQuestionBankPool(examsProp?: Exam[]): Promise<Question[]> {
+  const list: Question[] = [];
+  const seenIds = new Set<string>();
+  const seenTexts = new Set<string>();
+
+  const addValidQuestion = (q: any, defaultSubject?: string) => {
+    if (!q || !q.text || typeof q.text !== 'string' || q.text.trim().length === 0) return;
+    if (!Array.isArray(q.options) || q.options.length < 2) return;
+    if (typeof q.correctAnswer !== 'number' || q.correctAnswer < 0 || q.correctAnswer >= q.options.length) return;
+
+    const normalizedText = q.text.trim().toLowerCase();
+    const id = q.id || `bank-q-${Math.random().toString(36).substring(2, 9)}`;
+
+    if (seenIds.has(id) || seenTexts.has(normalizedText)) return;
+
+    seenIds.add(id);
+    seenTexts.add(normalizedText);
+
+    list.push({
+      ...q,
+      id,
+      text: q.text.trim(),
+      subject: q.subject || defaultSubject || 'সাধারণ প্রস্তুতি',
+      options: q.options.map(o => String(o).trim()),
+    });
+  };
+
+  // 1. Collect from passed exams (excluding secret upcoming exams)
+  if (Array.isArray(examsProp) && examsProp.length > 0) {
+    examsProp.forEach(exam => {
+      if (exam.status === 'upcoming') return;
+      if (Array.isArray(exam.questions)) {
+        exam.questions.forEach(q => addValidQuestion(q, exam.subject));
+      }
+    });
+  }
+
+  // 2. Query Firestore /questions collection if populated
+  try {
+    const qSnap = await getDocs(collection(db, 'questions'));
+    qSnap.forEach(docSnap => {
+      const q = mapFirestoreDocToQuestion(docSnap);
+      addValidQuestion(q);
+    });
+  } catch (err) {
+    console.warn("Could not query /questions in Firestore:", err);
+  }
+
+  // 3. Query Firestore /ministryQuestionBanks if populated
+  try {
+    const mSnap = await getDocs(collection(db, 'ministryQuestionBanks'));
+    mSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      if (Array.isArray(data.questions)) {
+        data.questions.forEach((q: any) => {
+          addValidQuestion(q, data.ministryName || 'মন্ত্রণালয় প্রস্তুতি');
+        });
+      }
+    });
+  } catch (err) {
+    console.warn("Could not query /ministryQuestionBanks in Firestore:", err);
+  }
+
+  // 4. Always ensure a comprehensive question pool by merging INITIAL_EXAMS
+  INITIAL_EXAMS.forEach(exam => {
+    if (Array.isArray(exam.questions)) {
+      exam.questions.forEach(q => addValidQuestion(q, exam.subject));
+    }
+  });
+
+  // 5. Merge INITIAL_MINISTRY_BANKS
+  INITIAL_MINISTRY_BANKS.forEach(bank => {
+    if (Array.isArray(bank.questions)) {
+      bank.questions.forEach(q => addValidQuestion(q, bank.ministryName));
+    }
+  });
+
+  return list;
+}
+
+/**
+ * Get or initialize today's Daily Practice session for a user.
+ * - Stores under a user-specific daily record `dailyPractice/${userId}_${dateKey}` to prevent multiple attempts per calendar day.
+ * - If record exists (completed or in-progress), loads it directly.
+ * - If completed, user is prevented from re-taking it.
+ * - If not yet created for today, fetches 10 random questions from the question bank and persists them to Firestore.
+ */
+export async function getOrCreateDailyPracticeSession(
+  userId: string,
+  allAvailableQuestions?: Question[]
+): Promise<DailyPracticeSession> {
+  const dateKey = getDailyPracticeDateKey();
+  const sessionId = `${userId}_${dateKey}`;
+  const practiceRef = doc(db, 'dailyPractice', sessionId);
+
+  // 1. Check if user already has a session created for today in Firestore
+  try {
+    const snap = await getDoc(practiceRef);
+    if (snap.exists()) {
+      const data = snap.data() as DailyPracticeSession;
+      let sessionQuestions = Array.isArray(data.questions) && data.questions.length > 0 ? data.questions : [];
+
+      // If questions array wasn't stored directly, hydrate from pool
+      if (sessionQuestions.length === 0 && Array.isArray(data.questionIds) && data.questionIds.length > 0) {
+        const pool = (allAvailableQuestions && allAvailableQuestions.length > 0)
+          ? allAvailableQuestions
+          : await fetchQuestionBankPool();
+        const questionMap = new Map<string, Question>();
+        pool.forEach(q => questionMap.set(q.id, q));
+        
+        data.questionIds.forEach(id => {
+          const found = questionMap.get(id);
+          if (found) sessionQuestions.push(found);
+        });
+      }
+
+      return {
+        ...data,
+        questions: sessionQuestions
+      };
+    }
+  } catch (e) {
+    console.warn("Error fetching daily practice from firestore, will generate session:", e);
+  }
+
+  // 2. Fetch or use pool of questions from question bank
+  const pool = (allAvailableQuestions && allAvailableQuestions.length >= 10)
+    ? allAvailableQuestions
+    : await fetchQuestionBankPool();
+
+  // 3. Select 10 randomized questions with Fisher-Yates shuffle
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const selectedQuestions = shuffled.slice(0, 10);
+  const questionIds = selectedQuestions.map(q => q.id);
+
+  const newSession: DailyPracticeSession = {
+    id: sessionId,
+    userId,
+    dateKey,
+    questionIds,
+    questions: selectedQuestions,
+    totalQuestions: selectedQuestions.length,
+    completed: false,
+    createdAt: new Date().toISOString()
+  };
+
+  // 4. Persist immediately into Firestore under user-specific daily record to lock in today's questions
+  try {
+    await setDoc(practiceRef, {
+      id: sessionId,
+      userId,
+      dateKey,
+      questionIds,
+      questions: selectedQuestions,
+      totalQuestions: selectedQuestions.length,
+      completed: false,
+      createdAt: newSession.createdAt
+    });
+  } catch (e) {
+    console.warn("Could not save new daily practice session to Firestore:", e);
+  }
+
+  return newSession;
+}
+
+/**
+ * Save completed Daily Practice result
+ * Sets completed to true to prevent multiple attempts for this calendar day.
+ */
+export async function saveDailyPracticeResult(
+  session: DailyPracticeSession
+): Promise<void> {
+  const practiceRef = doc(db, 'dailyPractice', session.id);
+  const payload = {
+    ...session,
+    completed: true,
+    completedAt: session.completedAt || new Date().toISOString()
+  };
+
+  try {
+    await setDoc(practiceRef, payload, { merge: true });
+  } catch (e) {
+    console.error("Could not save daily practice result to Firestore:", e);
+    throw e;
+  }
+}
+
+/**
+ * Real-time subscription to user's today's Daily Practice session
+ */
+export function subscribeToTodayDailyPractice(
+  userId: string,
+  callback: (session: DailyPracticeSession | null) => void
+): Unsubscribe {
+  if (!userId) {
+    callback(null);
+    return () => {};
+  }
+  const dateKey = getDailyPracticeDateKey();
+  const sessionId = `${userId}_${dateKey}`;
+  const practiceRef = doc(db, 'dailyPractice', sessionId);
+
+  return onSnapshot(practiceRef, (snap) => {
+    if (snap.exists()) {
+      callback({ id: snap.id, ...snap.data() } as DailyPracticeSession);
+    } else {
+      callback(null);
+    }
+  }, (err) => {
+    console.warn("Error subscribing to daily practice:", err);
+    callback(null);
+  });
+}
+
+// ==========================================
+// 13. WRONG QUESTIONS SERVICE (PRIVATE REPOSITORY)
+// ==========================================
+
+/**
+ * Save or increment wrong questions for a user in /wrongQuestions/{userId}/questions/{questionId}
+ */
+export async function recordWrongQuestions(
+  userId: string,
+  wrongQuestions: {
+    question: Question;
+    subject?: string;
+  }[]
+): Promise<void> {
+  if (!userId || wrongQuestions.length === 0) return;
+
+  const now = new Date().toISOString();
+
+  for (const item of wrongQuestions) {
+    const q = item.question;
+    const qDocRef = doc(db, 'wrongQuestions', userId, 'questions', q.id);
+
+    try {
+      const snap = await getDoc(qDocRef);
+      if (snap.exists()) {
+        const prev = snap.data();
+        await updateDoc(qDocRef, {
+          wrongCount: (prev.wrongCount || 1) + 1,
+          lastWrongAt: now,
+          status: 'unmastered' // Re-mark as unmastered if answered wrongly again
+        });
+      } else {
+        await setDoc(qDocRef, {
+          questionId: q.id,
+          userId,
+          questionText: q.text,
+          subject: q.subject || item.subject || 'সাধারণ',
+          options: q.options || [],
+          correctAnswer: q.correctAnswer ?? 0,
+          explanation: q.explanation || '',
+          addedAt: now,
+          lastWrongAt: now,
+          wrongCount: 1,
+          status: 'unmastered'
+        });
+      }
+    } catch (e) {
+      console.warn(`Failed to record wrong question ${q.id} for user ${userId}:`, e);
+    }
+  }
+}
+
+/**
+ * Update wrong question status after practice/exam
+ * If answered correctly: status can become 'mastered'
+ * If answered incorrectly: status remains 'unmastered' and wrongCount can increment
+ */
+export async function updateWrongQuestionPracticeStatus(
+  userId: string,
+  questionId: string,
+  isCorrect: boolean
+): Promise<void> {
+  if (!userId || !questionId) return;
+
+  const qDocRef = doc(db, 'wrongQuestions', userId, 'questions', questionId);
+  const now = new Date().toISOString();
+
+  try {
+    const snap = await getDoc(qDocRef);
+    if (snap.exists()) {
+      const prev = snap.data();
+      if (isCorrect) {
+        await updateDoc(qDocRef, {
+          status: 'mastered',
+          lastPracticedAt: now,
+          lastResult: 'correct'
+        });
+      } else {
+        await updateDoc(qDocRef, {
+          status: 'unmastered',
+          wrongCount: (prev.wrongCount || 1) + 1,
+          lastWrongAt: now,
+          lastPracticedAt: now,
+          lastResult: 'wrong'
+        });
+      }
+    }
+  } catch (e) {
+    console.warn(`Failed to update wrong question status for ${questionId}:`, e);
+  }
+}
+
+/**
+ * Real-time subscription to a user's wrong questions list
+ */
+export function subscribeToUserWrongQuestions(
+  userId: string,
+  callback: (questions: WrongQuestionRecord[]) => void
+): Unsubscribe {
+  if (!userId) {
+    callback([]);
+    return () => {};
+  }
+
+  const subcollRef = collection(db, 'wrongQuestions', userId, 'questions');
+
+  return onSnapshot(subcollRef, (snap) => {
+    const list: WrongQuestionRecord[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      list.push({
+        questionId: docSnap.id,
+        userId: data.userId || userId,
+        questionText: data.questionText || '',
+        subject: data.subject || '',
+        options: data.options || [],
+        correctAnswer: typeof data.correctAnswer === 'number' ? data.correctAnswer : 0,
+        explanation: data.explanation || '',
+        addedAt: data.addedAt || '',
+        wrongCount: data.wrongCount || 1,
+        lastWrongAt: data.lastWrongAt || '',
+        status: data.status || 'unmastered',
+        lastPracticedAt: data.lastPracticedAt,
+        lastResult: data.lastResult
+      });
+    });
+    // Sort by unmastered first, then by highest wrong count
+    list.sort((a, b) => {
+      if (a.status !== b.status) {
+        return a.status === 'unmastered' ? -1 : 1;
+      }
+      return (b.wrongCount || 1) - (a.wrongCount || 1);
+    });
+    callback(list);
+  }, (err) => {
+    console.warn("Error subscribing to wrong questions:", err);
+    callback([]);
+  });
 }

@@ -14,6 +14,9 @@ import ExamView from './components/ExamView';
 import ResultView from './components/ResultView';
 import ProfileView from './components/ProfileView';
 import AdminView from './components/AdminView';
+import StudyMaterialsView from './components/StudyMaterialsView';
+import DailyPracticeView from './components/DailyPracticeView';
+import WrongQuestionView from './components/WrongQuestionView';
 
 import { Exam, ExamResult, MinistryQuestionBank, UserProfile, UpcomingExamSettings } from './types';
 import { INITIAL_EXAMS, INITIAL_MINISTRY_BANKS } from './data';
@@ -62,6 +65,9 @@ const pathToView = (pathname: string): string => {
   if (p === '/profile') return 'profile';
   if (p === '/admin') return 'admin';
   if (p === '/dashboard') return 'dashboard';
+  if (p === '/daily-practice' || p === '/dailypractice' || p === '/daily') return 'daily-practice';
+  if (p === '/wrong-questions' || p === '/wrong-question' || p === '/wrongquestions') return 'wrong-questions';
+  if (p === '/study-materials' || p === '/study-material' || p === '/materials' || p === '/studymaterials') return 'study-materials';
   return 'home';
 };
 
@@ -81,6 +87,12 @@ const viewToPath = (view: string): string => {
       return '/admin';
     case 'dashboard':
       return '/dashboard';
+    case 'daily-practice':
+      return '/daily-practice';
+    case 'wrong-questions':
+      return '/wrong-questions';
+    case 'study-materials':
+      return '/study-materials';
     case 'home':
     default:
       return '/';
@@ -409,25 +421,6 @@ export default function App() {
     return () => unsubscribeResults();
   }, []);
 
-  // Live listener for active logged-in user profile in Firestore
-  useEffect(() => {
-    if (!user?.id) return;
-    const userDocRef = doc(db, 'users', user.id);
-    const unsubscribe = onSnapshot(userDocRef, (snap) => {
-      if (snap.exists()) {
-        const liveData = snap.data() as UserProfile;
-        if (liveData && typeof liveData.isPremium === 'boolean' && liveData.isPremium !== user.isPremium) {
-          const updated = { ...user, ...liveData };
-          setUser(updated);
-          localStorage.setItem('active_user_session', JSON.stringify(updated));
-        }
-      }
-    }, (err) => {
-      console.warn("User profile live snapshot error:", err);
-    });
-    return () => unsubscribe();
-  }, [user?.id, user?.isPremium]);
-
   // ZiniPay Payment Return Redirect Listener
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -479,12 +472,41 @@ export default function App() {
     return () => unsubscribeUpcoming();
   }, []);
 
-  // 2.6 Automatically transition upcoming exams to 'live' ONLY when an explicit scheduled start time (with hours and minutes) has arrived
+  // Helper to parse date strings safely
+  const parseExamDate = (dateStr?: string): Date | null => {
+    if (!dateStr) return null;
+    const direct = new Date(dateStr);
+    if (!isNaN(direct.getTime())) return direct;
+
+    // Convert Bangla numerals if present
+    const bnDigits: Record<string, string> = {
+      '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+      '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+    };
+    const engStr = dateStr.replace(/[০-৯]/g, m => bnDigits[m] || m);
+    const fallback = new Date(engStr);
+    if (!isNaN(fallback.getTime())) return fallback;
+
+    return null;
+  };
+
+  // Keep a ref to the latest exams for periodic background checks without causing infinite effect loops
+  const examsRef = React.useRef(exams);
   useEffect(() => {
-    const checkAndTransitionExamsToLive = async () => {
-      for (const exam of exams) {
+    examsRef.current = exams;
+  }, [exams]);
+
+  // Periodic check (every 30 seconds):
+  // 1. Auto-transition upcoming exams to 'live' ONLY when an explicit scheduled live time (with hours & minutes) has arrived.
+  // 2. Auto-transition live exams to 'archive' when archiveTime has passed.
+  useEffect(() => {
+    const checkScheduledTransitions = async () => {
+      const currentExams = examsRef.current;
+      const now = new Date();
+
+      for (const exam of currentExams) {
+        // 1. If upcoming, check if explicit scheduled time set by admin has arrived (hours and minutes)
         if (exam.status === 'upcoming' && exam.isPublished !== false) {
-          // CRITICAL: Must have an explicit scheduled time (hours and minutes), never bare creation date!
           if (isScheduledLiveTimeReached(exam.startTime, (exam as any).examDateTime)) {
             try {
               await updateExamArchiveStatus(exam.id, 'live');
@@ -493,33 +515,24 @@ export default function App() {
             }
           }
         }
+
+        // 2. If live or scheduled, check if archiveTime has arrived
+        if (exam.status !== 'archive' && exam.archiveTime) {
+          const archDate = parseExamDate(exam.archiveTime);
+          if (archDate && now >= archDate) {
+            try {
+              await updateExamArchiveStatus(exam.id, 'archive');
+            } catch (err) {
+              console.warn(`Error auto-archiving exam ${exam.id}:`, err);
+            }
+          }
+        }
       }
     };
 
-    checkAndTransitionExamsToLive();
-    const intervalTimer = setInterval(checkAndTransitionExamsToLive, 15000);
+    const intervalTimer = setInterval(checkScheduledTransitions, 30000);
     return () => clearInterval(intervalTimer);
-  }, [exams]);
-
-  // One-time repair for exams prematurely marked live (specifically "অফিস সহায়ক পদে পরিক্ষা -বাংলা" or similar upcoming exams with no valid reached schedule)
-  const repairedExamIdsRef = React.useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (exams.length > 0) {
-      exams.forEach(async (exam) => {
-        const title = (exam.title || '').trim();
-        const isTarget = title.includes('অফিস সহায়ক');
-        if (isTarget && exam.status === 'live' && !repairedExamIdsRef.current.has(exam.id)) {
-          repairedExamIdsRef.current.add(exam.id);
-          console.log(`[Auto-Repair] Resetting "${exam.title}" back to upcoming status...`);
-          try {
-            await updateExamToUpcoming(exam.id, exam);
-          } catch (err) {
-            console.warn("Could not repair exam to upcoming:", err);
-          }
-        }
-      });
-    }
-  }, [exams]);
+  }, []);
 
   // Global automatic Firestore -> Google Sheets real-time synchronization
   useEffect(() => {
@@ -650,72 +663,6 @@ export default function App() {
       localStorage.setItem('exam_results_sheet', JSON.stringify(initialResults));
     }
   }, []);
-
-  // Helper to parse date strings safely
-  const parseExamDate = (dateStr?: string): Date | null => {
-    if (!dateStr) return null;
-    const direct = new Date(dateStr);
-    if (!isNaN(direct.getTime())) return direct;
-
-    // Convert Bangla numerals if present
-    const bnDigits: Record<string, string> = {
-      '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
-      '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
-    };
-    const engStr = dateStr.replace(/[০-৯]/g, m => bnDigits[m] || m);
-    const fallback = new Date(engStr);
-    if (!isNaN(fallback.getTime())) return fallback;
-
-    return null;
-  };
-
-  // 3. Auto-transition exams: 'upcoming' -> 'live' when startTime arrives, and 'live'/'upcoming' -> 'archive' when archiveTime passes
-  useEffect(() => {
-    if (exams.length === 0) return;
-
-    const checkExamStatuses = () => {
-      const now = new Date();
-      let hasChanges = false;
-      
-      const updated = exams.map(exam => {
-        let targetStatus = exam.status;
-
-        // 1. Check if archiveTime has passed
-        if (exam.status !== 'archive' && exam.archiveTime) {
-          const archDate = parseExamDate(exam.archiveTime);
-          if (archDate && now >= archDate) {
-            targetStatus = 'archive';
-          }
-        }
-
-        // 2. If not archived, check if upcoming exam's scheduled startTime has arrived or passed
-        if (targetStatus === 'upcoming' && exam.startTime) {
-          const startDate = parseExamDate(exam.startTime);
-          if (startDate && now >= startDate) {
-            targetStatus = 'live';
-          }
-        }
-
-        if (targetStatus !== exam.status) {
-          hasChanges = true;
-          return { ...exam, status: targetStatus as 'live' | 'upcoming' | 'archive' };
-        }
-        return exam;
-      });
-
-      if (hasChanges) {
-        setExams(updated);
-        localStorage.setItem('master_exams', JSON.stringify(updated));
-      }
-    };
-
-    // Run check immediately
-    checkExamStatuses();
-
-    // Check periodically for real-time updates (every 3 seconds)
-    const interval = setInterval(checkExamStatuses, 3000);
-    return () => clearInterval(interval);
-  }, [exams]);
 
   // 4. User update & storage sync
   const handleLoginSuccess = (profile: UserProfile) => {
@@ -874,6 +821,20 @@ export default function App() {
       return;
     }
 
+    // Protected Route: /daily-practice requires authenticated user
+    if (matchedView === 'daily-practice' && !user) {
+      setCurrentView('login');
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Protected Route: /wrong-questions requires authenticated user
+    if (matchedView === 'wrong-questions' && !user) {
+      setCurrentView('login');
+      navigate('/login', { replace: true });
+      return;
+    }
+
     // Protected Route: /admin requires admin privileges
     if (matchedView === 'admin') {
       const isAdmin = user?.role === 'admin' && user?.email?.toLowerCase() === 'medha@admin.com';
@@ -957,6 +918,30 @@ export default function App() {
           />
         ) : (
           <LoginView onLoginSuccess={handleLoginSuccess} setView={setView} />
+        );
+      case 'daily-practice':
+        return user ? (
+          <DailyPracticeView
+            user={user}
+            exams={exams}
+            setView={setView}
+          />
+        ) : (
+          <LoginView onLoginSuccess={handleLoginSuccess} setView={setView} />
+        );
+      case 'wrong-questions':
+        return user ? (
+          <WrongQuestionView
+            user={user}
+            setView={setView}
+            onExamSubmit={handleExamSubmit}
+          />
+        ) : (
+          <LoginView onLoginSuccess={handleLoginSuccess} setView={setView} />
+        );
+      case 'study-materials':
+        return (
+          <StudyMaterialsView user={user} setView={setView} />
         );
       case 'exam':
         return selectedExam ? (

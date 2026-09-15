@@ -866,8 +866,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
           {/* Logo / Header */}
           <div className="flex items-center gap-2 relative z-10 cursor-pointer" onClick={() => setView('home')}>
-            <div className="p-2.5 rounded-xl bg-white text-[#38B262] shadow-md">
-              <MedhaLogo className="h-6 w-6" />
+            <div className="rounded-xl overflow-hidden shadow-md">
+              <MedhaLogo className="h-10 w-10" withBackground />
             </div>
             <span className="font-bold text-xl tracking-wide">মেধা এক্সাম</span>
           </div>

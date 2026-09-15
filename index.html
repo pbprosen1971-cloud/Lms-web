@@ -21,28 +21,6 @@
       };
     </script>
     <script src="https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit" async defer></script>
-    <script>
-      (function() {
-        try {
-          var originalFetch = window.fetch;
-          if (originalFetch) {
-            var _fetchVal = originalFetch;
-            Object.defineProperty(window, 'fetch', {
-              get: function() {
-                return _fetchVal;
-              },
-              set: function(val) {
-                _fetchVal = val;
-              },
-              configurable: true,
-              enumerable: true
-            });
-          }
-        } catch (e) {
-          console.warn('Fetch setter patch error:', e);
-        }
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>

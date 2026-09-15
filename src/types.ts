@@ -247,3 +247,86 @@ export interface ExamQuestionDoc {
   updatedAt?: any;
 }
 
+export type StudyMaterialCategory =
+  | 'Syllabus'
+  | 'Previous Questions'
+  | 'Notes'
+  | 'Suggestion'
+  | 'Job Preparation'
+  | 'Admission Preparation'
+  | 'Other'
+  | string;
+
+export type StudyMaterialAccessType = 'free' | 'premium';
+export type StudyMaterialStatus = 'published' | 'draft' | 'hidden';
+
+export interface StudyMaterial {
+  id: string;
+  title: string;
+  description?: string;
+  category: StudyMaterialCategory;
+  driveUrl: string;
+  driveFileId: string;
+  accessType: StudyMaterialAccessType; // 'free' | 'premium'
+  status: StudyMaterialStatus; // 'published' | 'draft' | 'hidden'
+  displayOrder?: number;
+  thumbnailUrl?: string;
+  createdAt: string;
+  updatedAt?: string;
+  createdBy?: string;
+}
+
+export interface MaterialAccessRecord {
+  id: string;
+  userId: string;
+  materialId: string;
+  materialTitle: string;
+  category?: string;
+  accessType: StudyMaterialAccessType;
+  accessedAt: string;
+  driveUrl?: string;
+  driveFileId?: string;
+}
+
+// ==========================================
+// DAILY PRACTICE TYPES
+// ==========================================
+
+export interface DailyPracticeSession {
+  id: string;
+  userId: string;
+  dateKey: string; // e.g. "2026-09-14"
+  questionIds: string[];
+  questions?: Question[];
+  totalQuestions: number;
+  completed: boolean;
+  score?: number;
+  correctAnswers?: number;
+  wrongAnswers?: number;
+  timeSpentSeconds?: number;
+  answers?: Record<string, number>;
+  createdAt: string;
+  completedAt?: string;
+}
+
+// ==========================================
+// WRONG QUESTION TYPES
+// ==========================================
+
+export interface WrongQuestionRecord {
+  questionId: string;
+  userId: string;
+  questionText: string;
+  subject: string;
+  options: string[];
+  correctAnswer: number;
+  explanation?: string;
+  addedAt: string;
+  wrongCount: number;
+  lastWrongAt: string;
+  status: 'unmastered' | 'mastered';
+  lastPracticedAt?: string;
+  lastResult?: 'correct' | 'wrong';
+}
+
+

@@ -76,6 +76,7 @@ import {
   clearUpcomingExamSettings,
   deleteUpcomingExamFromSiteSettings,
 } from '../services/firestoreService';
+import AdminStudyMaterials from './AdminStudyMaterials';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -129,7 +130,7 @@ export default function AdminView({
   upcomingExamSettings,
   onSaveUpcomingExamSettings,
 }: AdminViewProps) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials'>('analytics');
 
   // Ministry Question Bank Admin Form State
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
@@ -502,7 +503,7 @@ export default function AdminView({
         durationMinutes: item.durationMinutes || item.duration || matchExam?.durationMinutes || 30,
         startTime: item.startTime || matchExam?.startTime || '',
         startDate: item.startDate || matchExam?.startDate || '',
-        examDate: item.examDate || matchExam?.dateCreated || '',
+        examDate: (item.examDate && item.examDate !== matchExam?.dateCreated) ? item.examDate : ((matchExam as any)?.examDate && (matchExam as any)?.examDate !== matchExam?.dateCreated ? (matchExam as any)?.examDate : ''),
         isPublished: item.isPublished !== false,
         isPremium: !!item.isPremium || !!matchExam?.isPremium,
         totalQuestions: qCount,
@@ -526,7 +527,7 @@ export default function AdminView({
           durationMinutes: exam.durationMinutes || 30,
           startTime: exam.startTime || '',
           startDate: exam.startDate || '',
-          examDate: (exam as any).examDate || exam.dateCreated || '',
+          examDate: (exam as any).examDate && (exam as any).examDate !== exam.dateCreated ? (exam as any).examDate : '',
           isPublished: exam.isPublished !== false,
           isPremium: !!exam.isPremium,
           totalQuestions: qCount,
@@ -565,8 +566,12 @@ export default function AdminView({
     setSettingDesc(item.description || '');
     setSettingSubject(item.subject || 'BCS');
     setSettingDuration(item.durationMinutes || item.duration || 30);
-    setSettingStartTime(item.startTime || '');
-    setSettingDate(item.examDate || item.startDate || '');
+    const cleanStart = (item.startTime && item.startTime !== item.dateCreated && item.startTime !== 'নির্ধারিত নেই') ? item.startTime : '';
+    const cleanDate = (item.examDate && item.examDate !== item.dateCreated && item.examDate !== 'নির্ধারিত নেই') 
+      ? item.examDate 
+      : ((item.startDate && item.startDate !== item.dateCreated && item.startDate !== 'নির্ধারিত নেই') ? item.startDate : '');
+    setSettingStartTime(cleanStart);
+    setSettingDate(cleanDate);
     setSettingIsPremium(!!item.isPremium);
     setSettingIsPublished(item.isPublished !== false);
     setEditingUpcomingExamId(examId);
@@ -724,12 +729,15 @@ export default function AdminView({
       const existingExam = exams.find(ex => ex.id === targetExamId);
 
       const rawStart = settingStartTime ? settingStartTime.trim() : '';
-      const rawDate = settingDate ? settingDate.trim() : (rawStart ? (rawStart.includes('T') ? rawStart.split('T')[0] : rawStart) : '');
+      const rawDate = rawStart 
+        ? (rawStart.includes('T') ? rawStart.split('T')[0] : rawStart) 
+        : (settingDate && settingDate !== existingExam?.dateCreated ? settingDate.trim() : '');
 
       // 2. Prepare Exam object for the upcoming exams list & question editor
       const syncExam: Exam = {
         id: targetExamId,
         title: settingTitle.trim(),
+        description: settingDesc.trim(),
         subject: settingSubject,
         durationMinutes: Number(settingDuration) || 30,
         totalQuestions: existingExam?.questions?.length || existingExam?.totalQuestions || 0,
@@ -739,7 +747,8 @@ export default function AdminView({
         isPremium: settingIsPremium,
         startTime: rawStart || undefined,
         startDate: rawDate || undefined,
-        dateCreated: rawDate || '',
+        examDate: rawDate || undefined,
+        dateCreated: existingExam?.dateCreated || new Date().toISOString().split('T')[0],
         questions: existingExam?.questions || [],
       };
 
@@ -805,7 +814,8 @@ export default function AdminView({
     setSettingSubject(exam.subject || 'BCS');
     setSettingDuration(exam.durationMinutes || 30);
     setSettingStartTime(exam.startTime || '');
-    setSettingDate(exam.dateCreated || '');
+    const cleanExamDate = (exam as any).examDate && (exam as any).examDate !== exam.dateCreated ? (exam as any).examDate : '';
+    setSettingDate(cleanExamDate);
     setSettingIsPremium(!!exam.isPremium);
     setSettingExamId(exam.id);
     setSettingIsPublished(true);
@@ -817,7 +827,8 @@ export default function AdminView({
       duration: exam.durationMinutes || 30,
       durationMinutes: exam.durationMinutes || 30,
       startTime: exam.startTime || '',
-      examDate: exam.dateCreated || '',
+      startDate: cleanExamDate,
+      examDate: cleanExamDate,
       isPublished: true,
       isPremium: !!exam.isPremium,
       examId: exam.id,
@@ -894,8 +905,9 @@ export default function AdminView({
         isPremium: upcomingIsPremium,
         startTime: rawStart || undefined,
         startDate: rawDate || undefined,
+        examDate: rawDate || undefined,
         archiveTime: upcomingArchiveTime ? upcomingArchiveTime.trim() : undefined,
-        dateCreated: rawDate || '',
+        dateCreated: existingExam?.dateCreated || new Date().toISOString().split('T')[0],
         questions: existingExam?.questions || [],
       };
 
@@ -1048,9 +1060,6 @@ export default function AdminView({
 
     // Instant UI update
     setSelectedUpcomingExamForQuestions(updatedExam);
-    if (onUpdateExam) {
-      onUpdateExam(updatedExam);
-    }
 
     // Reset question form
     setNewQuestText('');
@@ -1089,9 +1098,6 @@ export default function AdminView({
 
     // Update component state immediately for instant, responsive UI feedback
     setSelectedUpcomingExamForQuestions(updatedExam);
-    if (onUpdateExam) {
-      onUpdateExam(updatedExam);
-    }
 
     try {
       // 1. Delete from /Exam/{examId}/questions/{questionId} and /questions collections
@@ -1526,6 +1532,17 @@ export default function AdminView({
             }`}
           >
             <Trophy className="h-4.5 w-4.5" /> রেফারেল লিডারবোর্ড
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('study_materials'); setSearchQuery(''); }}
+            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+              activeTab === 'study_materials'
+                ? 'bg-[#38B262] text-white shadow-md shadow-[#38B262]/25'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
+            }`}
+          >
+            <BookOpen className="h-4.5 w-4.5" /> 📚 স্টাডি ম্যাটেরিয়াল (PDF)
           </button>
 
           <button
@@ -2875,8 +2892,10 @@ export default function AdminView({
                                         status: 'upcoming',
                                         isPublished: item.isPublished !== false,
                                         isPremium: !!item.isPremium,
-                                        startTime: item.startTime || undefined,
-                                        dateCreated: item.examDate || new Date().toISOString().split('T')[0],
+                                        startTime: (item.startTime && item.startTime !== (item as any).dateCreated && item.startTime !== 'নির্ধারিত নেই') ? item.startTime : undefined,
+                                        startDate: (item.startDate && item.startDate !== (item as any).dateCreated && item.startDate !== 'নির্ধারিত নেই') ? item.startDate : undefined,
+                                        examDate: (item.examDate && item.examDate !== (item as any).dateCreated && item.examDate !== 'নির্ধারিত নেই') ? item.examDate : undefined,
+                                        dateCreated: (item as any).dateCreated || new Date().toISOString().split('T')[0],
                                         questions: item.questions || [],
                                       };
                                       setSelectedUpcomingExamForQuestions(targetExam);
@@ -3264,6 +3283,11 @@ export default function AdminView({
           {/* TAB 9: REFERRAL LEADERBOARD */}
           {activeTab === 'referral_leaderboard' && (
             <AdminReferralLeaderboard students={students} />
+          )}
+
+          {/* TAB 10: STUDY MATERIALS & PDF RESOURCES */}
+          {activeTab === 'study_materials' && (
+            <AdminStudyMaterials currentUser={currentUser} />
           )}
 
         </div>

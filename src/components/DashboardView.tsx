@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Sparkles,
   Flame,
@@ -18,10 +18,15 @@ import {
   ChevronRight,
   User,
   ExternalLink,
+  BookOpen,
+  XCircle,
+  RotateCcw,
+  Check
 } from 'lucide-react';
-import { Exam, ExamResult, UserProfile } from '../types';
+import { Exam, ExamResult, UserProfile, DailyPracticeSession, WrongQuestionRecord } from '../types';
 import { formatSafeDisplay } from '../lib/dateUtils';
 import ActivityHeatmap from './ActivityHeatmap';
+import { subscribeToTodayDailyPractice, subscribeToUserWrongQuestions } from '../services/firestoreService';
 
 interface DashboardViewProps {
   user: UserProfile;
@@ -69,6 +74,27 @@ export default function DashboardView({
   }, [results, user.id, user.email]);
 
   const [heatmapStreak, setHeatmapStreak] = useState<number | null>(null);
+  const [dailyPracticeSession, setDailyPracticeSession] = useState<DailyPracticeSession | null>(null);
+  const [wrongQuestionsList, setWrongQuestionsList] = useState<WrongQuestionRecord[]>([]);
+
+  // Real-time subscriptions for Daily Practice and Wrong Questions
+  useEffect(() => {
+    const uid = user.id || user.uid;
+    if (!uid) return;
+
+    const unsubDaily = subscribeToTodayDailyPractice(uid, (session) => {
+      setDailyPracticeSession(session);
+    });
+
+    const unsubWrong = subscribeToUserWrongQuestions(uid, (records) => {
+      setWrongQuestionsList(records);
+    });
+
+    return () => {
+      unsubDaily();
+      unsubWrong();
+    };
+  }, [user.id, user.uid]);
 
   // Statistics calculation
   const stats = useMemo(() => {
@@ -298,7 +324,177 @@ export default function DashboardView({
 
       </div>
 
-      {/* 3. 30-Day Activity Heatmap & Participation Frequency */}
+      {/* 3. Quick Action Grid with consistent glass-card styling & navigation */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {/* Card 1: 📅 Daily Practice */}
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm hover:shadow-md hover:border-emerald-500/40 dark:hover:border-emerald-500/40 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
+          <div className="space-y-3.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Calendar className="h-6 w-6" />
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-300 px-2.5 py-0.5 rounded-full">
+                  ১০ MCQ / দিন
+                </span>
+                {dailyPracticeSession?.completed && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/50">
+                    <Check className="h-3 w-3" /> সম্পন্ন
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-base sm:text-lg text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                দৈনিক অনুশীলন
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                প্রতিদিন নির্বাচিত ১০টি প্রশ্ন সমাধান করুন এবং মেধা যাচাইয়ের ধারাবাহিকতা রক্ষা করুন।
+              </p>
+            </div>
+
+            {dailyPracticeSession?.completed ? (
+              <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 rounded-xl flex items-center justify-between text-xs">
+                <span className="text-emerald-800 dark:text-emerald-300 font-medium">আজকের স্কোর:</span>
+                <span className="font-extrabold text-emerald-700 dark:text-emerald-400 text-sm">
+                  {dailyPracticeSession.score ?? 0} / {dailyPracticeSession.totalQuestions ?? 10}
+                </span>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-50/80 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span>আজকের প্র্যাকটিস বাকি</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">১০টি প্রশ্ন উপলব্ধ</span>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-700/60 mt-4 flex items-center justify-between">
+            <span className="text-[11px] text-slate-400 font-medium">
+              তারিখ: {new Date().toLocaleDateString('bn-BD')}
+            </span>
+            <button
+              onClick={() => setView('daily-practice')}
+              className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-sm ${
+                dailyPracticeSession?.completed
+                  ? 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-white'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white hover:-translate-y-0.5'
+              }`}
+            >
+              <span>{dailyPracticeSession?.completed ? 'রিভিউ দেখুন' : 'অনুশীলন শুরু'}</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Card 2: ❌ Wrong Question Practice */}
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm hover:shadow-md hover:border-rose-500/40 dark:hover:border-rose-500/40 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
+          <div className="space-y-3.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <XCircle className="h-6 w-6" />
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                <span className="text-[10px] font-bold text-rose-700 bg-rose-100 dark:bg-rose-900/50 dark:text-rose-300 px-2.5 py-0.5 rounded-full">
+                  স্মার্ট রিভিশন
+                </span>
+                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-200/50 dark:border-rose-800/50">
+                  {wrongQuestionsList.length} টি ভুল
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-base sm:text-lg text-slate-900 dark:text-white group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                ভুল প্রশ্ন অনুশীলন
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                পরীক্ষায় ভুল হওয়া প্রশ্নের ব্যক্তিগত ব্যাংক। দুর্বলতা চিহ্নিত করে নির্ভুল প্রস্তুতি নিন।
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 rounded-xl flex items-center justify-between">
+                <span className="text-amber-800 dark:text-amber-300">অমীমাংসিত:</span>
+                <span className="font-bold text-amber-700 dark:text-amber-400">
+                  {wrongQuestionsList.filter((q) => q.status === 'unmastered').length}
+                </span>
+              </div>
+              <div className="p-2.5 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl flex items-center justify-between">
+                <span className="text-emerald-800 dark:text-emerald-300">মাস্টার্ড:</span>
+                <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                  {wrongQuestionsList.filter((q) => q.status === 'mastered').length}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-700/60 mt-4 flex items-center justify-between">
+            <span className="text-[11px] text-slate-400 font-medium">
+              ব্যক্তিগত ব্যাংক
+            </span>
+            <button
+              onClick={() => setView('wrong-questions')}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-transform hover:-translate-y-0.5 shadow-sm"
+            >
+              <span>ভুল প্রশ্ন দেখুন</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Card 3: 📊 My Results & Performance */}
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 shadow-sm hover:shadow-md hover:border-blue-500/40 dark:hover:border-blue-500/40 flex flex-col justify-between transition-all duration-200 group relative overflow-hidden">
+          <div className="space-y-3.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Award className="h-6 w-6" />
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-100 dark:bg-blue-900/50 dark:text-blue-300 px-2.5 py-0.5 rounded-full">
+                  পারফরম্যান্স
+                </span>
+                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full border border-blue-200/50 dark:border-blue-800/50">
+                  {userResults.length} টি পরীক্ষা
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-base sm:text-lg text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                আমার ফলাফল
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                আপনার দেওয়া প্রতিটি পরীক্ষার বিস্তারিত ফলাফল, স্কোরশিট ও সমাধান বিশ্লেষণ পর্যালোচনা করুন।
+              </p>
+            </div>
+
+            <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 rounded-xl flex items-center justify-between text-xs">
+              <span className="text-blue-800 dark:text-blue-300 font-medium">গড় অর্জিত স্কোর:</span>
+              <span className="font-extrabold text-blue-700 dark:text-blue-400 text-sm">
+                {stats.avgScore}%
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-700/60 mt-4 flex items-center justify-between">
+            <span className="text-[11px] text-slate-400 font-medium">
+              {userResults.length > 0 ? `সর্বশেষ: ${formatSafeDisplay(userResults[0]?.dateTaken, 'আজ')}` : 'কোনো পরীক্ষা নেই'}
+            </span>
+            <a
+              href="#recent-results-sec"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-transform hover:-translate-y-0.5 shadow-sm"
+            >
+              <span>ফলাফল দেখুন</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 4. 30-Day Activity Heatmap & Participation Frequency */}
       <ActivityHeatmap
         user={user}
         results={userResults}
@@ -308,46 +504,54 @@ export default function DashboardView({
         onStreakCalculated={(s) => setHeatmapStreak(s)}
       />
 
-      {/* 4. Quick Action Buttons Row */}
+      {/* Quick Navigation Glass Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <a
-          href="#live-exams-sec"
-          className="p-4 bg-emerald-500/5 hover:bg-emerald-500/10 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 border border-emerald-500/10 rounded-2xl text-center space-y-1.5 transition-colors"
-        >
-          <div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center mx-auto">
-            <Clock className="h-4.5 w-4.5" />
-          </div>
-          <span className="block text-xs font-bold text-emerald-800 dark:text-emerald-300">আজকের লাইভ পরীক্ষা</span>
-        </a>
-
-        <a
-          href="#recent-results-sec"
-          className="p-4 bg-blue-500/5 hover:bg-blue-500/10 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 border border-blue-500/10 rounded-2xl text-center space-y-1.5 transition-colors"
-        >
-          <div className="w-8 h-8 rounded-xl bg-blue-500 text-white flex items-center justify-center mx-auto">
-            <FileText className="h-4.5 w-4.5" />
-          </div>
-          <span className="block text-xs font-bold text-blue-800 dark:text-blue-300">ফলাফল ও বিশ্লেষণ</span>
-        </a>
-
         <button
-          onClick={() => setView('profile')}
-          className="p-4 bg-purple-500/5 hover:bg-purple-500/10 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 border border-purple-500/10 rounded-2xl text-center space-y-1.5 transition-colors"
+          onClick={() => setView('daily-practice')}
+          className="p-4 bg-white/70 dark:bg-slate-800/70 backdrop-blur-md hover:bg-emerald-500/10 dark:hover:bg-emerald-500/15 border border-slate-200/80 dark:border-slate-700/70 hover:border-emerald-500/30 rounded-2xl text-center space-y-1.5 transition-all hover:-translate-y-0.5 shadow-sm group"
         >
-          <div className="w-8 h-8 rounded-xl bg-purple-500 text-white flex items-center justify-center mx-auto">
-            <Award className="h-4.5 w-4.5" />
+          <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform">
+            <Calendar className="h-5 w-5" />
           </div>
-          <span className="block text-xs font-bold text-purple-800 dark:text-purple-300">অর্জিত সার্টিফিকেটস</span>
+          <span className="block text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+            দৈনিক অনুশীলন
+          </span>
         </button>
 
         <button
-          onClick={() => setView('home')}
-          className="p-4 bg-amber-500/5 hover:bg-amber-500/10 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 border border-amber-500/10 rounded-2xl text-center space-y-1.5 transition-colors"
+          onClick={() => setView('wrong-questions')}
+          className="p-4 bg-white/70 dark:bg-slate-800/70 backdrop-blur-md hover:bg-rose-500/10 dark:hover:bg-rose-500/15 border border-slate-200/80 dark:border-slate-700/70 hover:border-rose-500/30 rounded-2xl text-center space-y-1.5 transition-all hover:-translate-y-0.5 shadow-sm group"
         >
-          <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center mx-auto">
-            <Bookmark className="h-4.5 w-4.5" />
+          <div className="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform">
+            <XCircle className="h-5 w-5" />
           </div>
-          <span className="block text-xs font-bold text-amber-800 dark:text-amber-300">নতুন পরীক্ষা খুঁজুন</span>
+          <span className="block text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+            ভুল প্রশ্ন ব্যাংক
+          </span>
+        </button>
+
+        <button
+          onClick={() => setView('study-materials')}
+          className="p-4 bg-white/70 dark:bg-slate-800/70 backdrop-blur-md hover:bg-purple-500/10 dark:hover:bg-purple-500/15 border border-slate-200/80 dark:border-slate-700/70 hover:border-purple-500/30 rounded-2xl text-center space-y-1.5 transition-all hover:-translate-y-0.5 shadow-sm group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform">
+            <BookOpen className="h-5 w-5" />
+          </div>
+          <span className="block text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+            স্টাডি ম্যাটেরিয়াল
+          </span>
+        </button>
+
+        <button
+          onClick={() => setView('profile')}
+          className="p-4 bg-white/70 dark:bg-slate-800/70 backdrop-blur-md hover:bg-amber-500/10 dark:hover:bg-amber-500/15 border border-slate-200/80 dark:border-slate-700/70 hover:border-amber-500/30 rounded-2xl text-center space-y-1.5 transition-all hover:-translate-y-0.5 shadow-sm group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 flex items-center justify-center mx-auto group-hover:scale-105 transition-transform">
+            <Award className="h-5 w-5" />
+          </div>
+          <span className="block text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+            প্রোফাইল ও সার্টিফিকেট
+          </span>
         </button>
       </div>
 

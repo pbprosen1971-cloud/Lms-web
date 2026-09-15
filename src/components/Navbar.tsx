@@ -28,9 +28,10 @@ export default function Navbar({
   const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
-    { label: 'হোম', view: 'home' },
-    ...(user ? [{ label: 'ড্যাশবোর্ড', view: 'dashboard' }] : []),
-    ...(user?.role === 'admin' ? [{ label: 'এডমিন প্যানেল', view: 'admin' }] : []),
+    { label: 'হোম', view: 'home', path: '/', href: '/' },
+    { label: '📚 স্টাডি ম্যাটেরিয়াল', view: 'study-materials', path: '/study-materials', href: '/study-materials' },
+    ...(user ? [{ label: 'ড্যাশবোর্ড', view: 'dashboard', path: '/dashboard', href: '/dashboard' }] : []),
+    ...(user?.role === 'admin' ? [{ label: 'এডমিন প্যানেল', view: 'admin', path: '/admin', href: '/admin' }] : []),
   ];
 
   const handleNavClick = (view: string) => {
@@ -44,8 +45,8 @@ export default function Navbar({
         <div className="flex items-center justify-between h-16">
           {/* Logo Section */}
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
-            <div className="p-2 rounded-xl bg-[#38B262] text-white shadow-md shadow-[#38B262]/20">
-              <MedhaLogo className="h-6 w-6" />
+            <div className="rounded-xl overflow-hidden shadow-md shadow-[#00a854]/25">
+              <MedhaLogo className="h-10 w-10" withBackground />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-lg text-slate-800 dark:text-white leading-tight tracking-tight">
@@ -60,17 +61,21 @@ export default function Navbar({
           {/* Desktop Navigation Links */}
           <div className="hidden md:flex items-center space-x-1 lg:space-x-2">
             {navItems.map((item) => (
-              <button
+              <a
                 key={item.view}
-                onClick={() => handleNavClick(item.view)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                href={item.path}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick(item.view);
+                }}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
                   currentView === item.view
                     ? 'bg-primary/10 text-primary dark:bg-primary/20 font-semibold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
                 }`}
               >
                 {item.label}
-              </button>
+              </a>
             ))}
           </div>
 
@@ -181,17 +186,21 @@ export default function Navbar({
         <div className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           <div className="px-2 pt-2 pb-3 space-y-1">
             {navItems.map((item) => (
-              <button
+              <a
                 key={item.view}
-                onClick={() => handleNavClick(item.view)}
-                className={`block w-full text-left px-3 py-2.5 rounded-xl text-base font-medium ${
+                href={item.path}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick(item.view);
+                }}
+                className={`block w-full text-left px-3 py-2.5 rounded-xl text-base font-medium cursor-pointer ${
                   currentView === item.view
                     ? 'bg-primary/10 text-primary dark:bg-primary/20'
                     : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                 }`}
               >
                 {item.label}
-              </button>
+              </a>
             ))}
 
             {/* Mobile Theme Toggle */}

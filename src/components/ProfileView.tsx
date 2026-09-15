@@ -11,6 +11,7 @@ import { updateProfile } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { formatSafeDisplay, safeTimestampToString } from '../lib/dateUtils';
 import ReferralDashboard from './ReferralDashboard';
+import UserStudyMaterials from './UserStudyMaterials';
 
 interface ProfileViewProps {
   user: UserProfile;
@@ -428,6 +429,9 @@ export default function ProfileView({
  
       {/* 3. Referral & Earn Dashboard */}
       <ReferralDashboard user={user} />
+
+      {/* 3.1. User Study Materials & PDF History */}
+      <UserStudyMaterials user={user} setView={setView} />
 
       {/* 4. Detailed Tabular Exam History Log */}
       <div className="bg-white dark:bg-slate-800 p-6 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-sm space-y-4">

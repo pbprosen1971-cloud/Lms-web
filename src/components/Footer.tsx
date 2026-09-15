@@ -202,8 +202,8 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
           {/* Brand Column */}
           <div className="space-y-4 md:col-span-1">
             <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('home')}>
-              <div className="p-2 rounded-xl bg-[#38B262] text-white shadow-md shadow-[#38B262]/20">
-                <MedhaLogo className="h-5 w-5" />
+              <div className="rounded-xl overflow-hidden shadow-md shadow-[#00a854]/25">
+                <MedhaLogo className="h-9 w-9" withBackground />
               </div>
               <span className="font-bold text-lg text-white">মেধা এক্সাম</span>
             </div>
@@ -263,6 +263,9 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
             <ul className="space-y-2.5 text-sm">
               <li>
                 <button onClick={() => setView('home')} className="hover:text-primary transition-colors duration-200">হোম পেজ</button>
+              </li>
+              <li>
+                <button onClick={() => setView('study-materials')} className="hover:text-primary transition-colors duration-200">📚 স্টাডি ম্যাটেরিয়াল</button>
               </li>
               <li>
                 <button onClick={() => setView('dashboard')} className="hover:text-primary transition-colors duration-200">স্টুডেন্ট ড্যাশবোর্ড</button>

@@ -167,6 +167,92 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["referrerId", "referredUserId", "referrerCode"]
+    },
+    "studyMaterials": {
+      "title": "studyMaterials",
+      "description": "Study materials and PDF resources with Google Drive references",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "driveUrl": { "type": "string" },
+        "driveFileId": { "type": "string" },
+        "accessType": { "type": "string", "enum": ["free", "premium"] },
+        "status": { "type": "string", "enum": ["draft", "published", "hidden"] },
+        "displayOrder": { "type": "number" },
+        "thumbnailUrl": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["title", "category", "driveUrl", "accessType", "status"]
+    },
+    "materialAccess": {
+      "title": "materialAccess",
+      "description": "User access and download history for study materials",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "materialId": { "type": "string" },
+        "materialTitle": { "type": "string" },
+        "category": { "type": "string" },
+        "accessType": { "type": "string", "enum": ["free", "premium"] },
+        "accessedAt": { "type": "string" }
+      },
+      "required": ["userId", "materialId", "accessType"]
+    },
+    "dailyPractice": {
+      "title": "dailyPractice",
+      "description": "Daily 10-MCQ practice sessions and completed results per user per day",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "dateKey": { "type": "string" },
+        "questionIds": { "type": "array", "items": { "type": "string" } },
+        "totalQuestions": { "type": "number" },
+        "completed": { "type": "boolean" },
+        "score": { "type": "number" },
+        "correctAnswers": { "type": "number" },
+        "wrongAnswers": { "type": "number" },
+        "timeSpentSeconds": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "completedAt": { "type": "string" }
+      },
+      "required": ["userId", "dateKey", "questionIds", "totalQuestions"]
+    },
+    "wrongQuestions": {
+      "title": "wrongQuestions",
+      "description": "Unique questions answered incorrectly by a user across exams",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "questionId": { "type": "string" },
+        "questionText": { "type": "string" },
+        "subject": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctAnswer": { "type": "number" },
+        "explanation": { "type": "string" },
+        "wrongCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["unmastered", "mastered"] },
+        "addedAt": { "type": "string" },
+        "lastWrongAt": { "type": "string" }
+      },
+      "required": ["userId", "questionId", "status", "wrongCount"]
+    }
+  },
+  "firestore": {
+    "/dailyPractice/{practiceId}": {
+      "schema": "dailyPractice",
+      "description": "Daily 10-MCQ practice sessions and completed results scoped to each user per day"
+    },
+    "/wrongQuestions/{userId}": {
+      "schema": "wrongQuestions",
+      "description": "User wrong question container document scoped to authenticated user ID"
+    },
+    "/wrongQuestions/{userId}/questions/{questionId}": {
+      "schema": "wrongQuestions",
+      "description": "User specific wrong questions collection scoped to request.auth.uid"
     }
   }
 }
