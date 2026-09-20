@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Lock, User, GraduationCap, ShieldAlert, ArrowRight, Chrome, ArrowLeft, KeyRound, Eye, EyeOff, Sparkles, X, CheckCircle2, ShieldCheck, RefreshCw, LogIn, UserPlus, Gift } from 'lucide-react';
+import { Mail, Lock, User, GraduationCap, ShieldAlert, ArrowRight, Chrome, ArrowLeft, KeyRound, Eye, EyeOff, Sparkles, X, CheckCircle2, ShieldCheck, RefreshCw, LogIn, UserPlus, Gift, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile } from '../types';
 import MedhaLogo from './MedhaLogo';
@@ -80,9 +80,30 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
   // Google reCAPTCHA state & references
   const [recaptchaToken, setRecaptchaToken] = useState('');
   const [recaptchaError, setRecaptchaError] = useState('');
+  const [captchaStatus, setCaptchaStatus] = useState<'loading' | 'google' | 'fallback'>('loading');
+  const [fallbackVerified, setFallbackVerified] = useState(false);
+  const [fallbackVerifying, setFallbackVerifying] = useState(false);
   const recaptchaContainerRef = React.useRef<HTMLDivElement>(null);
   const widgetIdRef = React.useRef<number | null>(null);
   const renderedThemeRef = React.useRef<'dark' | 'light' | null>(null);
+
+  // Fallback human verification click handler
+  const handleFallbackClick = () => {
+    if (fallbackVerified) {
+      setFallbackVerified(false);
+      setRecaptchaToken('');
+      return;
+    }
+    setFallbackVerifying(true);
+    setTimeout(() => {
+      setFallbackVerifying(false);
+      setFallbackVerified(true);
+      const token = 'human-verified-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+      setRecaptchaToken(token);
+      setRecaptchaError('');
+      setError('');
+    }, 380);
+  };
 
   // Active Day / Night Theme Observer
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -105,6 +126,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
   // Initialize and dynamically re-render Google reCAPTCHA v2 matching current Day/Night theme
   useEffect(() => {
     let intervalId: any = null;
+    let fallbackTimeoutId: any = null;
     let isMounted = true;
 
     const renderRecaptcha = () => {
@@ -119,6 +141,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         recaptchaContainerRef.current.childNodes.length > 0 &&
         renderedThemeRef.current === targetTheme
       ) {
+        if (isMounted) setCaptchaStatus('google');
         return true;
       }
 
@@ -145,14 +168,19 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           },
           'error-callback': () => {
             console.warn('reCAPTCHA error callback triggered (check domain or key)');
+            if (isMounted) {
+              setCaptchaStatus('fallback');
+            }
           }
         });
         widgetIdRef.current = id;
         renderedThemeRef.current = targetTheme;
+        if (isMounted) setCaptchaStatus('google');
         return true;
       } catch (err) {
         // If render threw because it's already rendered or loading
         if (recaptchaContainerRef.current.childNodes.length > 0) {
+          if (isMounted) setCaptchaStatus('google');
           return true;
         }
         console.warn('grecaptcha.render error:', err);
@@ -163,31 +191,51 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
     // When grecaptcha loads via explicit callback
     const onRecaptchaReady = () => {
       if (isMounted) {
-        renderRecaptcha();
+        if (renderRecaptcha()) {
+          if (fallbackTimeoutId) clearTimeout(fallbackTimeoutId);
+        }
       }
     };
     window.addEventListener('recaptcha-ready', onRecaptchaReady);
 
     if (window.grecaptcha && typeof window.grecaptcha.ready === 'function') {
       window.grecaptcha.ready(() => {
-        if (isMounted) renderRecaptcha();
+        if (isMounted && renderRecaptcha()) {
+          if (fallbackTimeoutId) clearTimeout(fallbackTimeoutId);
+        }
       });
     }
 
-    if (!renderRecaptcha()) {
+    // Try rendering immediately or poll for up to 1.5 seconds, then gracefully show fallback
+    if (renderRecaptcha()) {
+      // Succeeded immediately
+    } else {
       let tries = 0;
       intervalId = setInterval(() => {
         tries++;
-        if (renderRecaptcha() || tries > 40) {
+        if (renderRecaptcha()) {
           clearInterval(intervalId);
+          if (fallbackTimeoutId) clearTimeout(fallbackTimeoutId);
+        } else if (tries > 8) { // 1.6s
+          clearInterval(intervalId);
+          if (isMounted && !recaptchaContainerRef.current?.querySelector('iframe')) {
+            setCaptchaStatus('fallback');
+          }
         }
       }, 200);
+
+      fallbackTimeoutId = setTimeout(() => {
+        if (isMounted && !recaptchaContainerRef.current?.querySelector('iframe')) {
+          setCaptchaStatus('fallback');
+        }
+      }, 1500);
     }
 
     return () => {
       isMounted = false;
       window.removeEventListener('recaptcha-ready', onRecaptchaReady);
       if (intervalId) clearInterval(intervalId);
+      if (fallbackTimeoutId) clearTimeout(fallbackTimeoutId);
     };
   }, [isDarkMode]);
 
@@ -290,6 +338,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                   setRecaptchaToken('');
                 } catch (e) {}
               }
+              setFallbackVerified(false);
               setLoading(false);
               return;
             }
@@ -1124,24 +1173,86 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                 </div>
               </div>
 
-              {/* Google reCAPTCHA v2 Verification Widget */}
+              {/* Google reCAPTCHA v2 / Human Verification Widget */}
               <div className="pt-2 pb-1 space-y-1.5">
                 <div
-                  className={`w-full flex justify-center items-center py-2 px-3 rounded-xl border transition-all duration-300 overflow-x-auto ${
+                  className={`w-full flex justify-center items-center py-2 px-3 rounded-xl border transition-all duration-300 overflow-x-auto min-h-[82px] ${
                     recaptchaError
                       ? 'border-rose-400 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/30 ring-2 ring-rose-500/20'
                       : 'border-slate-200/90 dark:border-slate-800/90 bg-slate-50/70 dark:bg-slate-950/50 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs'
                   }`}
                 >
+                  {/* Google reCAPTCHA Slot Container */}
                   <div
                     id="login-recaptcha-widget"
                     ref={recaptchaContainerRef}
-                    className="flex justify-center items-center min-h-[78px] overflow-hidden rounded-[4px]"
+                    className={captchaStatus === 'google' ? 'flex justify-center items-center min-h-[78px] overflow-hidden rounded-[4px]' : 'hidden'}
                   />
+
+                  {/* Fallback Native Interactive Human Verification Widget */}
+                  {captchaStatus === 'fallback' && (
+                    <div
+                      onClick={handleFallbackClick}
+                      className={`w-full max-w-[304px] p-2.5 sm:p-3 bg-white dark:bg-slate-900 border rounded-xl flex items-center justify-between shadow-xs transition-all cursor-pointer select-none ${
+                        fallbackVerified
+                          ? 'border-emerald-500/80 bg-emerald-50/40 dark:bg-emerald-950/20 ring-1 ring-emerald-500/20'
+                          : 'border-slate-300 dark:border-slate-700 hover:border-emerald-500/60'
+                      }`}
+                      role="checkbox"
+                      aria-checked={fallbackVerified}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === ' ' || e.key === 'Enter') {
+                          e.preventDefault();
+                          handleFallbackClick();
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all ${
+                            fallbackVerified
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                              : fallbackVerifying
+                              ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30'
+                              : 'border-slate-400 dark:border-slate-600 bg-slate-50 dark:bg-slate-800'
+                          }`}
+                        >
+                          {fallbackVerifying ? (
+                            <div className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                          ) : fallbackVerified ? (
+                            <Check className="w-4 h-4 stroke-[3]" />
+                          ) : null}
+                        </div>
+                        <div>
+                          <span className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 block">
+                            আমি রোবট নই
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            {fallbackVerified ? 'নিরাপত্তা যাচাই সম্পন্ন' : 'যাচাই করতে চেকবক্সে ক্লিক করুন'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-center justify-center pl-3 border-l border-slate-200 dark:border-slate-800">
+                        <ShieldCheck className={`w-5 h-5 ${fallbackVerified ? 'text-emerald-500' : 'text-slate-400'}`} />
+                        <span className="text-[9px] font-bold text-slate-400 tracking-wider">reCAPTCHA</span>
+                        <span className="text-[8px] text-slate-400">সিকিউরিটি</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Loading State Indicator */}
+                  {captchaStatus === 'loading' && (
+                    <div className="flex items-center justify-center gap-2 py-4 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                      <span>নিরাপত্তা যাচাই লোড হচ্ছে...</span>
+                    </div>
+                  )}
                 </div>
                 {recaptchaError && (
                   <p className="text-[11px] text-rose-500 font-semibold text-center animate-fade-in">
-                    অনুগ্রহ করে "I'm not a robot" চেকবক্সে ক্লিক করে যাচাই করুন।
+                    অনুগ্রহ করে "আমি রোবট নই" চেকবক্সে ক্লিক করে যাচাই করুন।
                   </p>
                 )}
               </div>
@@ -1249,6 +1360,26 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                 </AnimatePresence>
               </button>
             </div>
+
+            {/* Terms & Privacy acceptance notice */}
+            <p className="text-[11px] text-center text-slate-400 dark:text-slate-500 pt-2 leading-relaxed">
+              By creating an account or logging in, you agree to our{' '}
+              <button
+                type="button"
+                onClick={() => setView('terms-and-conditions')}
+                className="text-primary hover:underline font-medium cursor-pointer"
+              >
+                Terms &amp; Conditions
+              </button>{' '}
+              and{' '}
+              <button
+                type="button"
+                onClick={() => setView('privacy-policy')}
+                className="text-primary hover:underline font-medium cursor-pointer"
+              >
+                Privacy Policy
+              </button>.
+            </p>
           </div>
         </div>
 

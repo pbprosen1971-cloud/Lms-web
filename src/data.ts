@@ -385,6 +385,7 @@ export const INITIAL_EXAMS: Exam[] = [
     totalMarks: 5,
     status: 'upcoming',
     dateCreated: '2026-07-19',
+    startTime: '2026-09-22T10:00:00',
     isPremium: true,
     questions: [
       {
@@ -438,6 +439,7 @@ export const INITIAL_EXAMS: Exam[] = [
     totalMarks: 5,
     status: 'upcoming',
     dateCreated: '2026-07-20',
+    startTime: '2026-09-21T18:30:00',
     questions: [
       {
         id: 'q-6-1',

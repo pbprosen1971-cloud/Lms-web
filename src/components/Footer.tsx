@@ -235,16 +235,6 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
                 <Facebook className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
               </a>
               <a
-                href="https://www.facebook.com/prosenjitbiswas47"
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Founder Facebook"
-                aria-label="Founder Profile"
-                className="p-2.5 bg-slate-800/80 text-slate-300 hover:bg-[#1877F2] hover:text-white hover:scale-110 hover:shadow-lg hover:shadow-[#1877F2]/30 active:scale-95 rounded-xl transition-all duration-300 transform border border-slate-700/50 hover:border-transparent flex items-center justify-center group"
-              >
-                <Facebook className="h-4 w-4 transition-transform duration-300 group-hover:scale-110 text-emerald-400 group-hover:text-white" />
-              </a>
-              <a
                 href="https://www.youtube.com/channel/UCeEFIEQjlsNHJTz4ZY-_WvA"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -271,10 +261,22 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
                 <button onClick={() => setView('dashboard')} className="hover:text-primary transition-colors duration-200">স্টুডেন্ট ড্যাশবোর্ড</button>
               </li>
               <li>
+                <button onClick={() => setView('referral')} className="hover:text-amber-400 text-amber-400/90 font-medium transition-colors duration-200">🎁 রেফারেল প্রোগ্রাম</button>
+              </li>
+              <li>
                 <button onClick={() => setView('profile')} className="hover:text-primary transition-colors duration-200">প্রোফাইল সেটিংস</button>
               </li>
               <li>
                 <button onClick={() => setView('login')} className="hover:text-primary transition-colors duration-200">লগইন / রেজিস্টার</button>
+              </li>
+              <li>
+                <button onClick={() => setView('privacy-policy')} className="hover:text-primary transition-colors duration-200">🔒 Privacy Policy</button>
+              </li>
+              <li>
+                <button onClick={() => setView('terms-and-conditions')} className="hover:text-primary transition-colors duration-200">📜 Terms &amp; Conditions</button>
+              </li>
+              <li>
+                <button onClick={() => setView('delete-account')} className="hover:text-rose-400 transition-colors duration-200">🗑️ Delete Account</button>
               </li>
             </ul>
           </div>
@@ -336,10 +338,25 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
 
         <div className="border-t border-slate-800 mt-8 pt-6 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-4">
           <p>© ২০২৬ মেধা এক্সাম। সর্বস্বত্ব সংরক্ষিত। <span className="hidden sm:inline">|</span> <span className="text-slate-400">Founder & Developer: <a href="https://www.facebook.com/prosenjitbiswas47" target="_blank" rel="noopener noreferrer" className="hover:text-primary underline">Prosenjit Biswas</a></span></p>
-          <div className="flex space-x-6">
-            <a href="#" className="hover:text-slate-400">গোপনীয়তা নীতি</a>
-            <a href="#" className="hover:text-slate-400">ব্যবহারের শর্তাবলী</a>
-            <a href="#" className="hover:text-slate-400">কুকি পলিসি</a>
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            <button
+              onClick={() => setView('privacy-policy')}
+              className="hover:text-primary transition-colors cursor-pointer text-slate-400"
+            >
+              Privacy Policy
+            </button>
+            <button
+              onClick={() => setView('terms-and-conditions')}
+              className="hover:text-primary transition-colors cursor-pointer text-slate-400"
+            >
+              Terms &amp; Conditions
+            </button>
+            <button
+              onClick={() => setView('delete-account')}
+              className="hover:text-rose-400 transition-colors cursor-pointer text-slate-400"
+            >
+              Delete Account
+            </button>
           </div>
         </div>
       </div>

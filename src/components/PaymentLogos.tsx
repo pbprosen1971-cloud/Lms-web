@@ -6,293 +6,208 @@
 import React from 'react';
 
 /**
- * 1. bKash Official Vector Logo
- * Features the authentic 'bKash' typography and official 6-facet origami bird symbol.
+ * Official bKash Logo
+ * Exact vector graphic from bkash-logo-png_seeklogo-273684
+ * Features the official bKash wordmark and origami bird with zero distortion
  */
-export const BkashLogo: React.FC<{ className?: string }> = ({ className = "h-7 w-auto" }) => (
-  <svg
-    viewBox="0 0 160 48"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-    aria-label="bKash Logo"
-  >
-    {/* bKash Wordmark */}
-    <g transform="translate(6, 32)">
-      <text
-        fontFamily="'Century Gothic', 'Segoe UI', Arial, sans-serif"
-        fontSize="28"
-        fontWeight="800"
-        fill="#222222"
-        letterSpacing="-0.8"
-      >
-        b<tspan fill="#222222" fontWeight="700">Kash</tspan>
-      </text>
-      <text
-        x="80"
-        y="-2"
-        fontFamily="'Hind Siliguri', 'Noto Sans Bengali', sans-serif"
-        fontSize="12"
-        fontWeight="700"
-        fill="#E2136E"
-      >
-        বিকাশ
-      </text>
-    </g>
-
-    {/* Official Origami Bird Symbol (6 faceted geometric polygons) */}
-    <g transform="translate(108, 3) scale(0.92)">
-      {/* Front upper wing */}
-      <polygon points="12,14 42,16 24,32 10,24" fill="#E2136E" />
-      {/* Central body */}
-      <polygon points="24,32 42,16 48,25 32,42" fill="#C1105A" />
-      {/* Head / Beak */}
-      <polygon points="42,16 52,19 48,25" fill="#D82A6D" />
-      {/* Lower wing / tail */}
-      <polygon points="32,42 16,45 20,35" fill="#990B47" />
-      <polygon points="20,35 32,42 24,32" fill="#E2136E" />
-      {/* Leading light facet */}
-      <polygon points="2,16 12,14 10,24" fill="#EA3A85" />
-    </g>
-  </svg>
-);
-
-/**
- * 2. Nagad Official Vector Logo
- * Features the signature postal runner swirl and bold Bengali 'নগদ' wordmark.
- */
-export const NagadLogo: React.FC<{ className?: string }> = ({ className = "h-7 w-auto" }) => (
-  <svg
-    viewBox="0 0 165 48"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-    aria-label="Nagad Logo"
-  >
-    <defs>
-      <linearGradient id="nagadBrandGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#F99F1B" />
-        <stop offset="45%" stopColor="#F15A24" />
-        <stop offset="100%" stopColor="#ED1C24" />
-      </linearGradient>
-    </defs>
-
-    {/* Dynamic Gradient Swirl with Postal Runner */}
-    <g transform="translate(4, 4)">
-      <circle cx="20" cy="20" r="19" fill="url(#nagadBrandGradient)" />
-      {/* Radiant yellow swirl highlight */}
-      <path
-        d="M20,4 C29,4 37,12 37,20 C37,25 34,29 30,32 C26,28 23,22 23,16 C23,10 26,6 20,4 Z"
-        fill="#FFD200"
-        opacity="0.9"
-      />
-      {/* White shine accent */}
-      <path
-        d="M5,20 C5,11 12,4 20,4 C16,9 14,15 16,21 C17,26 21,30 20,36 C12,36 5,28 5,20 Z"
-        fill="#FFFFFF"
-        opacity="0.25"
-      />
-      {/* Running Postman Silhouette */}
-      <g transform="translate(11.5, 9) scale(0.62)" fill="#FFFFFF">
-        <circle cx="12" cy="5.5" r="3" />
-        <path d="M11,9.5 L15,17.5 L18,25 L15,25 L12,18 L9,25 L6,25 L10,15.5 L8,11.5 Z" />
-        <path d="M7,11.5 Q4,14.5 6,17.5 Q9,18.5 10,14.5 Z" />
-        <line x1="3" y1="13.5" x2="19" y2="9.5" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" />
-        <rect x="2" y="13.5" width="3" height="3.5" rx="0.8" fill="#FFFFFF" />
-      </g>
-    </g>
-
-    {/* Bengali 'নগদ' Typography and Subtitle */}
-    <g transform="translate(52, 2)">
-      <text
-        x="0"
-        y="27"
-        fontFamily="'Hind Siliguri', 'Kalpurush', 'Noto Sans Bengali', sans-serif"
-        fontSize="29"
-        fontWeight="900"
-        fill="#ED1C24"
-        letterSpacing="0.4"
-      >
-        নগদ
-      </text>
-      <text
-        x="1"
-        y="39"
-        fontFamily="'Hind Siliguri', 'Kalpurush', sans-serif"
-        fontSize="7"
-        fontWeight="700"
-        fill="#404040"
-        letterSpacing="-0.2"
-      >
-        ডাক বিভাগের ডিজিটাল লেনদেন
-      </text>
-    </g>
-  </svg>
-);
-
-/**
- * 3. Rocket (DBBL) Official Vector Logo
- * Features Dutch-Bangla Bank's iconic purple brand style, origami jet plane, and dual English/Bengali typography.
- */
-export const RocketLogo: React.FC<{ className?: string }> = ({ className = "h-7 w-auto" }) => (
-  <svg
-    viewBox="0 0 160 48"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-    aria-label="Rocket DBBL Logo"
-  >
-    {/* DBBL Rocket Flying Paper Jet Symbol */}
-    <g transform="translate(102, 6) scale(0.68)">
-      <path d="M42,2 L2,24 L18,27 L42,2 Z" fill="#FFFFFF" />
-      <path d="M18,27 L22,38 L28,30 L42,2 Z" fill="#E8D5EC" />
-      <path d="M28,30 L42,2 L18,27 Z" fill="#FFFFFF" />
-    </g>
-
-    {/* English 'ROCKET' Tag */}
-    <text
-      x="8"
-      y="15"
-      fontFamily="Arial, sans-serif"
-      fontSize="9.5"
-      fontWeight="900"
-      fill="#FFFFFF"
-      letterSpacing="1.8"
-    >
-      ROCKET
-    </text>
-
-    {/* Bold Bengali 'রকেট' */}
-    <text
-      x="7"
-      y="32"
-      fontFamily="'Hind Siliguri', 'Kalpurush', sans-serif"
-      fontSize="19"
-      fontWeight="900"
-      fill="#FFFFFF"
-      letterSpacing="0.8"
-    >
-      রকেট
-    </text>
-
-    {/* Dutch-Bangla Bank Subtitle */}
-    <text
-      x="7"
-      y="41"
-      fontFamily="'Hind Siliguri', sans-serif"
-      fontSize="6"
-      fontWeight="600"
-      fill="#F2E6F5"
-    >
-      ডাচ-বাংলা ব্যাংক মোবাইল ব্যাংকিং
-    </text>
-  </svg>
-);
-
-/**
- * 4. Upay (UCB Fintech) Official Vector Logo
- * Features the signature smiling two-tone arch and Upay typography.
- */
-export const UpayLogo: React.FC<{ className?: string }> = ({ className = "h-7 w-auto" }) => (
-  <svg
-    viewBox="0 0 150 48"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-    aria-label="Upay Logo"
-  >
-    {/* Smiling 'U' Brand Mark */}
-    <g transform="translate(6, 4)">
-      {/* Left Yellow Dot */}
-      <circle cx="10" cy="8" r="4.8" fill="#FFC800" />
-      {/* Right Blue Dot */}
-      <circle cx="28" cy="8" r="4.8" fill="#005BAA" />
-
-      {/* Smiling U Curve (Yellow Left / Blue Right) */}
-      <path
-        d="M5,16 C5,26 11,33.5 19,33.5 C27,33.5 33,26 33,16 L25,16 C25,22 22.5,26.5 19,26.5 C15.5,26.5 13,22 13,16 Z"
-        fill="#005BAA"
-      />
-      <path
-        d="M5,16 C5,26 11,33.5 19,33.5 L19,26.5 C15.5,26.5 13,22 13,16 Z"
-        fill="#FFC800"
-      />
-    </g>
-
-    {/* Upay Typography (Bengali & English) */}
-    <g transform="translate(50, 4)">
-      <text
-        x="0"
-        y="25"
-        fontFamily="'Hind Siliguri', 'Kalpurush', sans-serif"
-        fontSize="24"
-        fontWeight="900"
-        fill="#005BAA"
-        letterSpacing="0.4"
-      >
-        উপায়
-      </text>
-      <text
-        x="2"
-        y="38"
-        fontFamily="'Century Gothic', Arial, sans-serif"
-        fontSize="11"
-        fontWeight="800"
-        fill="#4B5563"
-        letterSpacing="0.8"
-      >
-        upay
-      </text>
-    </g>
-  </svg>
-);
-
-/**
- * PaymentPartnersBar Component
- * Renders all 4 official payment partners horizontally aligned with consistent dimensions,
- * brand color borders, hover animations, and tailored background color schemes.
- */
-export const PaymentPartnersBar: React.FC = () => {
+export function BKashLogo({ className = 'h-7 w-auto' }: { className?: string }) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-      {/* 1. bKash Partner Card */}
-      <div
-        id="payment-partner-bkash"
-        className="w-32 sm:w-36 h-12 sm:h-13 bg-white rounded-xl shadow-sm border border-[#E2136E]/20 hover:border-[#E2136E] hover:shadow-md hover:shadow-[#E2136E]/20 hover:scale-105 active:scale-95 transition-all duration-200 cursor-default select-none px-3 py-1.5 flex items-center justify-center group"
-        title="bKash (বিকাশ) - অনুমোদিত পেমেন্ট পার্টনার"
-      >
-        <BkashLogo className="h-7 sm:h-8 w-full max-w-[120px] object-contain transition-transform duration-200 group-hover:scale-105" />
-      </div>
+    <img
+      src="/images/bkash-logo.png"
+      alt="bKash"
+      className={`${className} object-contain`}
+      draggable={false}
+    />
+  );
+}
 
-      {/* 2. Nagad Partner Card */}
-      <div
-        id="payment-partner-nagad"
-        className="w-32 sm:w-36 h-12 sm:h-13 bg-white rounded-xl shadow-sm border border-[#ED1C24]/20 hover:border-[#ED1C24] hover:shadow-md hover:shadow-[#ED1C24]/20 hover:scale-105 active:scale-95 transition-all duration-200 cursor-default select-none px-3 py-1.5 flex items-center justify-center group"
-        title="Nagad (নগদ) - ডাক বিভাগের ডিজিটাল লেনদেন"
-      >
-        <NagadLogo className="h-7 sm:h-8 w-full max-w-[120px] object-contain transition-transform duration-200 group-hover:scale-105" />
-      </div>
+/**
+ * Official Authentic Nagad Logo
+ * Features the official circular swirl with runner silhouette, Bengali typography 'নগদ',
+ * and the postal division subtitle 'ডাক বিভাগের ডিজিটাল লেনদেন'
+ */
+export function NagadLogo({ className = 'h-7 w-auto' }: { className?: string }) {
+  return (
+    <img
+      src="/images/nagad-logo.png"
+      alt="নগদ"
+      className={`${className} object-contain`}
+      draggable={false}
+    />
+  );
+}
 
-      {/* 3. Rocket Partner Card (DBBL Purple Brand Theme) */}
-      <div
-        id="payment-partner-rocket"
-        className="w-32 sm:w-36 h-12 sm:h-13 bg-gradient-to-r from-[#8C3494] to-[#711E79] rounded-xl shadow-sm border border-[#A845B2]/40 hover:border-[#C060CB] hover:shadow-md hover:shadow-[#8C3494]/40 hover:scale-105 active:scale-95 transition-all duration-200 cursor-default select-none px-2.5 py-1 flex items-center justify-center group"
-        title="Rocket (রকেট) - ডাচ-বাংলা ব্যাংক মোবাইল ব্যাংকিং"
-      >
-        <RocketLogo className="h-8 sm:h-8.5 w-full max-w-[125px] object-contain transition-transform duration-200 group-hover:scale-105" />
-      </div>
+/**
+ * Authentic Rocket Logo
+ * Features the official purple box, origami paper rocket in white,
+ * ROCKET in bold uppercase, 'রকেট' in Bengali, and 'ডাচ্-বাংলা ব্যাংক মোবাইল ব্যাংকিং'
+ */
+export function RocketLogo({ className = 'h-7 w-auto' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 160 56"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-label="Rocket"
+    >
+      {/* Official Rocket Purple Background Container */}
+      <rect width="160" height="56" rx="8" fill="#8C3494" />
 
-      {/* 4. Upay Partner Card */}
-      <div
-        id="payment-partner-upay"
-        className="w-32 sm:w-36 h-12 sm:h-13 bg-white rounded-xl shadow-sm border border-[#005BAA]/20 hover:border-[#005BAA] hover:shadow-md hover:shadow-[#005BAA]/20 hover:scale-105 active:scale-95 transition-all duration-200 cursor-default select-none px-3 py-1.5 flex items-center justify-center group"
-        title="Upay (উপায়) - ইউসিবি ফিনটেক কোম্পানি"
+      {/* White Paper Rocket / Jet Symbol */}
+      <g transform="translate(90, 8) scale(0.65)">
+        <polygon points="2,22 48,2 26,44" fill="#FFFFFF" />
+        <polygon points="26,44 48,2 32,24" fill="#EDE0EE" />
+        <polygon points="16,28 26,44 23,24" fill="#D7B5DC" />
+      </g>
+
+      {/* English 'ROCKET' */}
+      <text
+        x="14"
+        y="21"
+        fill="#FFFFFF"
+        fontFamily="sans-serif"
+        fontWeight="900"
+        fontSize="12"
+        letterSpacing="1.2px"
       >
-        <UpayLogo className="h-7 sm:h-8 w-full max-w-[115px] object-contain transition-transform duration-200 group-hover:scale-105" />
+        ROCKET
+      </text>
+
+      {/* Bengali 'রকেট' */}
+      <text
+        x="12"
+        y="41"
+        fill="#FFFFFF"
+        fontFamily="system-ui, -apple-system, sans-serif"
+        fontWeight="900"
+        fontSize="22"
+        letterSpacing="0.2px"
+      >
+        রকেট
+      </text>
+
+      {/* Small dot under 'র' */}
+      <circle cx="21" cy="45" r="1.5" fill="#FFFFFF" />
+
+      {/* Dutch-Bangla Bank Tagline */}
+      <text
+        x="14"
+        y="50"
+        fill="#F3E5F5"
+        fontFamily="system-ui, -apple-system, sans-serif"
+        fontWeight="500"
+        fontSize="5.2"
+      >
+        ডাচ্-বাংলা ব্যাংক মোবাইল ব্যাংকিং
+      </text>
+    </svg>
+  );
+}
+
+/**
+ * Official Upay (উপায়) Logo
+ * Exact vector graphic from official Upay brand assets with zero distortion
+ * Preserves the authentic smiling U emblem (yellow & blue) and official Bengali typography 'উপায়'
+ */
+export function UpayLogo({ className = 'h-7 w-auto' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 150 208"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`${className} object-contain`}
+      aria-label="Upay (উপায়)"
+    >
+      <g>
+        {/* Bengali typography paths for 'উপায়' */}
+        <path
+          d="M 106.234375 157.117188 C 106.234375 154.875 105.1875 153.753906 103.097656 153.753906 C 96.019531 153.753906 88.941406 153.753906 81.863281 153.753906 C 80.496094 153.753906 79.449219 154.636719 79.371094 156 C 79.289062 158.484375 79.289062 161.050781 79.289062 163.535156 C 79.289062 163.929688 79.289062 164.332031 79.289062 164.734375 C 80.09375 164.734375 80.898438 164.652344 81.703125 164.734375 C 84.757812 164.972656 86.847656 166.496094 88.054688 169.300781 C 89.261719 172.023438 89.261719 174.910156 89.261719 177.796875 C 89.261719 181.800781 89.339844 185.804688 89.261719 189.808594 C 89.261719 194.054688 87.089844 196.859375 82.988281 197.820312 C 77.277344 199.105469 71.566406 198.863281 65.855469 198.300781 C 64.488281 198.140625 63.683594 197.421875 63.683594 196.058594 C 63.683594 191.089844 63.683594 186.121094 63.683594 181.15625 C 63.683594 180.753906 63.683594 180.355469 63.683594 179.953125 C 62.71875 179.953125 61.914062 180.035156 61.109375 179.953125 C 59.179688 179.792969 58.132812 178.671875 58.054688 176.746094 C 58.054688 173.863281 58.054688 170.976562 58.054688 168.089844 C 58.054688 165.765625 58.054688 163.441406 58.054688 161.117188 C 58.054688 156.46875 61.351562 153.835938 65.9375 153.753906 C 70.039062 153.675781 74.140625 153.753906 78.484375 153.753906 C 78.484375 152.070312 78.484375 150.546875 78.484375 149.027344 C 78.484375 145.421875 77.039062 143.976562 73.417969 143.976562 C 70.363281 143.976562 67.304688 143.976562 64.089844 143.976562 C 64.089844 142.292969 64.089844 140.769531 64.089844 139.167969 C 68.914062 139.167969 73.738281 139.167969 78.566406 139.167969 C 85.082031 139.246094 88.863281 143.011719 88.863281 149.425781 C 88.863281 150.871094 88.863281 152.3125 88.863281 153.753906 C 94.65625 153.753906 100.367188 153.753906 106.234375 153.753906 Z M 78.804688 188.765625 C 78.804688 185.082031 78.804688 181.476562 78.804688 177.796875 C 78.804688 175.792969 78.164062 174.671875 76.074219 174.1875 C 75.109375 173.953125 73.984375 174.113281 73.019531 174.433594 C 70.847656 175.074219 69.476562 176.597656 69.316406 178.84375 C 69.15625 181.089844 69.15625 183.332031 69.15625 185.574219 C 69.15625 187.820312 69.15625 190.0625 69.234375 192.308594 C 69.316406 193.75 70.121094 194.226562 71.488281 194.070312 C 73.578125 193.828125 75.667969 193.347656 77.597656 192.386719 C 78.484375 191.90625 78.804688 190.707031 78.804688 189.65625 Z"
+          fill="#0B0B0B"
+        />
+        <path
+          d="M 38.085938 170.339844 C 36.398438 170.578125 34.789062 171.140625 33.097656 171.460938 C 26.421875 172.984375 25.777344 172.421875 26.097656 165.53125 C 26.179688 164.167969 26.582031 163.929688 27.789062 163.929688 C 30.847656 164.007812 33.902344 163.929688 36.960938 163.929688 C 42.753906 163.929688 42.914062 163.769531 42.835938 157.839844 C 42.835938 157.601562 42.835938 157.28125 42.835938 157.039062 C 42.753906 154.875 41.789062 153.675781 39.453125 153.753906 C 38.085938 153.753906 36.800781 153.753906 35.191406 153.753906 C 37.042969 146.0625 34.707031 141.335938 28.351562 139.894531 C 26.261719 139.414062 24.089844 139.652344 21.914062 139.972656 C 16.605469 140.855469 11.296875 142.21875 6.386719 138.53125 C 4.777344 137.328125 3.332031 138.292969 2.527344 140.054688 C 0.191406 145.179688 2.445312 149.027344 8.078125 149.988281 C 12.984375 150.789062 17.730469 150.070312 22.558594 149.1875 C 24.652344 148.785156 26.664062 149.988281 26.582031 151.671875 C 26.5 153.835938 24.8125 153.835938 23.285156 153.835938 C 17.972656 153.835938 12.664062 153.835938 7.355469 153.835938 C 0.433594 153.835938 0.515625 153.835938 0.59375 160.804688 C 0.59375 163.128906 1.480469 164.089844 3.8125 164.007812 C 7.355469 163.929688 10.8125 164.089844 14.351562 163.929688 C 15.960938 163.847656 16.527344 164.25 16.445312 165.933594 C 16.285156 169.296875 16.363281 172.742188 16.445312 176.1875 C 16.445312 179.953125 17.8125 181.316406 21.433594 181.875 C 24.570312 182.355469 27.46875 181.476562 30.523438 181.15625 C 31.25 181.074219 32.054688 180.355469 32.777344 181.234375 C 33.5 182.117188 32.777344 182.996094 32.375 183.71875 C 30.285156 187.484375 26.582031 188.207031 22.800781 188.605469 C 16.125 189.328125 12.339844 186.523438 10.972656 180.195312 C 10.410156 177.628906 10.25 175.066406 10.25 172.421875 C 10.25 166.894531 10.25 166.894531 4.699219 166.894531 C 4.539062 166.894531 4.296875 166.894531 4.136719 166.894531 C 2.042969 166.652344 0.996094 167.695312 0.675781 169.699219 C -0.210938 174.425781 -0.289062 179.152344 0.835938 183.800781 C 1.640625 187.402344 3.089844 190.769531 5.746094 193.492188 C 10.570312 198.460938 16.765625 199.421875 23.203125 198.941406 C 40.179688 197.660156 44.605469 187.003906 42.59375 173.382812 C 42.191406 171.058594 40.5 169.9375 38.085938 170.339844 Z"
+          fill="#0B0B0B"
+        />
+        <path
+          d="M 150 157.117188 C 150 154.875 149.035156 153.753906 146.78125 153.753906 C 135.355469 153.753906 123.851562 153.753906 112.425781 153.753906 C 110.496094 153.753906 109.371094 154.636719 109.449219 156.71875 C 109.449219 159.523438 109.371094 162.246094 109.449219 165.050781 C 109.613281 170.660156 110.65625 171.78125 116.207031 172.664062 C 117.738281 172.902344 119.910156 172.824219 120.152344 174.824219 C 120.394531 176.910156 118.21875 177.230469 116.851562 177.710938 C 107.679688 180.753906 109.773438 181.875 109.371094 188.765625 C 109.371094 189.007812 109.371094 189.328125 109.371094 189.566406 C 109.691406 192.210938 109.933594 195.257812 112.910156 195.898438 C 116.046875 196.617188 119.589844 197.578125 122.484375 194.695312 C 126.347656 190.929688 132.21875 191.410156 135.4375 195.738281 C 135.839844 196.21875 136.082031 197.019531 136.5625 197.257812 C 139.703125 198.460938 142.839844 199.582031 146.136719 197.980469 C 149.195312 196.457031 149.917969 193.8125 149.917969 190.847656 C 149.917969 185.402344 149.917969 179.871094 149.917969 174.425781 C 150 168.65625 150 162.886719 150 157.117188 Z M 137.53125 187.082031 C 133.265625 186.121094 129 186.042969 124.65625 186.042969 C 123.691406 186.042969 122.402344 186.28125 122.164062 185.082031 C 121.839844 183.800781 123.046875 183.238281 124.011719 182.835938 C 125.703125 182.117188 127.390625 181.234375 128.839844 180.035156 C 133.507812 176.105469 132.542969 170.179688 126.828125 167.933594 C 125.460938 167.453125 124.09375 166.972656 122.886719 166.414062 C 122.164062 166.09375 121.519531 165.371094 121.921875 164.410156 C 122.242188 163.609375 123.046875 164.007812 123.609375 164.007812 C 125.78125 163.929688 127.957031 164.007812 130.046875 164.007812 C 131.898438 164.007812 133.828125 164.089844 135.679688 164.007812 C 138.011719 163.847656 138.976562 164.972656 139.058594 167.132812 C 139.136719 170.660156 139.21875 174.105469 139.300781 177.628906 C 139.378906 180.113281 139.539062 182.597656 139.703125 185.082031 C 139.78125 186.683594 139.21875 187.484375 137.53125 187.082031 Z"
+          fill="#0B0B0B"
+        />
+        <path
+          d="M 128.679688 193.894531 C 124.65625 193.894531 121.679688 196.859375 121.679688 200.785156 C 121.679688 204.710938 124.65625 207.675781 128.679688 207.675781 C 132.703125 207.675781 135.519531 204.710938 135.519531 200.625 C 135.4375 196.777344 132.542969 193.894531 128.679688 193.894531 Z"
+          fill="#0B0B0B"
+        />
+
+        {/* Official Upay Smiley / Smile Graphic */}
+        {/* Left Yellow Dot */}
+        <path
+          d="M 44.441406 19.875 C 44.441406 9.078125 35.652344 0.324219 24.8125 0.324219 C 13.96875 0.324219 5.179688 9.078125 5.179688 19.875 C 5.179688 30.671875 13.96875 39.421875 24.8125 39.421875 C 35.652344 39.421875 44.441406 30.671875 44.441406 19.875 Z"
+          fill="#FACF01"
+        />
+        {/* Right Blue Dot */}
+        <path
+          d="M 144.289062 19.875 C 144.289062 9.078125 135.5 0.324219 124.65625 0.324219 C 113.816406 0.324219 105.027344 9.078125 105.027344 19.875 C 105.027344 30.671875 113.816406 39.421875 124.65625 39.421875 C 135.5 39.421875 144.289062 30.671875 144.289062 19.875 Z"
+          fill="#0D56A3"
+        />
+        {/* Right Blue Smile Arc */}
+        <path
+          d="M 57.878906 114.09375 C 57.316406 119.863281 59.648438 125.152344 63.671875 128.675781 C 66.648438 131.320312 70.671875 132.921875 75.015625 133.003906 C 85.234375 133.164062 95.691406 131.960938 105.589844 128.597656 C 130.851562 120.265625 144.691406 98.710938 144.527344 72.59375 C 144.527344 70.832031 144.527344 67.386719 144.527344 63.859375 C 144.527344 61.296875 143.5625 58.894531 142.035156 57.050781 C 140.105469 54.726562 137.128906 53.285156 133.910156 53.285156 C 128.761719 53.285156 123.53125 53.285156 118.382812 53.285156 C 115.003906 53.285156 112.023438 54.808594 110.09375 57.210938 C 108.566406 59.054688 107.679688 61.375 107.679688 63.941406 L 107.679688 67.386719 C 107.679688 68.585938 107.679688 71.472656 107.679688 72.511719 C 107.679688 76.917969 106.714844 82.046875 104.625 85.574219 C 102.050781 90.058594 98.429688 92.785156 93.28125 94.867188 C 87.164062 97.269531 80.726562 98.3125 75.417969 98.710938 C 79.441406 98.953125 83.0625 100.554688 85.957031 103.117188 C 89.175781 105.683594 91.269531 109.609375 91.671875 114.09375 Z"
+          fill="#0D56A3"
+        />
+        {/* Left Yellow Smile Arc */}
+        <path
+          d="M 91.671875 114.09375 C 92.234375 119.863281 89.898438 125.152344 85.878906 128.675781 C 82.902344 131.320312 78.878906 132.921875 74.535156 133.003906 C 64.316406 133.164062 53.855469 131.960938 43.960938 128.597656 C 18.699219 120.265625 4.859375 98.710938 5.019531 72.59375 C 5.019531 70.832031 5.019531 67.386719 5.019531 63.859375 C 5.019531 61.296875 5.984375 58.894531 7.515625 57.050781 C 9.445312 54.726562 12.421875 53.285156 15.640625 53.285156 C 20.789062 53.285156 26.019531 53.285156 31.167969 53.285156 C 34.546875 53.285156 37.523438 54.808594 39.453125 57.210938 C 40.984375 59.054688 41.867188 61.375 41.867188 63.941406 L 41.867188 67.386719 C 41.867188 68.585938 41.867188 71.472656 41.867188 72.511719 C 41.867188 76.917969 42.835938 82.046875 44.925781 85.574219 C 47.5 90.058594 51.121094 92.785156 56.269531 94.867188 C 62.382812 97.269531 68.820312 98.3125 75.417969 98.710938 C 79.441406 98.953125 83.0625 100.554688 85.957031 103.117188 C 89.175781 105.683594 91.269531 109.609375 91.671875 114.09375 Z"
+          fill="#FACF01"
+        />
+      </g>
+    </svg>
+  );
+}
+
+/**
+ * Helper to render the appropriate official logo based on method key
+ */
+export function PaymentMethodLogo({
+  methodKey,
+  className = 'h-6 w-auto'
+}: {
+  methodKey: string;
+  className?: string;
+}) {
+  switch (methodKey.toLowerCase()) {
+    case 'bkash':
+      return <BKashLogo className={className} />;
+    case 'nagad':
+      return <NagadLogo className={className} />;
+    case 'rocket':
+      return <RocketLogo className={className} />;
+    case 'upay':
+      return <UpayLogo className={className} />;
+    default:
+      return null;
+  }
+}
+
+/**
+ * PaymentPartnersBar - used in Footer and promotional sections
+ */
+export function PaymentPartnersBar() {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2.5">
+      <div className="h-9 px-3 py-1 bg-white rounded-xl border border-slate-700/50 shadow-sm flex items-center justify-center">
+        <BKashLogo className="h-6 w-auto" />
+      </div>
+      <div className="h-9 px-3 py-1 bg-white rounded-xl border border-slate-700/50 shadow-sm flex items-center justify-center">
+        <NagadLogo className="h-6 w-auto" />
+      </div>
+      <div className="h-9 px-3 py-1 bg-white rounded-xl border border-slate-700/50 shadow-sm flex items-center justify-center">
+        <RocketLogo className="h-6 w-auto" />
+      </div>
+      <div className="h-9 px-3 py-1 bg-white rounded-xl border border-slate-700/50 shadow-sm flex items-center justify-center">
+        <UpayLogo className="h-6 w-auto" />
       </div>
     </div>
   );
-};
+}
 
 export default PaymentPartnersBar;
-

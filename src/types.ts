@@ -70,6 +70,8 @@ export interface ExamResult {
       total: number;
     };
   };
+  questions?: Question[];
+  userAnswers?: Record<string, number>;
 }
 
 export interface UserProfile {
@@ -327,6 +329,60 @@ export interface WrongQuestionRecord {
   status: 'unmastered' | 'mastered';
   lastPracticedAt?: string;
   lastResult?: 'correct' | 'wrong';
+}
+
+// ==========================================
+// MANUAL MOBILE BANKING PAYMENT SYSTEM TYPES
+// ==========================================
+
+export type PaymentMethodType = 'bkash' | 'nagad' | 'upay' | 'rocket';
+
+export interface PaymentMethodConfig {
+  id: PaymentMethodType;
+  name: string;
+  nameBn: string;
+  enabled: boolean;
+  accountNumber: string;
+  accountName: string;
+  accountType?: string; // 'Personal (Send Money)' | 'Merchant' | 'Agent'
+  instruction: string;
+  brandColor: string;
+}
+
+export interface PaymentPlan {
+  id: string;
+  title: string;
+  duration: string;
+  durationDays: number;
+  price: number;
+  priceFormatted: string;
+  description: string;
+  badge?: string | null;
+  popular?: boolean;
+  features: string[];
+}
+
+export interface PaymentRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  paymentMethod: PaymentMethodType;
+  amount: number;
+  packageId: string;
+  packageTitle: string;
+  packageDurationDays?: number;
+  transactionId: string;
+  senderNumber: string;
+  note?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  adminNote?: string;
+  createdAt: string;
+  updatedAt: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
 }
 
 

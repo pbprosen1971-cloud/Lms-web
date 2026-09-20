@@ -144,6 +144,15 @@ export default function DailyPracticeView({ user, exams, setView }: DailyPractic
   const questions = session?.questions || [];
   const currentQuestion = questions[currentIdx];
   const currentDateKey = session?.dateKey || getDailyPracticeDateKey();
+  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSelectOption = (optIdx: number) => {
     if (submitted || isAlreadyCompleted) return;
@@ -152,6 +161,16 @@ export default function DailyPracticeView({ user, exams, setView }: DailyPractic
       ...prev,
       [currentQuestion.id]: optIdx,
     }));
+
+    // Automatically advance to the next question after brief feedback (300ms)
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+    }
+    if (currentIdx < questions.length - 1) {
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        setCurrentIdx((prev) => Math.min(questions.length - 1, prev + 1));
+      }, 300);
+    }
   };
 
   const handlePromptSubmit = () => {

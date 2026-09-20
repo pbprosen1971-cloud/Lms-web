@@ -179,6 +179,16 @@ export default function WrongQuestionView({ user, setView, onExamSubmit }: Wrong
     };
   }, [mode, examSubmitted, examQuestions, examAnswers]);
 
+  const examAutoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (examAutoAdvanceTimerRef.current) {
+        clearTimeout(examAutoAdvanceTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleExamSelectOption = (optIdx: number) => {
     if (examSubmitted) return;
     const currentQ = examQuestions[examIdx];
@@ -187,6 +197,16 @@ export default function WrongQuestionView({ user, setView, onExamSubmit }: Wrong
       ...prev,
       [currentQ.questionId]: optIdx,
     }));
+
+    // Automatically advance to the next question after brief feedback (300ms)
+    if (examAutoAdvanceTimerRef.current) {
+      clearTimeout(examAutoAdvanceTimerRef.current);
+    }
+    if (examIdx < examQuestions.length - 1) {
+      examAutoAdvanceTimerRef.current = setTimeout(() => {
+        setExamIdx((prev) => Math.min(examQuestions.length - 1, prev + 1));
+      }, 300);
+    }
   };
 
   const handleExamFinalSubmit = async () => {

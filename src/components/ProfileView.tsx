@@ -4,14 +4,16 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { User, Phone, GraduationCap, Mail, Award, Calendar, ChevronRight, CheckCircle2, ShieldAlert, Check, Edit2, Trash2, Image, Crown, Sparkles, ShieldCheck, Loader2 } from 'lucide-react';
+import { User, Phone, GraduationCap, Mail, Award, Calendar, ChevronRight, CheckCircle2, ShieldAlert, Check, Edit2, Trash2, Image, Crown, Sparkles, ShieldCheck, Loader2, Lock, Shield, FileText, AlertTriangle } from 'lucide-react';
 import { UserProfile, ExamResult } from '../types';
 import { doc, setDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { formatSafeDisplay, safeTimestampToString } from '../lib/dateUtils';
+import { deleteAuthenticatedUserAccount } from '../services/accountDeletionService';
 import ReferralDashboard from './ReferralDashboard';
 import UserStudyMaterials from './UserStudyMaterials';
+import UserPaymentHistory from './UserPaymentHistory';
 
 interface ProfileViewProps {
   user: UserProfile;
@@ -35,6 +37,31 @@ export default function ProfileView({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  // In-App Account Deletion states
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    setDeleteError(null);
+    try {
+      const res = await deleteAuthenticatedUserAccount(user.id, user.email);
+      if (res.requiresReauth && res.message) {
+        alert(res.message);
+      }
+      try {
+        await auth.signOut();
+      } catch (e) {}
+      localStorage.removeItem('active_user_session');
+      localStorage.removeItem('pending_referral_code');
+      window.location.href = '/';
+    } catch (err: any) {
+      setDeleteError(err?.message || 'অ্যাকাউন্ট ডিলিট করতে সমস্যা হয়েছে।');
+      setIsDeletingAccount(false);
+    }
+  };
 
   React.useEffect(() => {
     setName(user.name);
@@ -433,6 +460,12 @@ export default function ProfileView({
       {/* 3.1. User Study Materials & PDF History */}
       <UserStudyMaterials user={user} setView={setView} />
 
+      {/* 3.2. Manual Payment & Membership History */}
+      <UserPaymentHistory
+        user={user}
+        onNavigateToPlans={() => setView('home')}
+      />
+
       {/* 4. Detailed Tabular Exam History Log */}
       <div className="bg-white dark:bg-slate-800 p-6 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-sm space-y-4">
         <h3 className="font-bold text-base flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
@@ -489,6 +522,126 @@ export default function ProfileView({
           </div>
         )}
       </div>
+
+      {/* 5. Privacy & Account Section */}
+      <div className="bg-white dark:bg-slate-800 p-6 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-sm space-y-4">
+        <h3 className="font-bold text-base flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3 text-slate-900 dark:text-white">
+          <Lock className="h-4.5 w-4.5 text-primary" />
+          <span>🔐 Privacy &amp; Account</span>
+        </h3>
+
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          আপনার ব্যক্তিগত তথ্যের নিরাপত্তা ও অধিকার নিয়ন্ত্রণ করুন। আমাদের নীতিমালা সম্পর্কে জানতে বা অ্যাকাউন্ট সংক্রান্ত সিদ্ধান্ত নিতে নিচের অপশনগুলো ব্যবহার করুন।
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          <button
+            onClick={() => setView('privacy-policy')}
+            className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary/50 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-primary/5 transition-all text-left space-y-1 cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-primary" />
+                Privacy Policy
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-primary transition-colors" />
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+              তথ্যের সুরক্ষা ও গোপনীয়তা নীতি
+            </p>
+          </button>
+
+          <button
+            onClick={() => setView('terms-and-conditions')}
+            className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary/50 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-primary/5 transition-all text-left space-y-1 cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-primary" />
+                Terms &amp; Conditions
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-primary transition-colors" />
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+              ব্যবহার বিধি ও পরীক্ষার শর্তাবলী
+            </p>
+          </button>
+
+          <button
+            onClick={() => setShowDeleteConfirmModal(true)}
+            className="p-4 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:border-rose-500/60 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-500/10 transition-all text-left space-y-1 cursor-pointer group"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                Delete Account
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-rose-400" />
+            </div>
+            <p className="text-[11px] text-rose-500/80 dark:text-rose-400/80 line-clamp-1">
+              অ্যাকাউন্ট ও সকল ডেটা স্থায়ীভাবে মুছে ফেলুন
+            </p>
+          </button>
+        </div>
+      </div>
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 w-full max-w-md rounded-3xl p-6 sm:p-7 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                Are you sure you want to delete your Medha Exam account?
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                অ্যাকাউন্ট ডিলিট করলে আপনার প্রোফাইল, সমস্ত পরীক্ষার ফলাফল ও স্কোর হিস্ট্রি, ভুল প্রশ্ন সংগ্রহাগার, ডেইলি প্র্যাকটিস ডেটা এবং সংশ্লিষ্ট সকল ব্যক্তিগত তথ্য স্থায়ীভাবে মুছে যাবে। এটি আর কোনোভাবেই পুনরুদ্ধার করা সম্ভব নয়।
+              </p>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-400 text-xs">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={isDeletingAccount}
+                onClick={() => {
+                  setShowDeleteConfirmModal(false);
+                  setDeleteError(null);
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAccount}
+                onClick={handleDeleteAccount}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                {isDeletingAccount ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>মুছে ফেলা হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Delete My Account</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

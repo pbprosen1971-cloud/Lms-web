@@ -45,6 +45,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Manual Payment Requests Collection
+    match /paymentRequests/{requestId} {
+      allow read, write: if true;
+    }
+
     // Ministry Question Banks Collection
     match /ministryQuestionBanks/{bankId} {
       allow read, write: if true;
@@ -89,6 +94,12 @@ service cloud.firestore {
         allow update: if isAuthenticated() && request.auth.uid == userId;
         allow delete: if isAuthenticated() && request.auth.uid == userId;
       }
+    }
+
+    // Account Deletion Requests (Google Play & Public Web Compliance)
+    match /accountDeletionRequests/{requestId} {
+      allow create: if true;
+      allow read, write: if isAuthenticated();
     }
 
     // Default catch-all rule: Deny all unmatched collections

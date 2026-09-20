@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <!-- Background green gradient matching Medha Exam round logo -->
+    <linearGradient id="roundBgGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00a854"/>
+      <stop offset="100%" stop-color="#008f45"/>
+    </linearGradient>
+
+    <!-- Linear gradient for upper M fold (bright blue to deep cobalt) -->
+    <linearGradient id="blueFoldGrad" x1="100" y1="90" x2="250" y2="220" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="50%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#818cf8" stop-opacity="0.85"/>
+    </linearGradient>
+
+    <!-- Linear gradient for the right diagonal M stroke with soft white fade -->
+    <linearGradient id="rightDiagonalGrad" x1="230" y1="220" x2="360" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#93c5fd" stop-opacity="0.75"/>
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+
+    <!-- Blue gradient for checkmark circle badge -->
+    <linearGradient id="checkBadgeGrad" x1="320" y1="310" x2="420" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="60%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+
+    <!-- Subtle drop shadow for checkmark badge -->
+    <filter id="badgeShadow" x="270" y="270" width="180" height="180" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- 1. Circular Background (Round Logo) -->
+  <circle cx="256" cy="256" r="256" fill="url(#roundBgGrad)"/>
+
+  <!-- 2. The Blue Origami Fold behind the 'M' intersection -->
+  <path
+    d="M 112 118 C 112 105 125 96 138 103 L 260 220 L 230 250 L 112 135 Z"
+    fill="url(#blueFoldGrad)"
+  />
+
+  <!-- 3. The Continuous Tubular 'M' Shape -->
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <!-- Left vertical stem and central ribbon -->
+    <path
+      d="M 100 335 L 100 125 C 100 102 124 92 142 108 L 335 305"
+      stroke="#ffffff"
+      stroke-width="42"
+      fill="none"
+    />
+
+    <!-- Right diagonal connector with gradient reflection -->
+    <path
+      d="M 230 220 L 340 115"
+      stroke="url(#rightDiagonalGrad)"
+      stroke-width="42"
+      fill="none"
+    />
+
+    <!-- Right vertical stem -->
+    <path
+      d="M 345 125 L 345 285"
+      stroke="#ffffff"
+      stroke-width="42"
+      fill="none"
+    />
+  </g>
+
+  <!-- 4. Lower-right Verified Checkmark Badge -->
+  <!-- White protective outer ring -->
+  <circle cx="368" cy="368" r="68" fill="#ffffff" filter="url(#badgeShadow)"/>
+
+  <!-- Vibrant blue gradient circular badge -->
+  <circle cx="368" cy="368" r="56" fill="url(#checkBadgeGrad)"/>
+
+  <!-- White bold checkmark -->
+  <path
+    d="M 336 368 L 358 390 L 404 336"
+    stroke="#ffffff"
+    stroke-width="15"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>

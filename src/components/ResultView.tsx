@@ -3,20 +3,76 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Award, CheckCircle, XCircle, HelpCircle, Download, FileText, ChevronRight, RefreshCw, Trophy, Calendar, Sparkles, Share2, Copy, Check } from 'lucide-react';
-import { ExamResult } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Award, CheckCircle, CheckCircle2, XCircle, HelpCircle, Download, FileText, ChevronRight, RefreshCw, Trophy, Calendar, Sparkles, Share2, Copy, Check, Filter } from 'lucide-react';
+import { ExamResult, Question, Exam } from '../types';
 import { formatSafeDisplay } from '../lib/dateUtils';
+import { subscribeToQuestionsByExamId } from '../services/firestoreService';
 
 interface ResultViewProps {
   result: ExamResult;
   setView: (view: string) => void;
   user: any;
+  exams?: Exam[];
 }
 
-export default function ResultView({ result, setView, user }: ResultViewProps) {
+export default function ResultView({ result, setView, user, exams }: ResultViewProps) {
   const [copied, setCopied] = useState(false);
+  const [reviewFilter, setReviewFilter] = useState<'all' | 'correct' | 'wrong' | 'unanswered'>('all');
   const percentage = Math.round((result.score / result.totalQuestions) * 100);
+
+  const optionLabels = ['ক', 'খ', 'গ', 'ঘ'];
+
+  // Initialize questions from result, cache, or fetch from Firestore
+  const [questionsList, setQuestionsList] = useState<Question[]>(() => {
+    if (result.questions && result.questions.length > 0) {
+      return result.questions;
+    }
+    try {
+      const cached = localStorage.getItem(`medha_exam_questions_${result.examId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  useEffect(() => {
+    if (result.questions && result.questions.length > 0) {
+      setQuestionsList(result.questions);
+      return;
+    }
+    if (exams && exams.length > 0) {
+      const matched = exams.find((e) => e.id === result.examId || (e as any).examId === result.examId);
+      if (matched?.questions && matched.questions.length > 0) {
+        setQuestionsList(matched.questions);
+        return;
+      }
+    }
+    if (result.examId) {
+      const unsub = subscribeToQuestionsByExamId(result.examId, (qList) => {
+        if (qList && qList.length > 0) {
+          setQuestionsList(qList);
+        }
+      });
+      return () => unsub();
+    }
+  }, [result.examId, result.questions, exams]);
+
+  // Retrieve user answers
+  const userAnswers: Record<string, number> = useMemo(() => {
+    if (result.userAnswers && Object.keys(result.userAnswers).length > 0) {
+      return result.userAnswers;
+    }
+    try {
+      const c1 = localStorage.getItem(`medha_exam_answers_${result.id}`);
+      if (c1) return JSON.parse(c1);
+      const c2 = localStorage.getItem(`medha_exam_answers_${result.examId}`);
+      if (c2) return JSON.parse(c2);
+    } catch (e) {}
+    return {};
+  }, [result.id, result.examId, result.userAnswers]);
 
   // Compute standard rankings for demo/realism based on score percentage
   const computedRank = Math.max(1, Math.round(150 - (percentage / 100) * 148));
@@ -93,7 +149,7 @@ export default function ResultView({ result, setView, user }: ResultViewProps) {
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-400">
-            পরীক্ষার্থীর নাম: <strong className="font-semibold text-slate-700 dark:text-slate-200">{result.studentName}</strong> ({result.studentEmail}) • তারিখ: {formatSafeDisplay(result.dateTaken, '—')}
+            পরীক্ষার্থীর নাম: <strong className="font-semibold text-slate-700 dark:text-slate-200">{result.studentName}</strong> • তারিখ: {formatSafeDisplay(result.dateTaken, '—')}
           </p>
 
           <div className="border-t border-slate-100 dark:border-slate-700/50 pt-4 max-w-sm mx-auto">
@@ -191,7 +247,7 @@ export default function ResultView({ result, setView, user }: ResultViewProps) {
               <div className="space-y-1 border-l border-slate-200 dark:border-slate-700/60">
                 <HelpCircle className="h-5 w-5 text-amber-500 mx-auto" />
                 <span className="block text-base font-black text-amber-600 dark:text-amber-400">{result.unansweredQuestions} টি</span>
-                <span className="text-[10px] text-slate-400 block font-semibold">উড়িয়েছেন</span>
+                <span className="text-[10px] text-slate-400 block font-semibold">স্কিপ করেছেন</span>
               </div>
             </div>
 
@@ -298,6 +354,220 @@ export default function ResultView({ result, setView, user }: ResultViewProps) {
               );
             })}
           </div>
+        </div>
+
+        {/* 4. Question & Answer Review Section (📋 প্রশ্ন ও উত্তর পর্যালোচনা) */}
+        <div className="bg-white dark:bg-slate-800 p-6 sm:p-8 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-700/50 pb-5">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-full mb-1">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>বিস্তারিত উত্তরপত্র মূল্যায়ন</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <span>📋</span>
+                <span>প্রশ্ন ও উত্তর পর্যালোচনা</span>
+              </h2>
+              <p className="text-xs text-slate-400">
+                সব প্রশ্নের সঠিক উত্তর, আপনার নির্বাচিত উত্তর এবং প্রয়োজনীয় ব্যাখ্যা
+              </p>
+            </div>
+
+            {/* Quick Filter Navigation */}
+            {questionsList.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-900/70 rounded-xl self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('all')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    reviewFilter === 'all'
+                      ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  সব ({questionsList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('correct')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    reviewFilter === 'correct'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                  }`}
+                >
+                  সঠিক ({result.correctAnswers})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('wrong')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    reviewFilter === 'wrong'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30'
+                  }`}
+                >
+                  ভুল ({result.wrongAnswers})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter('unanswered')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    reviewFilter === 'unanswered'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                  }`}
+                >
+                  অনুত্তরিত ({result.unansweredQuestions})
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Questions Listing */}
+          {questionsList.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs sm:text-sm space-y-2">
+              <RefreshCw className="h-6 w-6 mx-auto text-slate-400 animate-spin opacity-50" />
+              <p>প্রশ্নোত্তর পর্যালোচনা লোড হচ্ছে...</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {questionsList
+                .filter((q) => {
+                  const userAns = userAnswers[q.id];
+                  if (reviewFilter === 'correct') return userAns === q.correctAnswer;
+                  if (reviewFilter === 'wrong') return userAns !== undefined && userAns !== q.correctAnswer;
+                  if (reviewFilter === 'unanswered') return userAns === undefined;
+                  return true;
+                })
+                .map((q, idx) => {
+                  const originalIndex = questionsList.findIndex((item) => item.id === q.id);
+                  const qNum = originalIndex !== -1 ? originalIndex + 1 : idx + 1;
+                  const userSelected = userAnswers[q.id];
+                  const isCorrect = userSelected === q.correctAnswer;
+                  const isUnanswered = userSelected === undefined;
+                  const isWrong = !isUnanswered && !isCorrect;
+
+                  return (
+                    <div
+                      key={q.id || idx}
+                      className="p-5 sm:p-6 bg-slate-50/70 dark:bg-slate-900/40 border border-slate-200/70 dark:border-slate-800 rounded-2xl space-y-4"
+                    >
+                      {/* Question Top Meta */}
+                      <div className="flex items-center justify-between gap-3 border-b border-slate-200/60 dark:border-slate-800 pb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center">
+                            {qNum}
+                          </span>
+                          {q.subject && (
+                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                              {q.subject}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Result Badge */}
+                        {isCorrect ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            সঠিক উত্তর (+১)
+                          </span>
+                        ) : isWrong ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/60 px-2.5 py-0.5 rounded-full border border-rose-300 dark:border-rose-800">
+                            <XCircle className="h-3.5 w-3.5" />
+                            ভুল উত্তর (০)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-300 dark:border-amber-800">
+                            <HelpCircle className="h-3.5 w-3.5" />
+                            অনুত্তরিত (০)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Question Text */}
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white leading-relaxed">
+                        প্রশ্ন: {q.text}
+                      </h3>
+
+                      {/* Options with Highlighting */}
+                      <div className="grid grid-cols-1 gap-2.5 pt-1">
+                        {q.options.map((option, optIdx) => {
+                          const isSystemCorrect = optIdx === q.correctAnswer;
+                          const isUserSelectedOption = optIdx === userSelected;
+
+                          let optionContainerClass = 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300';
+                          let indicatorIcon = '⚪';
+                          let indicatorBadge = null;
+
+                          if (isSystemCorrect && isUserSelectedOption) {
+                            // User selected correctly
+                            optionContainerClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 dark:border-emerald-600 text-emerald-900 dark:text-emerald-100 font-semibold ring-1 ring-emerald-500/20';
+                            indicatorIcon = '🟢';
+                            indicatorBadge = (
+                              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1 border border-emerald-200 dark:border-emerald-800">
+                                🟢 আপনার উত্তর — সঠিক
+                              </span>
+                            );
+                          } else if (isSystemCorrect) {
+                            // System correct answer (user picked something else or skipped)
+                            optionContainerClass = 'bg-emerald-50/80 dark:bg-emerald-950/25 border-emerald-500 dark:border-emerald-600 text-emerald-900 dark:text-emerald-100 font-semibold';
+                            indicatorIcon = '🟢';
+                            indicatorBadge = (
+                              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1 border border-emerald-200 dark:border-emerald-800">
+                                🟢 সঠিক উত্তর
+                              </span>
+                            );
+                          } else if (isUserSelectedOption && !isSystemCorrect) {
+                            // User selected wrong answer
+                            optionContainerClass = 'bg-rose-50 dark:bg-rose-950/30 border-rose-500 dark:border-rose-600 text-rose-900 dark:text-rose-100 font-medium ring-1 ring-rose-500/20';
+                            indicatorIcon = '🔴';
+                            indicatorBadge = (
+                              <span className="text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/60 px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1 border border-rose-200 dark:border-rose-800">
+                                🔴 আপনার উত্তর
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`p-3 sm:p-3.5 rounded-xl border flex items-center justify-between gap-3 text-sm transition-all ${optionContainerClass}`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <span className="text-base select-none shrink-0">
+                                  {indicatorIcon}
+                                </span>
+                                <span className="w-5 h-5 shrink-0 rounded-full border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-[11px] font-bold flex items-center justify-center text-slate-600 dark:text-slate-300">
+                                  {optionLabels[optIdx] || optIdx + 1}
+                                </span>
+                                <span className="break-words leading-relaxed">
+                                  {option}
+                                </span>
+                              </div>
+                              {indicatorBadge}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Explanation (if available in the existing question data) */}
+                      {q.explanation && q.explanation.trim() !== '' && (
+                        <div className="p-3.5 sm:p-4 bg-emerald-50/50 dark:bg-slate-800/80 border border-emerald-200/60 dark:border-slate-700/80 rounded-xl space-y-1 mt-2">
+                          <div className="text-xs font-bold text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                            <FileText className="h-3.5 w-3.5" />
+                            <span>ব্যাখ্যা:</span>
+                          </div>
+                          <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed pl-5">
+                            {q.explanation}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
         </div>
 
         {/* Action Controls Footer */}

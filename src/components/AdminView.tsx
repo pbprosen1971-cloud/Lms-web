@@ -37,6 +37,11 @@ import {
   Star,
   Plus,
   Trophy,
+  CreditCard,
+  FileDown,
+  Printer,
+  Loader2,
+  Filter,
 } from 'lucide-react';
 import {
   Exam,
@@ -60,6 +65,7 @@ import SheetsSync from './SheetsSync';
 import AdminGoogleSheetsTab from './AdminGoogleSheetsTab';
 import { AdminLiveArchivedExamTab } from './AdminLiveArchivedExamTab';
 import AdminReferralLeaderboard from './AdminReferralLeaderboard';
+import { generateStudentResultsPdfReport } from '../services/pdfReportService';
 import {
   saveQuestionToFirestore,
   deleteQuestionFromFirestore,
@@ -76,7 +82,18 @@ import {
   clearUpcomingExamSettings,
   deleteUpcomingExamFromSiteSettings,
 } from '../services/firestoreService';
+import {
+  readAndValidateQuestionsFromSheet,
+  getSavedSpreadsheetId,
+  saveSpreadsheetId,
+  SheetQuestionsParseResult,
+} from '../services/googleSheetsService';
+import {
+  isGoogleConnected,
+  connectGoogleSheetsAccount,
+} from '../lib/googleAuth';
 import AdminStudyMaterials from './AdminStudyMaterials';
+import AdminPaymentManagement from './AdminPaymentManagement';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -130,7 +147,7 @@ export default function AdminView({
   upcomingExamSettings,
   onSaveUpcomingExamSettings,
 }: AdminViewProps) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments'>('analytics');
 
   // Ministry Question Bank Admin Form State
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
@@ -152,6 +169,18 @@ export default function AdminView({
   // List of questions added to the current question bank set being created/edited
   const [mbQuestionsList, setMbQuestionsList] = useState<MinistryBankQuestion[]>([]);
   const [mbSuccessMsg, setMbSuccessMsg] = useState<string>('');
+
+  // Google Sheets import state for Ministry Question Bank
+  const [showMbSheetModal, setShowMbSheetModal] = useState<boolean>(false);
+  const [mbSpreadsheetId, setMbSpreadsheetId] = useState<string>(getSavedSpreadsheetId() || '');
+  const [mbSheetTabName, setMbSheetTabName] = useState<string>('Question Bank');
+  const [mbImportTargetMinistry, setMbImportTargetMinistry] = useState<string>('');
+  const [mbImportTargetTitle, setMbImportTargetTitle] = useState<string>('');
+  const [mbImportLoading, setMbImportLoading] = useState<boolean>(false);
+  const [mbImportConnecting, setMbImportConnecting] = useState<boolean>(false);
+  const [mbImportError, setMbImportError] = useState<string>('');
+  const [mbParsedSheetData, setMbParsedSheetData] = useState<SheetQuestionsParseResult | null>(null);
+  const [mbAppendMode, setMbAppendMode] = useState<'append' | 'replace'>('append');
 
   // Extract existing ministry names for the dropdown
   const existingMinistries = useMemo(() => {
@@ -246,6 +275,139 @@ export default function AdminView({
     setQOpt4('');
     setQCorrect(0);
     setQExplanation('');
+  };
+
+  // Connect Google account directly from the Ministry Question Bank import modal
+  const handleMbConnectGoogle = async () => {
+    setMbImportConnecting(true);
+    setMbImportError('');
+    try {
+      await connectGoogleSheetsAccount();
+    } catch (err: any) {
+      console.error('Connect Google error in ministry modal:', err);
+      setMbImportError(err?.message || 'Google অ্যাকাউন্ট কানেক্ট করতে সমস্যা হয়েছে।');
+    } finally {
+      setMbImportConnecting(false);
+    }
+  };
+
+  // Open Google Sheets import modal and prefill ministry/title if available
+  const handleOpenMbSheetModal = () => {
+    const currentMinistry = (selectedMinistryDropdown && selectedMinistryDropdown !== '__NEW__')
+      ? selectedMinistryDropdown
+      : customMinistryName.trim();
+    setMbImportTargetMinistry(currentMinistry);
+    setMbImportTargetTitle(mbTitle.trim());
+    setMbImportError('');
+    setMbParsedSheetData(null);
+    if (!mbSpreadsheetId) {
+      setMbSpreadsheetId(getSavedSpreadsheetId() || '');
+    }
+    setShowMbSheetModal(true);
+  };
+
+  // Fetch & Validate questions from Google Sheet for Ministry Question Bank
+  const handleMbFetchQuestionsFromSheet = async () => {
+    if (!mbSpreadsheetId.trim()) {
+      setMbImportError('অনুগ্রহ করে গুগল স্প্রেডশীট আইডি বা লিংক প্রদান করুন।');
+      return;
+    }
+    if (!isGoogleConnected()) {
+      setMbImportError('প্রশ্ন পড়তে প্রথমে Google অ্যাকাউন্ট কানেক্ট করুন।');
+      return;
+    }
+
+    setMbImportLoading(true);
+    setMbImportError('');
+    setMbParsedSheetData(null);
+
+    try {
+      // Save ID for future use
+      saveSpreadsheetId(mbSpreadsheetId.trim());
+
+      const result = await readAndValidateQuestionsFromSheet(
+        mbSpreadsheetId.trim(),
+        undefined, // targetExamId not needed for ministry bank
+        mbSheetTabName.trim() || 'Question Bank'
+      );
+
+      setMbParsedSheetData(result);
+
+      if (result.totalRows === 0) {
+        setMbImportError(`"${mbSheetTabName}" ট্যাবে কোনো প্রশ্নের রেকর্ড পাওয়া যায়নি। ট্যাবটির নাম ও কলাম ঠিক আছে কিনা নিশ্চিত করুন।`);
+      } else if (result.validCount === 0) {
+        setMbImportError(`শিট থেকে ${result.totalRows} টি সারি পাওয়া গেলেও কোনো বৈধ বহুনির্বাচনী প্রশ্ন পাওয়া যায়নি। কলাম ও ফরম্যাট যাচাই করুন।`);
+      }
+    } catch (err: any) {
+      console.error('Fetch ministry questions from sheet error:', err);
+      setMbImportError(err?.message || 'গুগল শিট থেকে প্রশ্ন পড়তে সমস্যা হয়েছে। স্প্রেডশীট এক্সেস ও ইন্টারনেট কানেকশন যাচাই করুন।');
+    } finally {
+      setMbImportLoading(false);
+    }
+  };
+
+  // Apply parsed questions from Google Sheet into the Ministry Question Bank draft list
+  const handleApplyMbSheetQuestions = () => {
+    if (!mbParsedSheetData || mbParsedSheetData.validQuestions.length === 0) {
+      setMbImportError('ইমপোর্ট করার জন্য কোনো বৈধ প্রশ্ন পাওয়া যায়নি।');
+      return;
+    }
+
+    // Convert sheet questions to MinistryBankQuestion format
+    const convertedQuestions: MinistryBankQuestion[] = mbParsedSheetData.validQuestions.map((vq, idx) => {
+      const q = vq.question;
+      return {
+        id: `mbq-sheet-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
+        text: q.text,
+        options: Array.isArray(q.options) && q.options.length === 4
+          ? q.options
+          : [
+              q.options?.[0] || 'বিকল্প ১',
+              q.options?.[1] || 'বিকল্প ২',
+              q.options?.[2] || 'বিকল্প ৩',
+              q.options?.[3] || 'বিকল্প ৪'
+            ],
+        correctAnswer: (typeof q.correctAnswer === 'number' && q.correctAnswer >= 0 && q.correctAnswer <= 3)
+          ? q.correctAnswer
+          : 0,
+        explanation: q.explanation || undefined,
+        subject: q.subject || 'সাধারণ জ্ঞান',
+      };
+    });
+
+    // Update draft questions list
+    if (mbAppendMode === 'replace') {
+      setMbQuestionsList(convertedQuestions);
+    } else {
+      setMbQuestionsList(prev => [...prev, ...convertedQuestions]);
+    }
+
+    // If ministry name was typed in the modal and not set in main form, copy it over
+    if (mbImportTargetMinistry.trim() && !selectedMinistryDropdown && !customMinistryName) {
+      if (existingMinistries.includes(mbImportTargetMinistry.trim())) {
+        setSelectedMinistryDropdown(mbImportTargetMinistry.trim());
+      } else {
+        setSelectedMinistryDropdown('__NEW__');
+        setCustomMinistryName(mbImportTargetMinistry.trim());
+      }
+    }
+
+    // If bank title was typed in modal and not set in main form, copy it over
+    if (mbImportTargetTitle.trim() && !mbTitle) {
+      setMbTitle(mbImportTargetTitle.trim());
+    }
+
+    const importedCount = convertedQuestions.length;
+    setShowMbSheetModal(false);
+    setMbParsedSheetData(null);
+    setMbSuccessMsg(`🎉 গুগল শিট থেকে সফলভাবে ${importedCount} টি প্রশ্ন প্রশ্ন ব্যাংকে ইমপোর্ট করা হয়েছে! এবার শিরোনাম ও তথ্য নিশ্চিত করে নিচে "প্রশ্ন ব্যাংক সংরক্ষণ করুন" বাটনে ক্লিক করুন।`);
+    setTimeout(() => setMbSuccessMsg(''), 6000);
+
+    // Smooth scroll to the questions draft list
+    setTimeout(() => {
+      const el = document.getElementById('ministry-bank-form-header');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }, 150);
   };
 
   // Handle saving the full Ministry Question Bank
@@ -1120,6 +1282,34 @@ export default function AdminView({
   // Search filter inside admin tabs
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Helper dictionary to normalize Bengali digits
+  const bnDigits: Record<string, string> = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
+  };
+
+  // Helper to extract timestamp in ms for sorting
+  const getResultTimeMs = (r: ExamResult): number => {
+    if (r.submittedAt) {
+      const t = new Date(r.submittedAt).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    if (r.dateTaken) {
+      let raw = String(r.dateTaken).trim();
+      for (const [bn, en] of Object.entries(bnDigits)) {
+        raw = raw.split(bn).join(en);
+      }
+      const t = new Date(raw).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    const match = r.id ? r.id.match(/\d{10,}/) : null;
+    if (match) {
+      const num = parseInt(match[0], 10);
+      if (!isNaN(num)) return num;
+    }
+    return 0;
+  };
+
   // Combine Firestore results with preloaded results
   const allResults = useMemo(() => {
     const combined = [...firestoreResults];
@@ -1130,6 +1320,125 @@ export default function AdminView({
     });
     return combined;
   }, [firestoreResults, results]);
+
+  // Results Tab States
+  const [onlyLatestResults, setOnlyLatestResults] = useState<boolean>(true);
+  const [resultsExamFilter, setResultsExamFilter] = useState<string>('all');
+  const [resultsSearchQuery, setResultsSearchQuery] = useState<string>('');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+
+  // Deduplicate results per student per exam, keeping strictly the latest result
+  const { dedupedLatestResults, examAttemptCounts, duplicateAttemptsCount } = useMemo(() => {
+    // Sort chronologically descending (newest first)
+    const sorted = [...allResults].sort((a, b) => {
+      const timeA = getResultTimeMs(a);
+      const timeB = getResultTimeMs(b);
+      if (timeB !== timeA) return timeB - timeA;
+      return (b.id || '').localeCompare(a.id || '');
+    });
+
+    const seenMap = new Map<string, ExamResult>();
+    const countsMap = new Map<string, number>();
+
+    sorted.forEach((res) => {
+      // Build unique student key (prioritizing email, userId, studentId, or normalized name)
+      const email = (res.studentEmail || '').trim().toLowerCase();
+      const userId = (res.userId || '').trim().toLowerCase();
+      const studentId = (res.studentId || '').trim().toLowerCase();
+      const name = (res.studentName || '').trim().toLowerCase();
+
+      let studentKey = `id:${res.id || Math.random()}`;
+      if (email && email !== 'undefined' && email !== 'null') {
+        studentKey = `email:${email}`;
+      } else if (userId && userId !== 'guest' && userId !== 'undefined') {
+        studentKey = `user:${userId}`;
+      } else if (studentId && studentId !== 'guest' && studentId !== 'undefined') {
+        studentKey = `student:${studentId}`;
+      } else if (name && name !== 'ইউজার' && name !== 'guest') {
+        studentKey = `name:${name}`;
+      }
+
+      // Build unique exam key
+      const examId = (res.examId || '').trim().toLowerCase();
+      const title = (res.examTitle || '').trim().toLowerCase();
+      const examKey = (examId && examId !== 'undefined') ? `examId:${examId}` : (title ? `title:${title}` : 'exam');
+
+      const compositeKey = `${studentKey}:::${examKey}`;
+
+      // Increment attempt counter for this user & exam
+      countsMap.set(compositeKey, (countsMap.get(compositeKey) || 0) + 1);
+
+      // Only save the very first occurrence (which is the latest)
+      if (!seenMap.has(compositeKey)) {
+        seenMap.set(compositeKey, res);
+      }
+    });
+
+    const deduped = Array.from(seenMap.values());
+    return {
+      dedupedLatestResults: deduped,
+      examAttemptCounts: countsMap,
+      duplicateAttemptsCount: Math.max(0, allResults.length - deduped.length),
+    };
+  }, [allResults]);
+
+  // Active pool of results for display: either only the latest attempt or all historical attempts
+  const resultsPool = useMemo(() => {
+    return onlyLatestResults ? dedupedLatestResults : allResults;
+  }, [onlyLatestResults, dedupedLatestResults, allResults]);
+
+  // Unique exams present in results
+  const uniqueResultExams = useMemo(() => {
+    const titles = new Set<string>();
+    resultsPool.forEach(r => {
+      const t = r.examTitle?.trim();
+      if (t) titles.add(t);
+    });
+    return Array.from(titles).sort();
+  }, [resultsPool]);
+
+  // Filtered results based on exam selection and search term
+  const filteredResults = useMemo(() => {
+    return resultsPool.filter(res => {
+      if (resultsExamFilter !== 'all') {
+        const matchTitle = (res.examTitle || '').trim().toLowerCase() === resultsExamFilter.trim().toLowerCase();
+        const matchId = res.examId === resultsExamFilter;
+        if (!matchTitle && !matchId) return false;
+      }
+      if (resultsSearchQuery.trim()) {
+        const q = resultsSearchQuery.toLowerCase().trim();
+        const matchName = (res.studentName || '').toLowerCase().includes(q);
+        const matchEmail = (res.studentEmail || '').toLowerCase().includes(q);
+        const matchTitle = (res.examTitle || '').toLowerCase().includes(q);
+        if (!matchName && !matchEmail && !matchTitle) return false;
+      }
+      return true;
+    });
+  }, [resultsPool, resultsExamFilter, resultsSearchQuery]);
+
+  // Results Metrics
+  const resultStats = useMemo(() => {
+    const total = filteredResults.length;
+    const uniqueStudents = new Set(
+      filteredResults.map(r => (r.studentEmail || r.studentId || r.userId || r.studentName || '').toLowerCase())
+    ).size;
+
+    const scores = filteredResults.map(r => {
+      const totalQ = r.totalQuestions > 0 ? r.totalQuestions : (r.totalMarks > 0 ? r.totalMarks : 1);
+      const scoreVal = typeof r.score === 'number' ? r.score : 0;
+      return Math.max(0, Math.min(100, Math.round((scoreVal / totalQ) * 100)));
+    });
+
+    const avgScore = scores.length > 0
+      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+      : 0;
+
+    const highestScore = scores.length > 0
+      ? Math.max(...scores)
+      : 0;
+
+    return { total, uniqueStudents, avgScore, highestScore };
+  }, [filteredResults]);
 
   // Local overrides for student premium status
   const [localPremiumOverrides, setLocalPremiumOverrides] = useState<Record<string, boolean>>({});
@@ -1415,9 +1724,33 @@ export default function AdminView({
     setTimeout(() => setCreateSuccessMsg(''), 5000);
   };
 
-  // Trigger print result sheet
+  // Trigger browser print
   const handleDownloadResultSheet = () => {
     window.print();
+  };
+
+  // Trigger jsPDF summary report download
+  const handleDownloadPdfReport = async () => {
+    if (filteredResults.length === 0) {
+      alert('ডাউনলোড করার জন্য কোনো ফলাফল পাওয়া যায়নি।');
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+    try {
+      await generateStudentResultsPdfReport(filteredResults, {
+        siteName: settings.siteName || 'মেধা এক্সাম',
+        examTitleFilter: resultsExamFilter === 'all'
+          ? (onlyLatestResults ? 'All Exams (Latest Attempts Only)' : 'All Exams (All Attempts)')
+          : (onlyLatestResults ? `${resultsExamFilter} (Latest Attempt Only)` : resultsExamFilter),
+        generatedBy: currentUser?.name || 'Medha Exam Administration',
+      });
+    } catch (err) {
+      console.error('Failed to generate PDF summary report:', err);
+      alert('PDF রিপোর্ট তৈরি করতে সমস্যা হয়েছে। অনুগ্রহ করে পুনরায় চেষ্টা করুন।');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   return (
@@ -1543,6 +1876,17 @@ export default function AdminView({
             }`}
           >
             <BookOpen className="h-4.5 w-4.5" /> 📚 স্টাডি ম্যাটেরিয়াল (PDF)
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('payments'); setSearchQuery(''); }}
+            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+              activeTab === 'payments'
+                ? 'bg-amber-500 text-white shadow-md shadow-amber-500/25'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
+            }`}
+          >
+            <CreditCard className="h-4.5 w-4.5" /> 💳 পেমেন্ট ও মেম্বারশিপ
           </button>
 
           <button
@@ -1858,58 +2202,321 @@ export default function AdminView({
             </div>
           )}
 
-          {/* TAB 3: EXAM RESULT SHEET */}
+          {/* TAB 3: EXAM RESULT SHEET & SUMMARY REPORT */}
           {activeTab === 'results' && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              {/* Header with Title and Actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800/80 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
                 <div>
-                  <h3 className="font-bold text-lg text-slate-900 dark:text-white">সর্বশেষ কুইজ ফলাফল বিবরণী</h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-300">শিক্ষার্থীদের দেওয়া সর্বশেষ কুইজের বিস্তারিত বিবরণ শিট।</p>
+                  <h3 className="font-extrabold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    শিক্ষার্থী পরীক্ষার ফলাফল বিবরণী ও সারাংশ
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    কুইজ ও মডেল টেস্টের ফলাফল বিবরণী পর্যালোচনা করুন এবং jsPDF দ্বারা অফিশিয়াল PDF সারাংশ রিপোর্ট ডাউনলোড করুন।
+                  </p>
                 </div>
                 
-                {/* Print/Download results action */}
-                <button
-                  onClick={handleDownloadResultSheet}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 self-start cursor-pointer"
-                >
-                  <Download className="h-4 w-4" /> ডাউনলোড রেজাল্ট শিট
-                </button>
+                {/* PDF and Print Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    onClick={handleDownloadPdfReport}
+                    disabled={isGeneratingPdf || filteredResults.length === 0}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="নির্বাচিত ফলাফলগুলোর অফিশিয়াল PDF সামারি রিপোর্ট ডাউনলোড করুন"
+                  >
+                    {isGeneratingPdf ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>PDF প্রস্তুত হচ্ছে...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileDown className="h-4 w-4" />
+                        <span>PDF রিপোর্ট ডাউনলোড ({filteredResults.length})</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleDownloadResultSheet}
+                    className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-600 flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="ব্রাউজার প্রিন্ট ডায়ালগ খুলুন"
+                  >
+                    <Printer className="h-4 w-4" />
+                    <span>প্রিন্ট শিট</span>
+                  </button>
+                </div>
               </div>
 
+              {/* KPI Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                <div className="p-4 bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                    {onlyLatestResults ? 'সর্বশেষ ফলাফল' : 'মোট সাবমিশন'}
+                  </span>
+                  <span className="text-2xl font-black text-slate-900 dark:text-white mt-1 block">
+                    {resultStats.total} টি
+                  </span>
+                  {onlyLatestResults && duplicateAttemptsCount > 0 && (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block mt-0.5">
+                      ({duplicateAttemptsCount} টি ডুপ্লিকেট বাদ)
+                    </span>
+                  )}
+                </div>
+
+                <div className="p-4 bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                    অনন্য শিক্ষার্থী
+                  </span>
+                  <span className="text-2xl font-black text-primary mt-1 block">
+                    {resultStats.uniqueStudents} জন
+                  </span>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                    গড় স্কোর (Avg)
+                  </span>
+                  <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
+                    {resultStats.avgScore}%
+                  </span>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                    সর্বোচ্চ স্কোর (Top)
+                  </span>
+                  <span className="text-2xl font-black text-amber-500 mt-1 block">
+                    {resultStats.highestScore}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Filter and Search Controls */}
+              <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+                {/* Search Input */}
+                <div className="relative flex-1 max-w-md">
+                  <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={resultsSearchQuery}
+                    onChange={(e) => setResultsSearchQuery(e.target.value)}
+                    placeholder="শিক্ষার্থীর নাম, ইমেইল অথবা পরীক্ষা দিয়ে খুঁজুন..."
+                    className="w-full pl-9 pr-8 py-2.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
+                  />
+                  {resultsSearchQuery && (
+                    <button
+                      onClick={() => setResultsSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Controls Group */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Toggle: Only Latest Results vs All Attempts */}
+                  <button
+                    type="button"
+                    onClick={() => setOnlyLatestResults(prev => !prev)}
+                    className={`px-3 py-2 text-xs font-bold rounded-xl border flex items-center gap-1.5 transition-all cursor-pointer select-none shrink-0 ${
+                      onlyLatestResults
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 shadow-2xs'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                    }`}
+                    title={onlyLatestResults ? 'সকল প্রচেষ্টা দেখতে ক্লিক করুন' : 'শুধু সর্বশেষ ফলাফল দেখতে ক্লিক করুন'}
+                  >
+                    {onlyLatestResults ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>শুধু সর্বশেষ ফলাফল ({dedupedLatestResults.length})</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 text-slate-400" />
+                        <span>সকল প্রচেষ্টা ({allResults.length})</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Exam Filter Dropdown */}
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                    <Filter className="h-3.5 w-3.5" />
+                    <span>ফিল্টার:</span>
+                  </div>
+                  <select
+                    value={resultsExamFilter}
+                    onChange={(e) => setResultsExamFilter(e.target.value)}
+                    className="px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                  >
+                    <option value="all">সকল পরীক্ষা ({resultsPool.length})</option>
+                    {uniqueResultExams.map((title) => (
+                      <option key={title} value={title}>
+                        {title}
+                      </option>
+                    ))}
+                  </select>
+
+                  {(resultsExamFilter !== 'all' || resultsSearchQuery) && (
+                    <button
+                      onClick={() => {
+                        setResultsExamFilter('all');
+                        setResultsSearchQuery('');
+                      }}
+                      className="text-xs text-rose-500 hover:text-rose-600 dark:text-rose-400 font-semibold px-2 py-1 underline cursor-pointer"
+                    >
+                      রিসেট
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Informative notification when duplicates are filtered */}
+              {onlyLatestResults && duplicateAttemptsCount > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/50 rounded-xl text-xs text-emerald-800 dark:text-emerald-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>
+                      <strong>ডুপ্লিকেট মুক্ত:</strong> শিক্ষার্থীরা একই পরীক্ষা একাধিকবার দিলেও কেবল তাদের <strong>সর্বশেষ পরীক্ষার ফলাফল</strong> প্রদর্শিত হচ্ছে (পুরনো {duplicateAttemptsCount} টি প্রচেষ্টা ফিল্টার করা হয়েছে)।
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setOnlyLatestResults(false)}
+                    className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 underline hover:text-emerald-900 dark:hover:text-emerald-100 shrink-0 cursor-pointer self-start sm:self-auto"
+                  >
+                    সকল পুরনো প্রচেষ্টা দেখুন
+                  </button>
+                </div>
+              )}
+
               {/* Table of results taken */}
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-                <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                  <thead>
-                    <tr className="bg-slate-100/80 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold">
-                      <th className="p-3">শিক্ষার্থী</th>
-                      <th className="p-3">পরীক্ষার নাম</th>
-                      <th className="p-3 text-center">প্রাপ্ত নম্বর</th>
-                      <th className="p-3 text-center">সঠিক/ভুল</th>
-                      <th className="p-3 text-right">তারিখ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200/80 dark:divide-slate-700/50">
-                    {allResults.map((res) => {
-                      const percentage = Math.round((res.score / res.totalQuestions) * 100);
-                      return (
-                        <tr key={res.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                          <td className="p-3">
-                            <span className="font-semibold block text-slate-900 dark:text-white">{res.studentName}</span>
-                            <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono">{res.studentEmail}</span>
-                          </td>
-                          <td className="p-3 text-slate-800 dark:text-slate-200 font-medium max-w-[200px] truncate">{res.examTitle}</td>
-                          <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-400">{res.score} / {res.totalQuestions} ({percentage}%)</td>
-                          <td className="p-3 text-center">
-                            <span className="text-emerald-700 dark:text-emerald-400 font-bold">{res.correctAnswers}✓</span>
-                            <span className="text-slate-400 dark:text-slate-500 mx-1">|</span>
-                            <span className="text-rose-700 dark:text-rose-400 font-bold">{res.wrongAnswers}✗</span>
-                          </td>
-                          <td className="p-3 text-right text-slate-700 dark:text-slate-300 font-mono font-medium">{res.dateTaken}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 shadow-xs">
+                {filteredResults.length === 0 ? (
+                  <div className="p-12 text-center space-y-3">
+                    <AlertCircle className="h-8 w-8 text-slate-400 mx-auto" />
+                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                      কোনো ফলাফল পাওয়া যায়নি।
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {resultsSearchQuery || resultsExamFilter !== 'all'
+                        ? 'আপনার সার্চ বা ফিল্টার পরিবর্তন করে আবার চেষ্টা করুন।'
+                        : 'এখনও কোনো শিক্ষার্থী পরীক্ষা সম্পন্ন করেনি।'}
+                    </p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                    <thead>
+                      <tr className="bg-slate-100/90 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold">
+                        <th className="p-3.5 w-12 text-center">#</th>
+                        <th className="p-3.5">শিক্ষার্থী</th>
+                        <th className="p-3.5">ইমেইল / ইউজার আইডি</th>
+                        <th className="p-3.5">পরীক্ষার নাম</th>
+                        <th className="p-3.5 text-center">প্রাপ্ত নম্বর</th>
+                        <th className="p-3.5 text-center">সঠিক/ভুল/বাদ</th>
+                        <th className="p-3.5 text-right">তারিখ ও সময়</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200/80 dark:divide-slate-700/50">
+                      {filteredResults.map((res, index) => {
+                        const totalQ = res.totalQuestions > 0 ? res.totalQuestions : (res.totalMarks > 0 ? res.totalMarks : 1);
+                        const percentage = Math.round(((res.score || 0) / totalQ) * 100);
+
+                        // Find total attempts by this student on this specific exam
+                        const sEmail = (res.studentEmail || '').trim().toLowerCase();
+                        const sUid = (res.userId || '').trim().toLowerCase();
+                        const sId = (res.studentId || '').trim().toLowerCase();
+                        const sName = (res.studentName || '').trim().toLowerCase();
+                        let sKey = `id:${res.id || ''}`;
+                        if (sEmail && sEmail !== 'undefined') sKey = `email:${sEmail}`;
+                        else if (sUid && sUid !== 'guest' && sUid !== 'undefined') sKey = `user:${sUid}`;
+                        else if (sId && sId !== 'guest' && sId !== 'undefined') sKey = `student:${sId}`;
+                        else if (sName && sName !== 'ইউজার' && sName !== 'guest') sKey = `name:${sName}`;
+
+                        const eId = (res.examId || '').trim().toLowerCase();
+                        const eTitle = (res.examTitle || '').trim().toLowerCase();
+                        const eKey = (eId && eId !== 'undefined') ? `examId:${eId}` : (eTitle ? `title:${eTitle}` : 'exam');
+                        const cKey = `${sKey}:::${eKey}`;
+                        const attemptCount = examAttemptCounts.get(cKey) || 1;
+
+                        return (
+                          <tr key={res.id || index} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                            <td className="p-3.5 text-center font-mono text-slate-400 text-xs">
+                              {index + 1}
+                            </td>
+                            <td className="p-3.5 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-semibold text-slate-900 dark:text-white">
+                                  {res.studentName || 'অজ্ঞাত শিক্ষার্থী'}
+                                </span>
+                                {attemptCount > 1 && onlyLatestResults && (
+                                  <span
+                                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200/60 dark:border-sky-800/40 inline-flex items-center gap-0.5"
+                                    title={`এই শিক্ষার্থী এই পরীক্ষাটি মোট ${attemptCount} বার সম্পন্ন করেছেন। এখানে শুধু সর্বশেষ পরীক্ষার ফলাফল দেখানো হচ্ছে।`}
+                                  >
+                                    <Clock className="h-2.5 w-2.5" />
+                                    সর্বশেষ ({attemptCount} বার)
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3.5">
+                              {res.studentEmail ? (
+                                <span className="text-xs text-slate-600 dark:text-slate-300 font-mono font-medium block truncate max-w-[220px]" title={res.studentEmail}>
+                                  {res.studentEmail}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-400 dark:text-slate-500 italic">
+                                  ইমেইল নেই
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-slate-800 dark:text-slate-200 font-medium max-w-[240px]">
+                              <span className="line-clamp-2">{res.examTitle || 'মডেল টেস্ট'}</span>
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <span className="font-bold text-emerald-600 dark:text-emerald-400 block">
+                                {res.score} / {totalQ}
+                              </span>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-block mt-0.5 ${
+                                percentage >= 70
+                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                  : percentage >= 40
+                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+                                  : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400'
+                              }`}>
+                                {percentage}%
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <div className="inline-flex items-center gap-1.5 text-xs">
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold" title="সঠিক">
+                                  {res.correctAnswers || 0}✓
+                                </span>
+                                <span className="text-slate-300 dark:text-slate-600">|</span>
+                                <span className="text-rose-600 dark:text-rose-400 font-bold" title="ভুল">
+                                  {res.wrongAnswers || 0}✗
+                                </span>
+                                {(res.skippedAnswers || 0) > 0 && (
+                                  <>
+                                    <span className="text-slate-300 dark:text-slate-600">|</span>
+                                    <span className="text-slate-400 dark:text-slate-500 font-medium" title="উত্তর দেননি">
+                                      {res.skippedAnswers} বাদ
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3.5 text-right text-slate-600 dark:text-slate-300 font-mono text-xs">
+                              {res.dateTaken || res.submittedAt || '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           )}
@@ -2233,17 +2840,34 @@ export default function AdminView({
                   </div>
                 </div>
 
-                {/* Step 2: Add Single Questions Form */}
+                {/* Step 2: Add Single Questions Form or Batch Import */}
                 <form onSubmit={handleAddQuestionToDraft} className="space-y-4 pt-2 border-t border-slate-200/60 dark:border-slate-800">
-                  <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-800 pb-2.5">
                     <div className="flex items-center gap-2">
                       <span className="w-5 h-5 rounded-full bg-primary text-white text-[11px] font-extrabold flex items-center justify-center">২</span>
-                      <span>প্রশ্ন, ৪টি বিকল্প উত্তর, সঠিক উত্তর ও বিশদ ব্যাখ্যা যুক্তকরণ</span>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                        প্রশ্ন সংযোজন (ম্যানুয়াল টাইপ অথবা সরাসরি গুগল শিট ইমপোর্ট)
+                      </h4>
                     </div>
-                    <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
-                      যুক্তকৃত প্রশ্ন: {mbQuestionsList.length} টি
-                    </span>
-                  </h4>
+
+                    <div className="flex items-center gap-2">
+                      {/* Direct Google Sheets Batch Import Button */}
+                      <button
+                        type="button"
+                        onClick={handleOpenMbSheetModal}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm shadow-emerald-600/20 transition-all cursor-pointer"
+                        title="গুগল শিট থেকে একসাথে অনেক প্রশ্ন ইমপোর্ট করুন"
+                      >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        <span>গুগল শিট থেকে প্রশ্ন ইমপোর্ট</span>
+                        <span className="bg-emerald-800/60 text-[10px] px-1.5 py-0.5 rounded font-mono">NEW</span>
+                      </button>
+
+                      <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
+                        মোট প্রশ্ন: {mbQuestionsList.length} টি
+                      </span>
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                     <div className="md:col-span-9 space-y-1">
@@ -2533,6 +3157,294 @@ export default function AdminView({
                   </div>
                 )}
               </div>
+
+              {/* MODAL: Import Questions from Google Sheets for Ministry Question Bank */}
+              {showMbSheetModal && (
+                <div
+                  id="ministry-sheets-import-modal"
+                  className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn overflow-y-auto"
+                >
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col">
+                    {/* Modal Header */}
+                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                          <FileSpreadsheet className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <h3 className="font-extrabold text-base text-slate-800 dark:text-white">
+                            গুগল শীট থেকে সরাসরি প্রশ্ন ইমপোর্ট
+                          </h3>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            নির্দিষ্ট মন্ত্রণালয় ও শিরোনামের প্রশ্ন ব্যাংকে অনেক প্রশ্ন একসাথে যুক্ত করুন
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowMbSheetModal(false)}
+                        className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    {/* Modal Body */}
+                    <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                      {/* Google Auth Banner */}
+                      {!isGoogleConnected() ? (
+                        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-bold text-amber-800 dark:text-amber-200">
+                                ⚠️ গুগল অ্যাকাউন্ট এখনও কানেক্ট করা হয়নি
+                              </p>
+                              <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                                আপনার স্প্রেডশীট থেকে প্রশ্ন লোড করতে নিচের বাটনে ক্লিক করে গুগল অনুমোদন দিন।
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleMbConnectGoogle}
+                              disabled={mbImportConnecting}
+                              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition-all shrink-0 flex items-center gap-1.5 disabled:opacity-50"
+                            >
+                              {mbImportConnecting ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span>কানেক্টিং...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FileSpreadsheet className="h-4 w-4" />
+                                  <span>গুগল কানেক্ট করুন</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/40 rounded-xl flex items-center justify-between text-xs">
+                          <span className="text-emerald-800 dark:text-emerald-300 font-medium flex items-center gap-1.5">
+                            <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                            Google Sheets কানেকশন সক্রিয় আছে
+                          </span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                            OAuth Active
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Error Banner if any */}
+                      {mbImportError && (
+                        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-medium flex items-start gap-2">
+                          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-500" />
+                          <div className="space-y-1">
+                            <span>{mbImportError}</span>
+                            <div className="text-[10px] text-rose-600/80 dark:text-rose-400/80">
+                              পরামর্শ: কলাম হেডার যথাক্রমে questionText, optionA, optionB, optionC, optionD, correctAnswer, explanation আছে কিনা নিশ্চিত করুন।
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sheet ID & Tab Configuration */}
+                      <div className="space-y-3 bg-slate-50/50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                            <span>গুগল স্প্রেডশীট আইডি বা পূর্ণাঙ্গ লিংক (Spreadsheet ID or URL)</span>
+                            <span className="text-[11px] text-primary font-normal">কপি-পেস্ট করুন</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="যেমন: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms অথবা পূর্ণ লিংক"
+                            value={mbSpreadsheetId}
+                            onChange={(e) => setMbSpreadsheetId(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              শীটের ট্যাবের নাম (Sheet Tab Name)
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="ডিফল্ট: Question Bank অথবা Sheet1"
+                              value={mbSheetTabName}
+                              onChange={(e) => setMbSheetTabName(e.target.value)}
+                              className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              বিদ্যমান প্রশ্নের সাথে সংযোজন পদ্ধতি
+                            </label>
+                            <select
+                              value={mbAppendMode}
+                              onChange={(e) => setMbAppendMode(e.target.value as 'append' | 'replace')}
+                              className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:outline-none"
+                            >
+                              <option value="append">বিদ্যমান প্রশ্নের সাথে আরও যুক্ত করুন (Append)</option>
+                              <option value="replace">পূর্বের ড্রাফট মুছে নতুনগুলো দিয়ে প্রতিস্থাপন করুন (Replace)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Read & Validate Button */}
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={handleMbFetchQuestionsFromSheet}
+                            disabled={mbImportLoading || !mbSpreadsheetId.trim()}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            {mbImportLoading ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>গুগল শিট থেকে প্রশ্ন যাচাই ও পড়া হচ্ছে...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Search className="h-4 w-4" />
+                                <span>স্প্রেডশীট যাচাই ও প্রশ্নাবলী লোড করুন</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Ministry and Bank Title Assignment */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                            মন্ত্রণালয় / দপ্তর নির্বাচন বা টাইপ
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="যেমন: পররাষ্ট্র মন্ত্রণালয় বা ডাক ও টেলিযোগাযোগ বিভাগ"
+                            value={mbImportTargetMinistry}
+                            onChange={(e) => setMbImportTargetMinistry(e.target.value)}
+                            className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                            প্রশ্ন ব্যাংক শিরোনাম
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="যেমন: সহকারী পরিচালক ও কম্পিউটার অপারেটর পরীক্ষা"
+                            value={mbImportTargetTitle}
+                            onChange={(e) => setMbImportTargetTitle(e.target.value)}
+                            className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Sheet Format Guide */}
+                      <div className="p-3 bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 rounded-xl text-[11px] text-blue-800 dark:text-blue-300 space-y-1.5">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <span>📋 গুগল শিটের স্ট্যান্ডার্ড কলাম বিন্যাস:</span>
+                        </div>
+                        <p className="font-mono text-[10px] bg-white/60 dark:bg-slate-900/60 p-2 rounded border border-blue-200/50 dark:border-blue-800/40 overflow-x-auto whitespace-nowrap">
+                          questionText | optionA | optionB | optionC | optionD | correctAnswer (1-4 বা ক-ঘ) | explanation
+                        </p>
+                        <p className="text-[10px] text-blue-600 dark:text-blue-400">
+                          টিপ: অপশন ও সঠিক উত্তর যেকোনো ফরম্যাটে (ক, খ, গ, ঘ অথবা A, B, C, D অথবা 1, 2, 3, 4) সাপোর্ট করে।
+                        </p>
+                      </div>
+
+                      {/* Verification & Preview Box */}
+                      {mbParsedSheetData && (
+                        <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-slate-800 dark:text-white">যাচাইয়ের ফলাফল:</span>
+                              <span className="text-xs font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300 px-2.5 py-0.5 rounded-full">
+                                {mbParsedSheetData.validCount} টি প্রশ্ন প্রস্তুত
+                              </span>
+                              {mbParsedSheetData.errorCount > 0 && (
+                                <span className="text-xs font-bold text-amber-700 bg-amber-100 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 rounded-full">
+                                  {mbParsedSheetData.errorCount} টি ত্রুটিযুক্ত বাদ পড়েছে
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                              মোট সারি: {mbParsedSheetData.totalRows}
+                            </span>
+                          </div>
+
+                          {/* Quick Preview of First 3 Questions */}
+                          {mbParsedSheetData.validQuestions.length > 0 && (
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                              <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                                প্রথম কয়েকটি প্রশ্নের প্রিভিউ:
+                              </div>
+                              {mbParsedSheetData.validQuestions.slice(0, 3).map((vq, idx) => (
+                                <div
+                                  key={idx}
+                                  className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 text-xs space-y-1.5"
+                                >
+                                  <div className="font-bold text-slate-800 dark:text-white flex items-start gap-1.5">
+                                    <span className="text-primary">{idx + 1}.</span>
+                                    <span>{vq.question.text}</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-600 dark:text-slate-400">
+                                    {vq.question.options.map((opt, oIdx) => (
+                                      <span
+                                        key={oIdx}
+                                        className={`px-1.5 py-0.5 rounded ${
+                                          oIdx === vq.question.correctAnswer
+                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold'
+                                            : ''
+                                        }`}
+                                      >
+                                        {['ক', 'খ', 'গ', 'ঘ'][oIdx]}. {opt}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                              {mbParsedSheetData.validQuestions.length > 3 && (
+                                <p className="text-[10px] text-center text-slate-400">
+                                  ...এবং আরও {mbParsedSheetData.validQuestions.length - 3} টি প্রশ্ন
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Modal Footer */}
+                    <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowMbSheetModal(false)}
+                        className="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs transition-all"
+                      >
+                        বন্ধ করুন
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleApplyMbSheetQuestions}
+                        disabled={!mbParsedSheetData || mbParsedSheetData.validQuestions.length === 0}
+                        className="px-6 py-2.5 bg-primary hover:bg-primary-dark text-white font-extrabold rounded-xl text-xs shadow-lg shadow-primary/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>
+                          {mbParsedSheetData?.validQuestions.length || 0} টি প্রশ্ন প্রশ্ন ব্যাংকে যুক্ত করুন
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3288,6 +4200,11 @@ export default function AdminView({
           {/* TAB 10: STUDY MATERIALS & PDF RESOURCES */}
           {activeTab === 'study_materials' && (
             <AdminStudyMaterials currentUser={currentUser} />
+          )}
+
+          {/* TAB 11: MANUAL PAYMENT REQUESTS & METHODS */}
+          {activeTab === 'payments' && (
+            <AdminPaymentManagement currentUser={currentUser} />
           )}
 
         </div>

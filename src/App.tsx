@@ -13,10 +13,15 @@ import DashboardView from './components/DashboardView';
 import ExamView from './components/ExamView';
 import ResultView from './components/ResultView';
 import ProfileView from './components/ProfileView';
+import ReferralDashboard from './components/ReferralDashboard';
 import AdminView from './components/AdminView';
 import StudyMaterialsView from './components/StudyMaterialsView';
 import DailyPracticeView from './components/DailyPracticeView';
 import WrongQuestionView from './components/WrongQuestionView';
+import SubmissionSuccessAnimation from './components/SubmissionSuccessAnimation';
+import PrivacyPolicyView from './components/PrivacyPolicyView';
+import TermsAndConditionsView from './components/TermsAndConditionsView';
+import DeleteAccountView from './components/DeleteAccountView';
 
 import { Exam, ExamResult, MinistryQuestionBank, UserProfile, UpcomingExamSettings } from './types';
 import { INITIAL_EXAMS, INITIAL_MINISTRY_BANKS } from './data';
@@ -68,6 +73,9 @@ const pathToView = (pathname: string): string => {
   if (p === '/daily-practice' || p === '/dailypractice' || p === '/daily') return 'daily-practice';
   if (p === '/wrong-questions' || p === '/wrong-question' || p === '/wrongquestions') return 'wrong-questions';
   if (p === '/study-materials' || p === '/study-material' || p === '/materials' || p === '/studymaterials') return 'study-materials';
+  if (p === '/privacy-policy' || p === '/privacy') return 'privacy-policy';
+  if (p === '/terms-and-conditions' || p === '/terms') return 'terms-and-conditions';
+  if (p === '/delete-account' || p === '/deleteaccount') return 'delete-account';
   return 'home';
 };
 
@@ -93,6 +101,12 @@ const viewToPath = (view: string): string => {
       return '/wrong-questions';
     case 'study-materials':
       return '/study-materials';
+    case 'privacy-policy':
+      return '/privacy-policy';
+    case 'terms-and-conditions':
+      return '/terms-and-conditions';
+    case 'delete-account':
+      return '/delete-account';
     case 'home':
     default:
       return '/';
@@ -157,6 +171,10 @@ export default function App() {
   // Selection states
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
+
+  // Subtle Success Animation on Firestore Submission
+  const [showSubmitSuccess, setShowSubmitSuccess] = useState<boolean>(false);
+  const [submittedExamTitle, setSubmittedExamTitle] = useState<string>('');
 
   // Subscribe to Firebase Auth State Changes and real-time user document listener
   useEffect(() => {
@@ -781,6 +799,9 @@ export default function App() {
 
     try {
       await saveResultToFirestore(newResult);
+      // Subtle checkmark pop and celebration flare animation on successful Firestore save
+      setSubmittedExamTitle(newResult.examTitle || '');
+      setShowSubmitSuccess(true);
     } catch (err) {
       console.warn("Firestore save for results failed, running locally.", err);
     }
@@ -963,7 +984,7 @@ export default function App() {
         );
       case 'result':
         return selectedResult ? (
-          <ResultView result={selectedResult} setView={setView} user={user} />
+          <ResultView result={selectedResult} setView={setView} user={user} exams={exams} />
         ) : (
           <HomeView
             exams={exams}
@@ -985,6 +1006,54 @@ export default function App() {
           />
         ) : (
           <LoginView onLoginSuccess={handleLoginSuccess} setView={setView} />
+        );
+      case 'referral':
+        return user ? (
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>🎁 রেফারেল ও রিওয়ার্ড ড্যাশবোর্ড</span>
+                </h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  বন্ধুদের সাথে আপনার রেফারেল কোড শেয়ার করে আকর্ষণীয় বোনাস ও রিওয়ার্ড উপভোগ করুন।
+                </p>
+              </div>
+              <button
+                onClick={() => setView('home')}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+              >
+                ← হোমে ফিরুন
+              </button>
+            </div>
+            <ReferralDashboard user={user} />
+          </div>
+        ) : (
+          <div className="max-w-md mx-auto px-4 py-16 text-center space-y-6">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto text-3xl shadow-sm border border-amber-500/20">
+              🎁
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white">মেধা এক্সাম রেফারেল প্রোগ্রাম</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                আপনার রেফারেল কোড, অর্জিত পয়েন্ট এবং রেফারেল লিস্ট দেখার জন্য অনুগ্রহ করে লগইন করুন।
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setView('login')}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-sm shadow-md transition-all cursor-pointer"
+              >
+                লগইন করুন
+              </button>
+              <button
+                onClick={() => setView('register')}
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 font-bold text-sm transition-all cursor-pointer"
+              >
+                নতুন অ্যাকাউন্ট তৈরি করুন
+              </button>
+            </div>
+          </div>
         );
       case 'admin':
         return user?.role === 'admin' && user?.email?.toLowerCase() === 'medha@admin.com' ? (
@@ -1013,6 +1082,12 @@ export default function App() {
             upcomingExamSettings={upcomingExamSettings}
           />
         );
+      case 'privacy-policy':
+        return <PrivacyPolicyView setView={setView} />;
+      case 'terms-and-conditions':
+        return <TermsAndConditionsView setView={setView} />;
+      case 'delete-account':
+        return <DeleteAccountView user={user} setView={setView} onLogout={handleLogout} />;
       default:
         return (
           <HomeView
@@ -1029,6 +1104,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 theme-transition flex flex-col justify-between">
+      {/* Subtle Success Celebration Animation on Firestore Submit */}
+      <SubmissionSuccessAnimation
+        show={showSubmitSuccess}
+        onClose={() => setShowSubmitSuccess(false)}
+        examTitle={submittedExamTitle}
+      />
+
       {/* Dynamic Navigation */}
       <Navbar
         currentView={currentView}

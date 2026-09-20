@@ -39,7 +39,7 @@ import {
   BookMarked,
   Layers,
 } from 'lucide-react';
-import { Exam, LeaderboardUser, MinistryQuestionBank, Question, Review, SubjectStats, UserProfile, UpcomingExamSettings } from '../types';
+import { Exam, LeaderboardUser, MinistryQuestionBank, Question, Review, SubjectStats, UserProfile, UpcomingExamSettings, PaymentPlan } from '../types';
 import { SUBJECTS, MOCK_REVIEWS, MOCK_LEADERBOARD, INITIAL_STATS, INITIAL_MINISTRY_BANKS } from '../data';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -48,6 +48,8 @@ import { formatSafeDisplay, formatBengaliDateTimeSafe, toBengaliDigits, isSchedu
 import heroExamPrepBg from '../assets/images/hero_exam_prep_1786609165056.jpg';
 import DailyChallengeWidget from './DailyChallengeWidget';
 import { PlexusHeroBackground } from './PlexusHeroBackground';
+import ManualPaymentModal from './ManualPaymentModal';
+import UpcomingExamCountdown from './UpcomingExamCountdown';
 
 const FALLBACK_SUBJECT_QUESTIONS: Record<string, Question[]> = {
   'বাংলা': [
@@ -312,28 +314,31 @@ const formatBanglaDateTime = (dateTimeStr: string) => {
   }
 };
 
-const PREMIUM_PLANS = [
+const PREMIUM_PLANS: PaymentPlan[] = [
   {
     id: '7_days',
     title: '৭ দিনের প্যাকেজ',
     duration: '৭ দিন মেয়াদ',
-    price: 150,
-    priceFormatted: '৳ ১৫০',
+    durationDays: 7,
+    price: 90,
+    priceFormatted: '৳ ৯০',
     description: 'স্বল্পমেয়াদী রিভিশন ও দ্রুত প্রস্তুতির জন্য উপযুক্ত',
     badge: null,
     popular: false,
     features: [
       '৭ দিন সকল প্রিমিয়াম মডেল টেস্ট আনলক',
       'প্রতিটি প্রশ্নের বিস্তারিত সমাধান ও ব্যাখ্যা',
-      'ইনস্ট্যান্ট মেরিট পজিশন ও রেজাল্ট শিট'
+      'ইনস্ট্যান্ট মেরিট পজিশন ও রেজাল্ট শিট',
+      'স্টাডি ম্যাটেরিয়াল আনলক'
     ]
   },
   {
     id: '30_days',
     title: '৩০ দিনের প্যাকেজ',
     duration: '৩০ দিন মেয়াদ',
-    price: 480,
-    priceFormatted: '৳ ৪৮০',
+    durationDays: 30,
+    price: 340,
+    priceFormatted: '৳ ৩৪০',
     description: '১ মাসের নিবিড় প্রস্তুতি ও নিয়মিত কুইজ প্যাকেজ',
     badge: 'জনপ্রিয় (Popular)',
     popular: true,
@@ -341,15 +346,17 @@ const PREMIUM_PLANS = [
       '৩০ দিন সকল প্রিমিয়াম ও স্পেশাল পরীক্ষা আনলক',
       'বিষয়ভিত্তিক দুর্বলতা বিশ্লেষণ ও ট্র্যাকিং',
       'ভেরিফাইড পরীক্ষা সার্টিফিকেট',
-      'লাইভ কুইজ ও পার্সোনাল ড্যাশবোর্ড'
+      'লাইভ কুইজ ও পার্সোনাল ড্যাশবোর্ড',
+      'স্টাডি ম্যাটেরিয়াল আনলক'
     ]
   },
   {
     id: '6_months',
     title: '৬ মাসের প্যাকেজ',
     duration: '৬ মাস মেয়াদ',
-    price: 2444,
-    priceFormatted: '৳ ২৪৪৪',
+    durationDays: 180,
+    price: 1990,
+    priceFormatted: '৳ ১৯৯০',
     description: '৬ মাসের সম্পূর্ণ নিবিড় প্রস্তুতি ও সকল পরীক্ষার আনলিমিটেড অ্যাক্সেস',
     badge: 'সেরা ডিল (Best Value)',
     popular: false,
@@ -357,7 +364,8 @@ const PREMIUM_PLANS = [
       '৬ মাস সকল প্রিমিয়াম ও স্পেশাল মডেল টেস্ট আনলক',
       'প্রতিটি প্রশ্নের বিস্তারিত সমাধান ও ব্যাখ্যা',
       'বিষয়ভিত্তিক দুর্বলতা বিশ্লেষণ ও ট্র্যাকিং',
-      'বিসিএস ও ব্যাংক স্পেশাল এক্সক্লুসিভ গাইড'
+      'বিসিএস ও ব্যাংক স্পেশাল এক্সক্লুসিভ গাইড',
+      'স্টাডি ম্যাটেরিয়াল আনলক'
     ]
   }
 ];
@@ -494,16 +502,9 @@ export default function HomeView({
     setView('exam');
   };
 
-  // Simulated billing states
-  const [selectedPlan, setSelectedPlan] = useState(PREMIUM_PLANS[1]);
+  // Manual Mobile Banking billing states
+  const [selectedPlan, setSelectedPlan] = useState<PaymentPlan>(PREMIUM_PLANS[1]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'bkash' | 'nagad' | 'rocket' | 'card'>('bkash');
-  const [paymentPhone, setPaymentPhone] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [paymentProcessing, setPaymentProcessing] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [blockedExam, setBlockedExam] = useState<Exam | null>(null);
 
   // Practice modal state
@@ -621,172 +622,6 @@ export default function HomeView({
     }
     return list;
   }, [exams, practiceSubject, practiceSearch]);
-
-  const handleSimulatedPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPaymentProcessing(true);
-
-    const customerName = user?.name || user?.fullName || (user?.email ? user.email.split('@')[0] : 'শিক্ষার্থী');
-    const customerEmail = user?.email || 'student@medha.com';
-    const customerPhone = user?.phone || '01700000000';
-
-    const payload = {
-      amount: selectedPlan.price,
-      cus_name: customerName,
-      cus_email: customerEmail,
-      cus_phone: customerPhone,
-      customer_name: customerName,
-      customer_email: customerEmail,
-      customer_phone: customerPhone,
-      metadata: {
-        planId: selectedPlan.id,
-        planTitle: selectedPlan.title,
-        userId: user?.id || user?.uid || 'guest',
-      }
-    };
-
-    try {
-      // 1. Try server ZiniPay proxy endpoint
-      const res = await fetch('/api/payment/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      let data: any = {};
-      try {
-        data = await res.json();
-      } catch (err) {}
-
-      console.log("ZiniPay Payment response:", data);
-
-      const redirectUrl = data?.payment_url || data?.data?.payment_url || data?.data?.url || data?.url || data?.data?.redirect_url;
-
-      if (redirectUrl) {
-        window.location.href = redirectUrl;
-        return;
-      }
-
-      // 2. Direct fallback to ZiniPay API endpoint if proxy returns error
-      if (!res.ok) {
-        const directRes = await fetch('https://api.zinipay.com/v1/payment/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'zini-api-key': 'sandbox_test_8f4c9a2e7b31'
-          },
-          body: JSON.stringify({
-            amount: selectedPlan.price,
-            currency: 'BDT',
-            cus_name: customerName,
-            cus_email: customerEmail,
-            cus_phone: customerPhone,
-            cus_add1: 'Dhaka',
-            cus_city: 'Dhaka',
-            cus_country: 'Bangladesh',
-            customer_name: customerName,
-            customer_email: customerEmail,
-            customer_phone: customerPhone,
-            redirect_url: window.location.origin + '?payment=success',
-            cancel_url: window.location.origin + '?payment=cancel',
-            return_url: window.location.origin + '?payment=success',
-            webhook_url: window.location.origin + '/api/payment/webhook'
-          })
-        });
-
-        const directData = await directRes.json().catch(() => null);
-        console.log("Direct ZiniPay API Response:", directData);
-
-        const directUrl = directData?.data?.payment_url || directData?.payment_url || directData?.url || directData?.data?.url;
-        if (directUrl) {
-          window.location.href = directUrl;
-          return;
-        }
-      }
-
-      // Complete payment session and store isPremium, isPremiumDate, isPremiumExpiryDate
-      const durationDays = selectedPlan.id === '7_days' ? 7 : selectedPlan.id === '30_days' ? 30 : selectedPlan.id === '6_months' ? 180 : 365;
-      const now = new Date();
-      const expiry = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
-      const isPremiumDate = now.toISOString();
-      const isPremiumExpiryDate = expiry.toISOString();
-
-      setTimeout(async () => {
-        setPaymentProcessing(false);
-        setPaymentSuccess(true);
-        if (user && onUpdateUser) {
-          const updatedUser: UserProfile = {
-            ...user,
-            isPremium: true,
-            isPremiumDate,
-            isPremiumExpiryDate,
-            inPremiumDate: isPremiumDate,
-            inPremiumExpiryDate: isPremiumExpiryDate,
-          };
-
-          // Save to Firestore
-          const uid = user.id || user.uid;
-          if (uid) {
-            try {
-              await setDoc(doc(db, 'users', uid), {
-                isPremium: true,
-                isPremiumDate,
-                isPremiumExpiryDate,
-                inPremiumDate: isPremiumDate,
-                inPremiumExpiryDate: isPremiumExpiryDate,
-              }, { merge: true });
-            } catch (fsErr) {
-              console.warn("Error persisting premium dates to firestore:", fsErr);
-            }
-          }
-
-          onUpdateUser(updatedUser);
-        }
-      }, 1000);
-
-    } catch (err) {
-      console.warn("ZiniPay Payment call exception:", err);
-      const durationDays = selectedPlan.id === '7_days' ? 7 : selectedPlan.id === '30_days' ? 30 : selectedPlan.id === '6_months' ? 180 : 365;
-      const now = new Date();
-      const expiry = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
-      const isPremiumDate = now.toISOString();
-      const isPremiumExpiryDate = expiry.toISOString();
-
-      setTimeout(async () => {
-        setPaymentProcessing(false);
-        setPaymentSuccess(true);
-        if (user && onUpdateUser) {
-          const updatedUser: UserProfile = {
-            ...user,
-            isPremium: true,
-            isPremiumDate,
-            isPremiumExpiryDate,
-            inPremiumDate: isPremiumDate,
-            inPremiumExpiryDate: isPremiumExpiryDate,
-          };
-
-          const uid = user.id || user.uid;
-          if (uid) {
-            try {
-              await setDoc(doc(db, 'users', uid), {
-                isPremium: true,
-                isPremiumDate,
-                isPremiumExpiryDate,
-                inPremiumDate: isPremiumDate,
-                inPremiumExpiryDate: isPremiumExpiryDate,
-              }, { merge: true });
-            } catch (fsErr) {
-              console.warn("Error persisting premium dates to firestore:", fsErr);
-            }
-          }
-
-          onUpdateUser(updatedUser);
-        }
-      }, 1000);
-    }
-  };
 
   const getGreetingText = () => {
     const hour = new Date().getHours();
@@ -971,7 +806,7 @@ export default function HomeView({
               
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
                 {getGreetingText()}! <br />
-                ঘরে বসেই নিন <span className="animated-gradient-text font-black drop-shadow-sm">সেরা পরীক্ষার</span> প্রস্তুতি!
+                ঘরে বসেই নিন <span className="animated-gradient-text font-black drop-shadow-sm">চাকরির পরীক্ষার</span> প্রস্তুতি!
               </h1>
               
               <p className="text-base sm:text-lg text-slate-200/90 max-w-2xl font-normal leading-relaxed drop-shadow-sm">
@@ -1449,30 +1284,30 @@ export default function HomeView({
 
                         {/* প্রশ্ন সংখ্যা দেখানো যাবে না: user explicitly requested to hide question count from upcoming exams */}
 
-                        {/* এডমিন প্যানেল থেকে নির্দিষ্ট কোন তারিখ ও সময় না দেয়া থাকলে তারিখ শো করানো যাবে না। এডমিন নিজে লাইভের জন্য সুনির্দিষ্ট তারিখ ও সময় (startTime) সেট করলেই কেবল শুরু হওয়ার তারিখ দেখা যাবে */}
+                        {/* Real-time countdown timer that triggers when exam is in 'upcoming' status, showing hours/minutes until start */}
                         {(() => {
                           const rawStart = (item.startTime && item.startTime.trim() !== 'নির্ধারিত নেই') ? item.startTime.trim() : '';
                           const creationDate = ((item as any).dateCreated || '').trim();
                           const createdAt = ((item as any).createdAt || '').trim();
 
                           // Scheduled live time MUST be an explicit schedule with a specific time or distinct future timestamp set by admin.
-                          // It must not equal the creation date, dateCreated, or creation timestamp.
-                          if (!rawStart) return null;
-                          if (creationDate && (rawStart === creationDate || rawStart.startsWith(creationDate))) return null;
-                          if (createdAt && rawStart.startsWith(createdAt.substring(0, 10))) return null;
-                          
-                          // A valid admin-set schedule contains a specific time component ('T' or ':')
-                          if (!rawStart.includes('T') && !rawStart.includes(':')) return null;
+                          const hasExplicitSchedule = !!(rawStart &&
+                            !(creationDate && (rawStart === creationDate || rawStart.startsWith(creationDate))) &&
+                            !(createdAt && rawStart.startsWith(createdAt.substring(0, 10))) &&
+                            (rawStart.includes('T') || rawStart.includes(':')));
+
+                          const scheduleCandidate = hasExplicitSchedule
+                            ? rawStart
+                            : (rawStart && (rawStart.includes('T') || rawStart.includes(':')) ? rawStart : item.startTime);
+
+                          const formattedDate = scheduleCandidate ? formatBanglaDateTime(scheduleCandidate) : undefined;
 
                           return (
-                            <div className="p-2.5 bg-amber-100/80 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-300 flex items-center gap-1.5 font-medium leading-relaxed">
-                              <Calendar className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
-                              <span>
-                                শুরু হবে: <strong className="font-extrabold">
-                                  {formatBanglaDateTime(rawStart)}
-                                </strong>
-                              </span>
-                            </div>
+                            <UpcomingExamCountdown
+                              startTime={scheduleCandidate || item.startTime}
+                              examDate={item.examDate}
+                              formattedDateDisplay={formattedDate}
+                            />
                           );
                         })()}
                       </div>
@@ -1724,7 +1559,7 @@ export default function HomeView({
       </section>
 
       {/* Premium Membership & Pricing Section */}
-      <section id="premium-pricing" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="premium-pricing" data-section="packages" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-20">
         <div className="bg-gradient-to-br from-amber-500/10 via-amber-600/5 to-transparent dark:from-amber-950/20 dark:via-transparent dark:to-transparent rounded-3xl border border-amber-500/20 p-6 sm:p-10 relative overflow-hidden shadow-sm space-y-8">
           
           {/* Background Ambient Glow */}
@@ -1800,7 +1635,6 @@ export default function HomeView({
                           setView('login');
                         } else {
                           setBlockedExam(null);
-                          setPaymentSuccess(false);
                           setShowPaymentModal(true);
                         }
                       }}
@@ -1819,9 +1653,9 @@ export default function HomeView({
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-600 dark:text-slate-400 font-bold pt-2">
-            <span>🔒 নিরাপদ বিকাশ / নগদ / রকেট / কার্ড পেমেন্ট</span>
+            <span>🔒 বিকাশ / নগদ / রকেট / উপায় ম্যানুয়াল পেমেন্ট</span>
             <span>•</span>
-            <span>⚡ ইনস্ট্যান্ট সক্রিয়</span>
+            <span>⚡ এডমিন ভেরিফিকেশন ও প্রিমিয়াম অ্যাক্টিভেশন</span>
             <span>•</span>
             <span>📞 ২৪/৭ কাস্টমার সাপোর্ট</span>
           </div>
@@ -1946,179 +1780,25 @@ export default function HomeView({
 
       </section>
 
-      {/* Simulated Secure Payment Gateway Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md border border-slate-100 dark:border-slate-700 shadow-2xl overflow-hidden relative animate-in fade-in zoom-in-95 duration-200">
-            
-            {/* Header / Accent Bar */}
-            <div className={`h-2.5 w-full ${
-              paymentSuccess ? 'bg-emerald-500' :
-              selectedPaymentMethod === 'bkash' ? 'bg-[#D12053]' :
-              selectedPaymentMethod === 'nagad' ? 'bg-[#F26222]' :
-              selectedPaymentMethod === 'rocket' ? 'bg-[#8C3494]' : 'bg-primary'
-            }`}></div>
-
-            {/* Close Button */}
-            {!paymentProcessing && (
-              <button
-                onClick={() => {
-                  setShowPaymentModal(false);
-                  setBlockedExam(null);
-                }}
-                className="absolute top-5 right-5 p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            )}
-
-            <div className="p-6 sm:p-8 space-y-6">
-              
-              {paymentSuccess ? (
-                /* SUCCESS STATE SCREEN */
-                <div className="text-center space-y-5 py-4 animate-in fade-in duration-300">
-                  <div className="w-16 h-16 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20 shadow-lg shadow-emerald-500/10">
-                    <ShieldCheck className="h-10 w-10" />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">পেমেন্ট সফল হয়েছে!</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Transaction ID: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">TXN-{Math.floor(100000 + Math.random() * 900000)}</span></p>
-                  </div>
-
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-w-xs mx-auto">
-                    অভিনন্দন! আপনার প্রিমিয়াম মেম্বারশিপটি তাৎক্ষণিকভাবে সক্রিয় করা হয়েছে। এখন থেকে আপনি মেধার সকল এক্সক্লুসিভ পরীক্ষা ও ফিচার ব্যবহার করতে পারবেন।
-                  </p>
-
-                  <div className="pt-2">
-                    <button
-                      onClick={() => {
-                        setShowPaymentModal(false);
-                        if (blockedExam) {
-                          setSelectedExam(blockedExam);
-                          setView('exam');
-                          setBlockedExam(null);
-                        }
-                      }}
-                      className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
-                    >
-                      {blockedExam ? 'পরীক্ষায় অংশ নিন (Start Exam)' : 'ধন্যবাদ, শুরু করুন'}
-                      <ArrowRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* CHECKOUT STATE SCREEN */
-                <div className="space-y-5">
-                  <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-bold tracking-widest text-primary">নিরাপদ পেমেন্ট গেটওয়ে</span>
-                    <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">মেম্বারশিপ সাবস্ক্রিপশন সম্পন্ন করুন</h3>
-                    
-                    {blockedExam && (
-                      <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/40 rounded-xl text-xs text-amber-800 dark:text-amber-400 flex items-start gap-2">
-                        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <strong className="font-bold">পরীক্ষা আনলক করুন:</strong> "{blockedExam.title}" পরীক্ষাটি শুধুমাত্র প্রিমিয়াম মেম্বারদের জন্য প্রযোজ্য।
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Pricing Overview Row */}
-                  <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-150 dark:border-slate-800 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-slate-400 font-bold">নির্বাচিত প্যাকেজ:</p>
-                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200 font-sans">{selectedPlan.title} ({selectedPlan.duration})</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-slate-400 font-bold">পেমেন্ট পরিমাণ:</p>
-                      <p className="text-xl font-black text-amber-500">{selectedPlan.priceFormatted}</p>
-                    </div>
-                  </div>
-
-                  {/* Payment Method Selector */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">পেমেন্ট মাধ্যম নির্বাচন করুন:</span>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { id: 'bkash', label: 'বিকাশ', color: 'border-[#D12053] text-[#D12053] bg-[#D12053]/5' },
-                        { id: 'nagad', label: 'নগদ', color: 'border-[#F26222] text-[#F26222] bg-[#F26222]/5' },
-                        { id: 'rocket', label: 'রকেট', color: 'border-[#8C3494] text-[#8C3494] bg-[#8C3494]/5' },
-                        { id: 'card', label: 'কার্ড', logo: 'card', color: 'border-blue-500 text-blue-500 bg-blue-500/5' },
-                      ].map((pm) => {
-                        const isSelected = selectedPaymentMethod === pm.id;
-                        return (
-                          <button
-                            key={pm.id}
-                            type="button"
-                            onClick={() => setSelectedPaymentMethod(pm.id as any)}
-                            className={`p-2 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-all hover:scale-105 ${
-                              isSelected
-                                ? pm.color + ' ring-2 ring-primary/10'
-                                : 'border-slate-150 dark:border-slate-700 bg-white dark:bg-slate-800'
-                            }`}
-                          >
-                            {pm.logo === 'card' ? (
-                              <CreditCard className="h-5 w-5" />
-                            ) : (
-                              <div className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center overflow-hidden font-extrabold text-xs text-slate-800 border border-slate-200">
-                                {pm.label}
-                              </div>
-                            )}
-                            <span className="text-[10px] font-extrabold">{pm.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Simple Direct Gateway Checkout Info */}
-                  <form onSubmit={handleSimulatedPayment} className="space-y-4 pt-1">
-                    <div className="p-4 bg-slate-50 dark:bg-slate-900/80 rounded-2xl border border-slate-150 dark:border-slate-800 space-y-2 text-center">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] rounded-full">
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        <span>১০০% নিরাপদ ও এনক্রিপ্টেড পেমেন্ট</span>
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                        পেমেন্ট সম্পন্ন করার পর আপনার অ্যাকাউন্টটি তাৎক্ষণিকভাবে <strong className="text-amber-500 font-extrabold">প্রিমিয়াম মেম্বারশিপে</strong> উন্নীত হবে।
-                      </p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal pt-1 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-center gap-1.5">
-                        <span>⚡ ZiniPay গেটওয়ে API (Sandbox) কানেক্টেড</span>
-                      </p>
-                    </div>
-
-                    {/* Submit Button */}
-                    <button
-                      type="submit"
-                      disabled={paymentProcessing}
-                      className={`w-full py-3.5 text-white font-extrabold text-sm rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                        paymentProcessing
-                          ? 'bg-slate-400 dark:bg-slate-700 cursor-not-allowed shadow-none'
-                          : selectedPaymentMethod === 'bkash' ? 'bg-[#D12053] hover:bg-[#B11B45] shadow-[#D12053]/20' :
-                            selectedPaymentMethod === 'nagad' ? 'bg-[#F26222] hover:bg-[#D5501A] shadow-[#F26222]/20' :
-                            selectedPaymentMethod === 'rocket' ? 'bg-[#8C3494] hover:bg-[#73277A] shadow-[#8C3494]/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
-                      }`}
-                    >
-                      {paymentProcessing ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                          পেমেন্ট সম্পন্ন করা হচ্ছে...
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard className="h-4 w-4" />
-                          <span>{selectedPlan.priceFormatted} দিয়ে প্রিমিয়াম সদস্য হোন</span>
-                        </>
-                      )}
-                    </button>
-                  </form>
-                </div>
-              )}
-
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Manual Mobile Banking Payment Modal */}
+      <ManualPaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setBlockedExam(null);
+        }}
+        selectedPlan={selectedPlan}
+        user={user}
+        blockedExam={blockedExam}
+        onViewProfile={() => {
+          setView('profile');
+        }}
+        onExamUnlock={(exam) => {
+          setSelectedExam(exam);
+          setView('exam');
+          setBlockedExam(null);
+        }}
+      />
 
       {/* Subject Q&A & Practice Modal */}
       {practiceSubject && (

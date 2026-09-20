@@ -76,6 +76,10 @@ export default function UserStudyMaterials({ user, setView }: UserStudyMaterials
   };
 
   const handleDownload = (rec: MaterialAccessRecord) => {
+    if (!user) {
+      setView('login');
+      return;
+    }
     if (rec.accessType === 'premium' && !isUserPremium) {
       return;
     }
@@ -85,10 +89,15 @@ export default function UserStudyMaterials({ user, setView }: UserStudyMaterials
 
   const handleBecomePremium = () => {
     setView('home');
-    setTimeout(() => {
-      const el = document.getElementById('pricing') || document.getElementById('packages');
-      if (el) el.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    const scrollToPricing = () => {
+      const el =
+        document.getElementById('premium-pricing') ||
+        document.getElementById('pricing') ||
+        document.getElementById('packages');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    setTimeout(scrollToPricing, 80);
+    setTimeout(scrollToPricing, 300);
   };
 
   return (

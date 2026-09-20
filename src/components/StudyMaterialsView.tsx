@@ -190,6 +190,12 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
 
   // Handle PDF Download Click
   const handleDownload = (m: StudyMaterial) => {
+    // Require user login before downloading any file
+    if (!user) {
+      setView('login');
+      return;
+    }
+
     // If premium, ensure user has active premium status
     if (m.accessType === 'premium' && !isUserPremium) {
       return;
@@ -198,33 +204,32 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
     const downloadUrl = buildDriveDownloadUrl(m.driveFileId || m.driveUrl);
     window.open(downloadUrl, '_blank', 'noopener,noreferrer');
 
-    // Record user access history if logged in
-    if (user) {
-      recordMaterialAccess(user.id || user.uid || '', {
-        id: m.id,
-        title: m.title,
-        category: m.category,
-        accessType: m.accessType,
-        driveUrl: m.driveUrl,
-        driveFileId: m.driveFileId,
-      });
-    }
+    // Record user access history
+    recordMaterialAccess(user.id || user.uid || '', {
+      id: m.id,
+      title: m.title,
+      category: m.category,
+      accessType: m.accessType,
+      driveUrl: m.driveUrl,
+      driveFileId: m.driveFileId,
+    });
   };
 
   // Handle Become Premium click
   const handleBecomePremium = () => {
-    if (!user) {
-      setView('login');
-    } else {
-      setView('home');
-      // Scroll to packages/pricing section on homeview
-      setTimeout(() => {
-        const pricingEl = document.getElementById('pricing') || document.getElementById('packages');
-        if (pricingEl) {
-          pricingEl.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 100);
-    }
+    setView('home');
+    // Scroll to premium packages/pricing section on homeview
+    const scrollToPricing = () => {
+      const pricingEl =
+        document.getElementById('premium-pricing') ||
+        document.getElementById('pricing') ||
+        document.getElementById('packages');
+      if (pricingEl) {
+        pricingEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+    setTimeout(scrollToPricing, 80);
+    setTimeout(scrollToPricing, 300);
   };
 
   return (
@@ -460,7 +465,8 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
 
                       <button
                         onClick={() => handleDownload(m)}
-                        className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition-all shadow-xs shadow-primary/20 active:scale-[0.98]"
+                        title={!user ? 'ডাউনলোড করতে প্রথমে লগইন করুন' : 'ডাউনলোড করুন'}
+                        className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition-all shadow-xs shadow-primary/20 active:scale-[0.98] cursor-pointer"
                       >
                         <Download className="h-3.5 w-3.5" />
                         <span>ডাউনলোড</span>
@@ -474,14 +480,14 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
                         <span>প্রিমিয়াম কনটেন্ট</span>
                       </div>
                       <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
-                        এই PDFটি শুধুমাত্র Premium Members-এর জন্য।
+                        যেকোন একটি প্যাকেজ সাবস্কাইব করে ডাউনলোড করুন
                       </p>
                       <button
                         onClick={handleBecomePremium}
-                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-xs shadow-amber-500/20 active:scale-[0.98]"
+                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-xs shadow-amber-500/20 active:scale-[0.98] cursor-pointer"
                       >
                         <Crown className="h-3.5 w-3.5" />
-                        <span>প্রিমিয়াম মেম্বার হোন</span>
+                        <span>প্রিমিয়াম প্যাকেজ দেখুন</span>
                       </button>
                     </div>
                   )}
@@ -520,17 +526,23 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => handleDownload(previewMaterial)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all shadow-xs"
-                  title="ডাউনলোড করুন"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all shadow-xs cursor-pointer"
+                  title={!user ? 'ডাউনলোড করতে প্রথমে লগইন করুন' : 'ডাউনলোড করুন'}
                 >
                   <Download className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">ডাউনলোড</span>
                 </button>
 
                 <button
-                  onClick={() => window.open(buildDriveViewUrl(previewMaterial.driveFileId || previewMaterial.driveUrl), '_blank', 'noopener,noreferrer')}
-                  className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all"
-                  title="নতুন ট্যাবে খুলুন"
+                  onClick={() => {
+                    if (!user) {
+                      setView('login');
+                      return;
+                    }
+                    window.open(buildDriveViewUrl(previewMaterial.driveFileId || previewMaterial.driveUrl), '_blank', 'noopener,noreferrer');
+                  }}
+                  className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
+                  title={!user ? 'নতুন ট্যাবে দেখতে লগইন করুন' : 'নতুন ট্যাবে খুলুন'}
                 >
                   <ExternalLink className="h-4 w-4" />
                 </button>

@@ -86,12 +86,31 @@ export default function ExamView({ exam, user, onExamSubmit, setView }: ExamView
   };
 
   const currentQuestion = questionsList[currentIdx];
+  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSelectOption = (optionIndex: number) => {
     setAnswers((prev) => ({
       ...prev,
       [currentQuestion.id]: optionIndex,
     }));
+
+    // Automatically advance to the next question after a brief feedback delay (300ms)
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+    }
+    if (currentIdx < questionsList.length - 1) {
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        setCurrentIdx((prev) => Math.min(questionsList.length - 1, prev + 1));
+      }, 300);
+    }
   };
 
   // Submit and compile results
@@ -154,7 +173,16 @@ export default function ExamView({ exam, user, onExamSubmit, setView }: ExamView
       dateTaken: new Date().toLocaleDateString('bn-BD'),
       timeSpentSeconds: timeSpent,
       subjectPerformance: subjectPerformance,
+      questions: questionsList,
+      userAnswers: answers,
     };
+
+    // Client-side cache for question review resilience
+    try {
+      localStorage.setItem(`medha_exam_answers_${resultRecord.id}`, JSON.stringify(answers));
+      localStorage.setItem(`medha_exam_answers_${resultRecord.examId}`, JSON.stringify(answers));
+      localStorage.setItem(`medha_exam_questions_${resultRecord.examId}`, JSON.stringify(questionsList));
+    } catch (e) {}
 
     onExamSubmit(resultRecord);
 

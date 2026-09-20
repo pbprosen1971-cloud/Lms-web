@@ -138,34 +138,36 @@ export default function ReferralDashboard({ user }: ReferralDashboardProps) {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Referral Code Card */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 rounded-xl space-y-2">
+        <div className="group relative p-4 bg-slate-50 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-900 border border-slate-200/70 dark:border-slate-800 hover:border-primary/40 dark:hover:border-primary/40 rounded-xl space-y-2 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-md shadow-xs animate-in fade-in slide-in-from-bottom-2 duration-300">
           <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
             আপনার রেফারেল কোড
           </span>
           <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-xl font-black text-primary tracking-widest">
+            <span className="font-mono text-xl font-black text-primary tracking-widest group-hover:scale-105 origin-left transition-transform duration-200">
               {referralCode}
             </span>
             <button
               onClick={handleCopyCode}
-              className="p-1.5 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors"
+              className="p-1.5 hover:bg-primary/10 text-slate-600 dark:text-slate-300 hover:text-primary rounded-lg border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
               title="কোড কপি করুন"
             >
               {copiedCode ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
             </button>
           </div>
           {copiedCode && (
-            <span className="text-[10px] text-emerald-600 font-semibold block">কোড কপি হয়েছে!</span>
+            <span className="text-[10px] text-emerald-600 font-semibold block animate-in fade-in duration-150">কোড কপি হয়েছে!</span>
           )}
         </div>
 
         {/* Total Referrals Card */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 rounded-xl space-y-2">
+        <div className="group relative p-4 bg-slate-50 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-900 border border-slate-200/70 dark:border-slate-800 hover:border-emerald-500/40 dark:hover:border-emerald-500/40 rounded-xl space-y-2 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-md shadow-xs animate-in fade-in slide-in-from-bottom-2 duration-300 delay-75">
           <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
             মোট সফল রেফারেল
           </span>
-          <div className="flex items-center gap-2">
-            <Users className="h-6 w-6 text-emerald-500" />
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500/20 group-hover:scale-110 transition-all duration-300">
+              <Users className="h-5 w-5" />
+            </div>
             <span className="text-2xl font-black text-slate-900 dark:text-white">
               {totalReferrals}
             </span>
@@ -174,14 +176,16 @@ export default function ReferralDashboard({ user }: ReferralDashboardProps) {
         </div>
 
         {/* Community Status Card */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 rounded-xl space-y-2">
+        <div className="group relative p-4 bg-slate-50 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-900 border border-slate-200/70 dark:border-slate-800 hover:border-amber-500/40 dark:hover:border-amber-500/40 rounded-xl space-y-2 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-md shadow-xs animate-in fade-in slide-in-from-bottom-2 duration-300 delay-150">
           <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
             অ্যাম্বাসেডর ব্যাজ
           </span>
-          <div className="flex items-center gap-2">
-            <Award className="h-6 w-6 text-amber-500" />
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 group-hover:bg-amber-500/20 group-hover:rotate-12 group-hover:scale-110 transition-all duration-300">
+              <Award className="h-5 w-5" />
+            </div>
             <div>
-              <span className="text-sm font-bold text-slate-900 dark:text-white block">
+              <span className="text-sm font-bold text-slate-900 dark:text-white block group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
                 {totalReferrals >= 10 ? 'গোল্ড অ্যাম্বাসেডর' : totalReferrals >= 5 ? 'সিলভার অ্যাম্বাসেডর' : 'ব্রোঞ্জ লার্নার'}
               </span>
               <span className="text-[10px] text-slate-400">
