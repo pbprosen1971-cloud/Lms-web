@@ -38,6 +38,8 @@ import {
   RotateCcw,
   BookMarked,
   Layers,
+  Share2,
+  Copy,
 } from 'lucide-react';
 import { Exam, LeaderboardUser, MinistryQuestionBank, Question, Review, SubjectStats, UserProfile, UpcomingExamSettings, PaymentPlan } from '../types';
 import { motion } from 'motion/react';
@@ -513,6 +515,60 @@ export default function HomeView({
   const [selectedPlan, setSelectedPlan] = useState<PaymentPlan>(PREMIUM_PLANS[1]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [blockedExam, setBlockedExam] = useState<Exam | null>(null);
+
+  // Live Exam Share state
+  const [sharingExam, setSharingExam] = useState<Exam | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const getExamShareUrl = (exam: Exam): string => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/?examId=${encodeURIComponent(exam.id)}`;
+  };
+
+  const handleShareLiveExam = async (exam: Exam, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    const shareUrl = getExamShareUrl(exam);
+    const shareTitle = `${exam.title} - লাইভ পরীক্ষা | মেধা জব এক্সাম`;
+    const shareText = `মেধা জব পোর্টালে ${exam.subject} বিষয়ের লাইভ পরীক্ষা "${exam.title}" চলছে! এখনই অংশ নিন:`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch (err: any) {
+        // If user aborted/cancelled native share sheet, do not fallback to modal
+        if (err?.name === 'AbortError') return;
+      }
+    }
+    // Fallback or full share options modal
+    setSharingExam(exam);
+    setShareCopied(false);
+  };
+
+  const copyShareLink = async (url: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2500);
+    } catch (e) {
+      console.warn('Failed to copy link', e);
+    }
+  };
 
   // Practice modal state
   const [practiceSubject, setPracticeSubject] = useState<string | null>(null);
@@ -1080,6 +1136,7 @@ export default function HomeView({
                 {liveExams.map((exam, index) => (
                   <motion.div
                     key={exam.id}
+                    id={`live-exam-${exam.id}`}
                     initial={{ opacity: 0, y: 22 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-30px" }}
@@ -1088,7 +1145,7 @@ export default function HomeView({
                       delay: Math.min(index * 0.08, 0.32),
                       ease: [0.16, 1, 0.3, 1]
                     }}
-                    className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary/40 dark:hover:border-primary/40 transition-all duration-300 flex flex-col justify-between"
+                    className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary/40 dark:hover:border-primary/40 transition-all duration-300 flex flex-col justify-between scroll-mt-28"
                   >
                     {/* Exam Status Badge & Subject */}
                     <div className="p-6 pb-4 space-y-3 flex-grow animate-fade-in-up">
@@ -1142,17 +1199,29 @@ export default function HomeView({
                     </div>
 
                     {/* Exam Action Footer */}
-                    <div className="p-6 pt-3 pb-4 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-950/60 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                    <div className="p-6 pt-3 pb-4 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-950/60 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium truncate">
                         তৈরি হয়েছে: {formatSafeDisplay(exam.dateCreated, '—')}
                       </span>
-                      <button
-                        onClick={() => handleStartExam(exam)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 hover:shadow-primary/30 transform hover:-translate-y-0.5 transition-all duration-200"
-                      >
-                        অংশ নিন
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Share Button (Only for Live Exam) */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleShareLiveExam(exam, e)}
+                          title="লাইভ পরীক্ষা শেয়ার করুন বা লিংক কপি করুন"
+                          className="inline-flex items-center justify-center p-2 rounded-xl text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-emerald-400 bg-white hover:bg-emerald-50 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200/90 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 shadow-sm transition-all duration-200 active:scale-95"
+                          aria-label="শেয়ার করুন"
+                        >
+                          <Share2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleStartExam(exam)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 hover:shadow-primary/30 transform hover:-translate-y-0.5 transition-all duration-200"
+                        >
+                          অংশ নিন
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
@@ -2320,6 +2389,144 @@ export default function HomeView({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* 8. Live Exam Share Modal */}
+      {sharingExam && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+          onClick={() => setSharingExam(null)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/60 text-primary dark:text-emerald-400 rounded-2xl border border-emerald-100 dark:border-emerald-900/50">
+                  <Share2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-slate-100">
+                    লাইভ পরীক্ষা শেয়ার করুন
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    বন্ধুদের সাথে লিংকটি শেয়ার করুন
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSharingExam(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                aria-label="বন্ধ করুন"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Exam Details Card */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md capitalize">
+                  {sharingExam.subject}
+                </span>
+                <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded-full dark:bg-emerald-950/70 dark:text-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  চলমান লাইভ
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
+                {sharingExam.title}
+              </h4>
+            </div>
+
+            {/* Social Share Buttons */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                সোশ্যাল মিডিয়ায় সরাসরি শেয়ার
+              </span>
+              <div className="grid grid-cols-3 gap-2.5">
+                {/* WhatsApp */}
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`🔥 মেধা জব পোর্টালে লাইভ পরীক্ষা "${sharingExam.title}" চলছে! অংশ নিন:\n${getExamShareUrl(sharingExam)}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-emerald-50/80 hover:bg-emerald-100/80 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 border border-emerald-200/80 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs transition-all active:scale-95"
+                >
+                  <span className="text-base mb-1">💬</span>
+                  <span>হোয়াটসঅ্যাপ</span>
+                </a>
+
+                {/* Facebook */}
+                <a
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getExamShareUrl(sharingExam))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-blue-50/80 hover:bg-blue-100/80 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200/80 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 font-bold text-xs transition-all active:scale-95"
+                >
+                  <span className="text-base mb-1">📘</span>
+                  <span>ফেসবুক</span>
+                </a>
+
+                {/* Telegram */}
+                <a
+                  href={`https://t.me/share/url?url=${encodeURIComponent(getExamShareUrl(sharingExam))}&text=${encodeURIComponent(`🔥 মেধা জব পোর্টালে লাইভ পরীক্ষা "${sharingExam.title}" চলছে!`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-sky-50/80 hover:bg-sky-100/80 dark:bg-sky-950/40 dark:hover:bg-sky-900/50 border border-sky-200/80 dark:border-sky-800/60 text-sky-700 dark:text-sky-300 font-bold text-xs transition-all active:scale-95"
+                >
+                  <span className="text-base mb-1">✈️</span>
+                  <span>টেলিগ্রাম</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Copy Link Section */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                পরীক্ষার লিংক কপি করুন
+              </span>
+              <div className="flex items-center gap-2 p-1.5 pl-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80">
+                <span className="text-xs text-slate-700 dark:text-slate-300 truncate flex-1 font-mono select-all">
+                  {getExamShareUrl(sharingExam)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copyShareLink(getExamShareUrl(sharingExam))}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                    shareCopied
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-primary hover:bg-primary-dark text-white shadow-sm'
+                  }`}
+                >
+                  {shareCopied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      <span>কপি হয়েছে!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>কপি লিংক</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Footer Button */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setSharingExam(null)}
+                className="w-full py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
           </div>
         </div>
       )}

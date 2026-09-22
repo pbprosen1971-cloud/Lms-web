@@ -55,16 +55,16 @@ export const ModernNoticeTicker: React.FC<ModernNoticeTickerProps> = ({
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-50/95 via-teal-50/90 to-cyan-50/90 dark:from-slate-900/90 dark:via-slate-900/95 dark:to-slate-900/90 border border-emerald-300/80 dark:border-emerald-500/30 p-2 sm:p-2.5 shadow-xs hover:shadow-md transition-shadow group">
         <div className="flex items-center gap-2.5 sm:gap-3">
           
-          {/* Fixed Left Badge with Dynamic Modern Red & Green Styling */}
-          <div className="shrink-0 relative overflow-hidden flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 via-rose-500 to-emerald-600 text-white text-xs font-extrabold shadow-md shadow-rose-500/20 border border-white/20 select-none backdrop-blur-xs transition-all duration-300 hover:scale-[1.03] group/badge">
+          {/* Fixed Left Badge with Dynamic Modern Red & Green Styling (Compact on Mobile) */}
+          <div className="shrink-0 relative overflow-hidden flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl bg-gradient-to-r from-rose-600 via-rose-500 to-emerald-600 text-white text-[11px] sm:text-xs font-bold sm:font-extrabold shadow-sm sm:shadow-md shadow-rose-500/20 border border-white/20 select-none backdrop-blur-xs transition-all duration-300 hover:scale-[1.02] group/badge max-w-fit">
             {/* Dynamic animated glow sheen overlay */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full animate-[shimmer_2.5s_infinite]" />
             
-            <span className="relative flex h-2 w-2 shrink-0">
+            <span className="relative flex h-1.5 w-1.5 sm:h-2 sm:w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-90" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-300 ring-1 ring-white/60" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 sm:h-2 sm:w-2 bg-emerald-300 ring-1 ring-white/60" />
             </span>
-            <Megaphone className="h-3.5 w-3.5 shrink-0 text-amber-300 drop-shadow-xs transition-transform duration-300 group-hover/badge:rotate-12" />
+            <Megaphone className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-amber-300 drop-shadow-xs transition-transform duration-300 group-hover/badge:rotate-12" />
             <span className="relative z-10 tracking-tight whitespace-nowrap drop-shadow-xs">
               {notice.badgeText || 'বিজ্ঞপ্তি'}
             </span>

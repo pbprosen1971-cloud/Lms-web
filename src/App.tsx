@@ -463,7 +463,7 @@ export default function App() {
     return () => unsubscribeResults();
   }, []);
 
-  // ZiniPay Payment Return Redirect Listener
+  // Payment Return Redirect Listener
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('payment') === 'success') {
@@ -881,6 +881,14 @@ export default function App() {
       localStorage.setItem('pending_referral_code', ref.trim().toUpperCase());
     }
 
+    const examIdParam = searchParams.get('examId');
+    if (examIdParam && !selectedExam && exams.length > 0) {
+      const foundExam = exams.find(e => e.id === examIdParam);
+      if (foundExam) {
+        setSelectedExam(foundExam);
+      }
+    }
+
     const matchedView = pathToView(location.pathname);
 
     // Protected Route: /profile requires authenticated user
@@ -934,7 +942,7 @@ export default function App() {
     }
 
     setCurrentView(matchedView);
-  }, [location.pathname, location.search, user, selectedExam, selectedResult, navigate]);
+  }, [location.pathname, location.search, user, selectedExam, selectedResult, exams, navigate]);
 
   const setView = (nextView: string) => {
     setCurrentView(nextView);

@@ -317,4 +317,15 @@
   animation-play-state: paused;
 }
 
+/* Hide Netlify / Host injected badges if present */
+.netlify-badge,
+[data-netlify-badge],
+div[class*="netlify"],
+a[href*="netlify.com"][class*="badge"],
+a[href*="netlify.com"]:has(img[alt*="Netlify"]) {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 

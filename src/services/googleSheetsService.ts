@@ -393,7 +393,7 @@ export function formatPaymentsForSheet(payments: PaymentRecord[] = []): any[][] 
         'pay-sample-01',
         'student-demo-1',
         'student-demo-1',
-        'TRX-ZINI-982184',
+        'TRX-DEMO-982184',
         'bKash',
         249,
         'BDT',
