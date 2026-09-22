@@ -527,22 +527,32 @@ export async function getUpcomingExamById(examId: string): Promise<UpcomingExamD
 /**
  * Clear or Remove Upcoming Exam banner settings from Firestore
  */
-export async function clearUpcomingExamSettings(examIdToClear?: string): Promise<void> {
+export async function clearUpcomingExamSettings(examIdToClear?: string, examTitleToClear?: string): Promise<void> {
   try {
     const docRef = doc(db, 'siteSettings', 'upcomingExam');
-    if (examIdToClear) {
+    const cleanId = (examIdToClear || '').trim();
+    const cleanTitle = (examTitleToClear || '').trim().toLowerCase();
+
+    const isMatch = (it: any) => {
+      if (!it) return false;
+      if (cleanId && (it.examId === cleanId || it.id === cleanId)) return true;
+      if (cleanTitle && it.title && it.title.trim().toLowerCase() === cleanTitle) return true;
+      return false;
+    };
+
+    if (cleanId || cleanTitle) {
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const data = snap.data();
         let items: any[] = Array.isArray(data.items) ? [...data.items] : [];
         if (items.length > 0) {
-          items = items.filter(it => it.examId !== examIdToClear && it.id !== examIdToClear);
+          items = items.filter(it => !isMatch(it));
           if (items.length > 0) {
             const nextPrimary = items.find(it => it.isPublished !== false) || items[0];
             await setDoc(docRef, {
               title: nextPrimary.title,
               description: nextPrimary.description || '',
-              examId: nextPrimary.examId || '',
+              examId: nextPrimary.examId || nextPrimary.id || '',
               examDate: nextPrimary.examDate || '',
               startDate: nextPrimary.startDate || '',
               startTime: nextPrimary.startTime || '',
@@ -558,22 +568,24 @@ export async function clearUpcomingExamSettings(examIdToClear?: string): Promise
               lastUpdated: new Date().toISOString(),
               items: items,
             });
-            try {
-              await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${examIdToClear}`));
-            } catch (e) {}
+            if (cleanId) {
+              try {
+                await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${cleanId}`));
+              } catch (e) {}
+            }
             return;
           }
         }
-        if (data.examId && data.examId !== examIdToClear) {
+        if (data.examId && !isMatch(data)) {
           // It's referencing a different upcoming exam, keep it intact
           return;
         }
       }
     }
     await deleteDoc(docRef);
-    if (examIdToClear) {
+    if (cleanId) {
       try {
-        await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${examIdToClear}`));
+        await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${cleanId}`));
       } catch (e) {}
     }
     try {
@@ -649,27 +661,80 @@ export async function updateUpcomingExamInFirestore(
 }
 
 /**
- * Delete Upcoming Exam from /exam/{examId}, /Exam/{examId}, and its questions
+ * Delete Upcoming Exam from /exam, /Exam, /exams, /questions, and subcollections.
+ * Searches and removes by examId AND by title to ensure complete Firestore deletion.
  */
-export async function deleteUpcomingExamFromFirestore(examId: string): Promise<void> {
+export async function deleteUpcomingExamFromFirestore(examId: string, examTitle?: string): Promise<void> {
+  const cleanId = (examId || '').trim();
+  const cleanTitle = (examTitle || '').trim().toLowerCase();
+  const idsToDelete = new Set<string>();
+  if (cleanId) idsToDelete.add(cleanId);
+
+  const checkDoc = (docSnap: any) => {
+    const data = docSnap.data();
+    const docId = docSnap.id;
+    const docExamId = (data?.examId || data?.id || '').trim();
+    const docTitle = (data?.title || '').trim().toLowerCase();
+
+    if (
+      (cleanId && (docId === cleanId || docExamId === cleanId)) ||
+      (cleanTitle && docTitle === cleanTitle) ||
+      (cleanTitle && docTitle && (docTitle.includes(cleanTitle) || cleanTitle.includes(docTitle)))
+    ) {
+      idsToDelete.add(docId);
+      if (docExamId) idsToDelete.add(docExamId);
+    }
+  };
+
   try {
-    // 1. Delete /Exam/{examId}/questions subcollection
-    const subQSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
-    const subQDeletes = subQSnap.docs.map(d => deleteDoc(d.ref));
-    await Promise.all(subQDeletes);
+    const snap1 = await getDocs(collection(db, 'exam'));
+    snap1.forEach(checkDoc);
+  } catch (e) {}
 
-    // 2. Delete /Exam/{examId}
-    await deleteDoc(doc(db, 'Exam', examId));
+  try {
+    const snap2 = await getDocs(collection(db, 'Exam'));
+    snap2.forEach(checkDoc);
+  } catch (e) {}
 
-    // 3. Delete /exam/{examId}
-    await deleteDoc(doc(db, 'exam', examId));
+  try {
+    const snap3 = await getDocs(collection(db, 'exams'));
+    snap3.forEach(checkDoc);
+  } catch (e) {}
 
-    // 4. Delete legacy /exams/{examId} and /questions
-    await deleteExamFromFirestore(examId);
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `exam/${examId}`);
-    throw err;
+  // For every identified doc id, remove from /Exam (with subquestions), /exam, /exams, and /questions
+  for (const id of Array.from(idsToDelete)) {
+    try {
+      // 1. Delete /Exam/{id}/questions subcollection
+      const subQSnap = await getDocs(collection(db, 'Exam', id, 'questions'));
+      const subQDeletes = subQSnap.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(subQDeletes);
+    } catch (e) {}
+
+    try {
+      // 2. Delete /Exam/{id}
+      await deleteDoc(doc(db, 'Exam', id));
+    } catch (e) {}
+
+    try {
+      // 3. Delete /exam/{id}
+      await deleteDoc(doc(db, 'exam', id));
+    } catch (e) {}
+
+    try {
+      // 4. Delete legacy /exams/{id} and /questions
+      await deleteExamFromFirestore(id);
+    } catch (e) {}
+
+    try {
+      // 5. Delete individual siteSettings doc if exists
+      await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${id}`));
+    } catch (e) {}
   }
+
+  // Also clean up siteSettings/upcomingExam
+  try {
+    await deleteUpcomingExamFromSiteSettings(cleanId, examTitle);
+  } catch (e) {}
 }
 
 // ==========================================
@@ -1691,49 +1756,99 @@ export async function saveUpcomingExamSettings(settings: UpcomingExamSettings, u
 }
 
 // Delete an upcoming exam from siteSettings and associated collections
-export async function deleteUpcomingExamFromSiteSettings(examId: string): Promise<void> {
+export async function deleteUpcomingExamFromSiteSettings(examId: string, examTitle?: string): Promise<void> {
   const docRef = doc(db, 'siteSettings', 'upcomingExam');
   try {
+    const cleanId = (examId || '').trim();
+    const cleanTitle = (examTitle || '').trim().toLowerCase();
+
+    const isMatch = (it: any) => {
+      if (!it) return false;
+      const itId = (it.examId || it.id || '').trim();
+      const itTitle = (it.title || '').trim().toLowerCase();
+      if (cleanId && (itId === cleanId || cleanId === itId)) return true;
+      if (cleanTitle && itTitle === cleanTitle) return true;
+      if (cleanTitle && itTitle && (itTitle.includes(cleanTitle) || cleanTitle.includes(itTitle))) return true;
+      return false;
+    };
+
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const data = snap.data();
       let items: UpcomingExamSettings[] = Array.isArray(data.items) ? [...data.items] : [];
-      items = items.filter(it => it.examId !== examId && it.id !== examId);
-      if (items.length > 0) {
-        const nextPrimary = items.find(it => it.isPublished !== false) || items[0];
-        await setDoc(docRef, {
-          title: nextPrimary.title,
-          description: nextPrimary.description || '',
-          examId: nextPrimary.examId || '',
-          examDate: nextPrimary.examDate || '',
-          startDate: nextPrimary.startDate || '',
-          startTime: nextPrimary.startTime || '',
-          archiveTime: nextPrimary.archiveTime || '',
-          duration: nextPrimary.duration || 30,
-          durationMinutes: nextPrimary.durationMinutes || 30,
-          isPublished: nextPrimary.isPublished !== false,
-          subject: nextPrimary.subject || 'BCS',
-          totalQuestions: nextPrimary.totalQuestions || 0,
-          totalMarks: nextPrimary.totalMarks || 0,
-          isPremium: !!nextPrimary.isPremium,
-          updatedAt: serverTimestamp(),
-          lastUpdated: new Date().toISOString(),
-          items: items,
-        });
+
+      if (items.length === 0 && data.title) {
+        if (isMatch(data)) {
+          await deleteDoc(docRef);
+          try {
+            localStorage.removeItem('cached_upcoming_exam_settings');
+          } catch (e) {}
+        }
       } else {
-        await deleteDoc(docRef);
+        const initialCount = items.length;
+        items = items.filter(it => !isMatch(it));
+        const rootMatched = isMatch(data);
+
+        if (items.length > 0) {
+          const nextPrimary = items.find(it => it.isPublished !== false) || items[0];
+          const updatedPayload = {
+            title: nextPrimary.title,
+            description: nextPrimary.description || '',
+            examId: nextPrimary.examId || nextPrimary.id || '',
+            examDate: nextPrimary.examDate || '',
+            startDate: nextPrimary.startDate || '',
+            startTime: nextPrimary.startTime || '',
+            archiveTime: nextPrimary.archiveTime || '',
+            duration: nextPrimary.duration || 30,
+            durationMinutes: nextPrimary.durationMinutes || 30,
+            isPublished: nextPrimary.isPublished !== false,
+            subject: nextPrimary.subject || 'BCS',
+            totalQuestions: nextPrimary.totalQuestions || 0,
+            totalMarks: nextPrimary.totalMarks || 0,
+            isPremium: !!nextPrimary.isPremium,
+            updatedAt: serverTimestamp(),
+            lastUpdated: new Date().toISOString(),
+            items: items,
+          };
+          await setDoc(docRef, updatedPayload);
+          try {
+            localStorage.setItem('cached_upcoming_exam_settings', JSON.stringify(updatedPayload));
+          } catch (e) {}
+        } else if (initialCount > 0 || rootMatched) {
+          await deleteDoc(docRef);
+          try {
+            localStorage.removeItem('cached_upcoming_exam_settings');
+          } catch (e) {}
+        }
       }
     }
     // Delete individual doc from siteSettings
+    if (cleanId) {
+      try {
+        await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${cleanId}`));
+      } catch (e) {}
+    }
+    // Also scan siteSettings collection for any matching upcoming exam docs
     try {
-      await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${examId}`));
+      const siteSettingsSnap = await getDocs(collection(db, 'siteSettings'));
+      for (const sDoc of siteSettingsSnap.docs) {
+        if (sDoc.id.startsWith('upcomingExam_')) {
+          const sData = sDoc.data();
+          if (isMatch(sData) || sDoc.id === `upcomingExam_${cleanId}`) {
+            await deleteDoc(sDoc.ref);
+          }
+        }
+      }
     } catch (e) {}
+
     // Also delete from /exam, /Exam, /exams
-    try {
-      await deleteDoc(doc(db, 'exam', examId));
-      await deleteDoc(doc(db, 'Exam', examId));
-      await deleteDoc(doc(db, 'exams', examId));
-    } catch (e) {}
+    if (cleanId) {
+      try {
+        await deleteDoc(doc(db, 'exam', cleanId));
+        await deleteDoc(doc(db, 'Exam', cleanId));
+        await deleteDoc(doc(db, 'exams', cleanId));
+      } catch (e) {}
+    }
   } catch (err) {
     console.warn("Error deleting upcoming exam from siteSettings:", err);
   }

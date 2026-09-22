@@ -69,7 +69,7 @@ export const UpcomingExamCountdown: React.FC<UpcomingExamCountdownProps> = ({
           <Calendar className="h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-400" />
           <span>
             শুরু হবে: <strong className="font-extrabold text-slate-900 dark:text-white">
-              {formattedDateDisplay || 'শীঘ্রই নির্ধারিত সময়'}
+              {formattedDateDisplay || 'শীঘ্রই দময় নির্ধারিত হবে'}
             </strong>
           </span>
         </div>

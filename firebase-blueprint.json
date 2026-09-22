@@ -239,9 +239,46 @@
         "lastWrongAt": { "type": "string" }
       },
       "required": ["userId", "questionId", "status", "wrongCount"]
+    },
+    "notifications": {
+      "title": "notifications",
+      "description": "System and admin broadcast notifications for users",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "url": { "type": "string" },
+        "tag": { "type": "string" },
+        "sentBy": { "type": "string" },
+        "recipientCount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "body", "createdAt"]
+    },
+    "fcmTokens": {
+      "title": "fcmTokens",
+      "description": "FCM device tokens for web push notifications",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["token", "createdAt"]
     }
   },
   "firestore": {
+    "/notifications/{notificationId}": {
+      "schema": "notifications",
+      "description": "Broadcast notifications sent from admin to all users"
+    },
+    "/fcmTokens/{tokenId}": {
+      "schema": "fcmTokens",
+      "description": "User device registration tokens for push notifications"
+    },
     "/dailyPractice/{practiceId}": {
       "schema": "dailyPractice",
       "description": "Daily 10-MCQ practice sessions and completed results scoped to each user per day"

@@ -137,3 +137,6 @@ export function isScheduledLiveTimeReached(
 
   return Date.now() >= parsedMs;
 }
+
+export const formatBanglaDateTime = formatBengaliDateTimeSafe;
+

@@ -42,6 +42,7 @@ import {
   Printer,
   Loader2,
   Filter,
+  Bell,
 } from 'lucide-react';
 import {
   Exam,
@@ -94,6 +95,7 @@ import {
 } from '../lib/googleAuth';
 import AdminStudyMaterials from './AdminStudyMaterials';
 import AdminPaymentManagement from './AdminPaymentManagement';
+import AdminNotificationManager from './AdminNotificationManager';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -118,7 +120,7 @@ interface AdminViewProps {
   results: ExamResult[];
   onCreateExam: (newExam: Exam) => void;
   onUpdateExam?: (updatedExam: Exam) => void;
-  onDeleteExam?: (examId: string) => void;
+  onDeleteExam?: (examId: string, examTitle?: string) => void;
   ministryBanks?: MinistryQuestionBank[];
   onSaveMinistryBank?: (newBank: MinistryQuestionBank) => void;
   onDeleteMinistryBank?: (bankId: string) => void;
@@ -147,7 +149,7 @@ export default function AdminView({
   upcomingExamSettings,
   onSaveUpcomingExamSettings,
 }: AdminViewProps) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications'>('analytics');
 
   // Ministry Question Bank Admin Form State
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
@@ -622,6 +624,17 @@ export default function AdminView({
   const [settingErrorMsg, setSettingErrorMsg] = useState<string>('');
   const [lastSavedUpcomingExam, setLastSavedUpcomingExam] = useState<Exam | null>(null);
 
+  // Local state for toast notification and immediate UI deletion
+  const [adminToast, setAdminToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [locallyDeletedUpcomingIds, setLocallyDeletedUpcomingIds] = useState<Set<string>>(new Set());
+
+  const showAdminToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setAdminToast({ message, type });
+    setTimeout(() => {
+      setAdminToast(prev => (prev?.message === message ? null : prev));
+    }, 4500);
+  };
+
   // Combined multiple upcoming exams from siteSettings and exams collection
   const combinedUpcomingExams = useMemo(() => {
     const list: Array<{
@@ -641,6 +654,12 @@ export default function AdminView({
       questions?: Question[];
     }> = [];
 
+    const isLocallyDeleted = (id: string, title?: string) => {
+      if (locallyDeletedUpcomingIds.has(id)) return true;
+      if (title && locallyDeletedUpcomingIds.has(title.trim().toLowerCase())) return true;
+      return false;
+    };
+
     const seenIds = new Set<string>();
     const seenTitles = new Set<string>();
 
@@ -652,6 +671,10 @@ export default function AdminView({
       if (!item || !item.title) return;
       const tKey = item.title.trim().toLowerCase();
       const examId = item.examId || item.id || `upcoming-${tKey}`;
+
+      if (isLocallyDeleted(examId, item.title) || isLocallyDeleted(item.id || '', item.title)) {
+        return;
+      }
 
       const matchExam = exams.find(e => e.id === examId || e.title.trim().toLowerCase() === tKey);
       const qCount = matchExam?.questions?.length || matchExam?.totalQuestions || item.totalQuestions || 0;
@@ -678,6 +701,9 @@ export default function AdminView({
 
     exams.filter(e => e.status === 'upcoming').forEach(exam => {
       const tKey = (exam.title || '').trim().toLowerCase();
+      if (isLocallyDeleted(exam.id, exam.title)) {
+        return;
+      }
       if (!seenIds.has(exam.id) && !seenTitles.has(tKey)) {
         const qCount = exam.questions?.length || exam.totalQuestions || 0;
         list.push({
@@ -702,7 +728,7 @@ export default function AdminView({
     });
 
     return list;
-  }, [upcomingExamSettings, exams]);
+  }, [upcomingExamSettings, exams, locallyDeletedUpcomingIds]);
 
   const handleStartAddNewUpcoming = () => {
     setSettingExamId(`upcoming-exam-${Date.now()}`);
@@ -750,22 +776,75 @@ export default function AdminView({
     setSettingErrorMsg('');
   };
 
-  const handleDeleteUpcomingExamItem = async (examId: string, examTitle: string) => {
-    if (!window.confirm(`আপনি কি নিশ্চিত যে "${examTitle}" আপকামিং পরীক্ষাটি মুছে ফেলতে চান? এটি ডাটাবেজ থেকেও মুছে যাবে।`)) {
+  const handleDeleteUpcomingExamItem = async (examId: string, examTitle: string, itemObj?: any) => {
+    let confirmed = false;
+    try {
+      confirmed = window.confirm(`আপনি কি নিশ্চিত যে "${examTitle || 'এই'}" আপকামিং পরীক্ষাটি মুছে ফেলতে চান? এটি ডেটাবেজ থেকেও মুছে যাবে।`);
+    } catch (e) {
+      confirmed = true;
+    }
+    if (!confirmed) {
       return;
     }
+
+    const cleanTitle = (examTitle || '').trim().toLowerCase();
+
+    // Optimistically remove from UI immediately for seamless UX
+    setLocallyDeletedUpcomingIds(prev => {
+      const updated = new Set(prev);
+      if (examId) updated.add(examId);
+      if (itemObj?.id) updated.add(itemObj.id);
+      if (itemObj?.examId) updated.add(itemObj.examId);
+      if (cleanTitle) updated.add(cleanTitle);
+      return updated;
+    });
+
     try {
       setSettingSaving(true);
-      await deleteUpcomingExamFromSiteSettings(examId);
-      await deleteUpcomingExamFromFirestore(examId);
-      if (onDeleteExam) {
-        onDeleteExam(examId);
+
+      // Collect all candidate IDs for this exam
+      const targetIds = Array.from(new Set([
+        examId,
+        itemObj?.id,
+        itemObj?.examId,
+        ...(exams.filter(e => e.id === examId || (e.title && e.title.trim().toLowerCase() === cleanTitle)).map(e => e.id))
+      ].filter(Boolean) as string[]));
+
+      // 1. Delete from siteSettings/upcomingExam and any individual docs
+      await deleteUpcomingExamFromSiteSettings(examId, examTitle);
+      for (const tid of targetIds) {
+        if (tid !== examId) {
+          await deleteUpcomingExamFromSiteSettings(tid, examTitle);
+        }
       }
-      setSettingSuccessMsg(`"${examTitle}" পরীক্ষাটি সফলভাবে মুছে ফেলা হয়েছে।`);
+
+      // 2. Delete from Firestore collections (/exam, /Exam, /exams, questions)
+      await deleteUpcomingExamFromFirestore(examId, examTitle);
+      for (const tid of targetIds) {
+        if (tid !== examId) {
+          await deleteUpcomingExamFromFirestore(tid, examTitle);
+        }
+      }
+
+      // 3. Inform parent state
+      if (onDeleteExam) {
+        onDeleteExam(examId, examTitle);
+        for (const tid of targetIds) {
+          if (tid !== examId) {
+            onDeleteExam(tid, examTitle);
+          }
+        }
+      }
+
+      const successText = `"${examTitle}" আপকামিং পরীক্ষাটি সফলভাবে মুছে ফেলা হয়েছে।`;
+      setSettingSuccessMsg(successText);
+      showAdminToast(successText, 'success');
       setTimeout(() => setSettingSuccessMsg(''), 5000);
     } catch (err) {
-      console.error(err);
-      setSettingErrorMsg('পরীক্ষাটি মুছতে সমস্যা হয়েছে।');
+      console.error("Error deleting upcoming exam item:", err);
+      const errorText = `"${examTitle}" পরীক্ষাটি মুছতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।`;
+      setSettingErrorMsg(errorText);
+      showAdminToast(errorText, 'error');
     } finally {
       setSettingSaving(false);
     }
@@ -1135,15 +1214,21 @@ export default function AdminView({
 
   // Delete an upcoming exam permanently from Firestore
   const handleDeleteUpcomingExam = async (exam: Exam) => {
-    if (!window.confirm(`আপনি কি নিশ্চিত যে "${exam.title}" পরীক্ষাটি ফায়ারস্টোর ডেটাবেস থেকে স্থায়ীভাবে মুছে ফেলতে চান? এর সকল প্রশ্নও মুছে যাবে।`)) {
+    let confirmed = true;
+    try {
+      confirmed = window.confirm(`আপনি কি নিশ্চিত যে "${exam.title}" পরীক্ষাটি ফায়ারস্টোর ডেটাবেস থেকে স্থায়ীভাবে মুছে ফেলতে চান? এর সকল প্রশ্নও মুছে যাবে।`);
+    } catch (e) {
+      confirmed = true;
+    }
+    if (!confirmed) {
       return;
     }
 
     try {
-      await deleteUpcomingExamFromFirestore(exam.id);
-      await deleteUpcomingExamFromSiteSettings(exam.id);
+      await deleteUpcomingExamFromFirestore(exam.id, exam.title);
+      await deleteUpcomingExamFromSiteSettings(exam.id, exam.title);
       if (onDeleteExam) {
-        onDeleteExam(exam.id);
+        onDeleteExam(exam.id, exam.title);
       }
       setUpcomingSuccessMsg(`"${exam.title}" পরীক্ষাটি ফায়ারস্টোর থেকে সফলভাবে মুছে ফেলা হয়েছে!`);
       setTimeout(() => setUpcomingSuccessMsg(''), 5000);
@@ -1887,6 +1972,17 @@ export default function AdminView({
             }`}
           >
             <CreditCard className="h-4.5 w-4.5" /> 💳 পেমেন্ট ও মেম্বারশিপ
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('notifications'); setSearchQuery(''); }}
+            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+              activeTab === 'notifications'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
+            }`}
+          >
+            <Bell className="h-4.5 w-4.5" /> 📢 পুশ নোটিফিকেশন ও নোটিশ
           </button>
 
           <button
@@ -3868,10 +3964,12 @@ export default function AdminView({
                                     {/* Delete Button */}
                                     <button
                                       type="button"
-                                      onClick={() => handleDeleteUpcomingExamItem(examKey, item.title)}
-                                      className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-800 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                      id={`delete-upcoming-exam-btn-${examKey}`}
+                                      onClick={() => handleDeleteUpcomingExamItem(examKey, item.title, item)}
+                                      className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white dark:hover:bg-rose-600 dark:hover:text-white text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-800 hover:border-rose-600 flex items-center justify-center gap-1.5 transition-all duration-200 shadow-sm hover:shadow active:scale-95 cursor-pointer group"
+                                      title="আপকামিং পরীক্ষা মুছে ফেলুন"
                                     >
-                                      <Trash2 className="h-3 w-3" />
+                                      <Trash2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 group-hover:text-white transition-colors" />
                                       <span>মুছুন</span>
                                     </button>
                                   </div>
@@ -4207,9 +4305,42 @@ export default function AdminView({
             <AdminPaymentManagement currentUser={currentUser} />
           )}
 
+          {/* TAB 12: PUSH NOTIFICATIONS & HOME BANNER NOTICE */}
+          {activeTab === 'notifications' && (
+            <AdminNotificationManager currentUser={currentUser} />
+          )}
+
         </div>
 
       </div>
+
+      {/* Floating Admin Toast Notification */}
+      {adminToast && (
+        <div
+          id="admin-toast-alert"
+          role="alert"
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border text-xs sm:text-sm font-bold backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-bottom-5 max-w-md ${
+            adminToast.type === 'error'
+              ? 'bg-rose-600/95 text-white border-rose-700 shadow-rose-600/20'
+              : 'bg-emerald-600/95 text-white border-emerald-700 shadow-emerald-600/20'
+          }`}
+        >
+          {adminToast.type === 'error' ? (
+            <AlertCircle className="h-5 w-5 flex-shrink-0 text-white" />
+          ) : (
+            <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-white" />
+          )}
+          <span className="flex-1 leading-snug">{adminToast.message}</span>
+          <button
+            type="button"
+            onClick={() => setAdminToast(null)}
+            className="p-1 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-colors cursor-pointer"
+            title="বন্ধ করুন"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
     </div>
   );

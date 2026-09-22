@@ -3,11 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Moon, Sun, Menu, X, LogOut, User, LayoutDashboard, Settings } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Moon, Sun, Menu, X, LogOut, User, LayoutDashboard, Settings, Bell } from 'lucide-react';
 import { UserProfile } from '../types';
 import MedhaLogo from './MedhaLogo';
 import Tooltip from './Tooltip';
+import NotificationModal from './NotificationModal';
+import { subscribeToNotifications } from '../services/notificationService';
 
 interface NavbarProps {
   currentView: string;
@@ -27,6 +29,15 @@ export default function Navbar({
   toggleDarkMode,
 }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
+  const [notifCount, setNotifCount] = useState<number>(0);
+
+  useEffect(() => {
+    const unsub = subscribeToNotifications((list) => {
+      setNotifCount(list.length);
+    });
+    return () => unsub();
+  }, []);
 
   const navItems = [
     { label: 'হোম', view: 'home', path: '/', href: '/' },
@@ -55,7 +66,7 @@ export default function Navbar({
                 মেধা এক্সাম
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                Student Exam Portal
+                Job Exam Portal
               </span>
             </div>
           </div>
@@ -74,28 +85,40 @@ export default function Navbar({
                   }}
                   className={`relative px-3.5 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer group flex items-center justify-center ${
                     isActive
-                      ? 'bg-primary/10 text-primary dark:bg-primary/20 font-semibold'
+                      ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-400 font-semibold shadow-xs shadow-primary/10'
                       : 'text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-emerald-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
                   }`}
                 >
-                  <span className="relative z-10 transition-colors duration-200 group-hover:text-primary dark:group-hover:text-emerald-400">
+                  {/* Span 1: Navigation Text with conditional active color */}
+                  <span
+                    className={`relative z-10 transition-colors duration-200 ${
+                      isActive
+                        ? 'text-primary dark:text-emerald-400 font-bold'
+                        : 'group-hover:text-primary dark:group-hover:text-emerald-400'
+                    }`}
+                  >
                     {item.label}
                   </span>
-                  {/* Subtle bottom border transition */}
+
+                  {/* Span 2: Subtle bottom underline transition */}
                   <span
-                    className={`absolute bottom-0.5 left-3 right-3 h-[2px] rounded-full transition-all duration-300 ease-out ${
+                    className={`absolute bottom-0.5 left-2.5 right-2.5 h-[2.5px] rounded-full transition-all duration-300 ease-out ${
                       isActive
-                        ? 'bg-primary dark:bg-emerald-400 scale-x-100 opacity-100 shadow-xs shadow-primary/30'
-                        : 'bg-primary/60 dark:bg-emerald-400/60 scale-x-0 group-hover:scale-x-100 opacity-0 group-hover:opacity-80 origin-center'
+                        ? 'bg-gradient-to-r from-emerald-500 via-primary to-teal-500 dark:from-emerald-400 dark:via-emerald-300 dark:to-teal-400 scale-x-100 opacity-100 shadow-sm shadow-emerald-500/40'
+                        : 'bg-primary/50 dark:bg-emerald-400/50 scale-x-0 group-hover:scale-x-100 opacity-0 group-hover:opacity-75 origin-center'
                     }`}
+                    aria-hidden="true"
                   />
-                  {/* Small subtle colored indicator dot beneath active link */}
-                  {isActive && (
-                    <span
-                      className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-primary dark:bg-emerald-400 shadow-xs shadow-primary/60 animate-in fade-in zoom-in-75 duration-200"
-                      aria-hidden="true"
-                    />
-                  )}
+
+                  {/* Span 3: Distinct active indicator badge/pill beneath active link */}
+                  <span
+                    className={`absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 rounded-full transition-all duration-300 ease-out ${
+                      isActive
+                        ? 'w-3 bg-gradient-to-r from-emerald-500 to-teal-500 dark:from-emerald-400 dark:to-teal-300 shadow-md shadow-emerald-500/60 opacity-100 scale-100'
+                        : 'w-0 bg-transparent opacity-0 scale-50'
+                    }`}
+                    aria-hidden="true"
+                  />
                 </a>
               );
             })}
@@ -103,6 +126,22 @@ export default function Navbar({
 
           {/* User Controls and Theme Switcher */}
           <div className="hidden md:flex items-center space-x-3">
+            {/* Notification Bell Button */}
+            <Tooltip content="নোটিফিকেশন সেন্টার (Notifications)" position="bottom">
+              <button
+                onClick={() => setIsNotifModalOpen(true)}
+                className="relative p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 transition-all duration-200 border border-slate-200/80 dark:border-slate-700/80 hover:border-primary/40 shadow-xs active:scale-95 group"
+                aria-label="Notifications"
+              >
+                <Bell className="h-4 w-4 group-hover:text-primary transition-colors" />
+                {notifCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-xs animate-pulse">
+                    {notifCount > 9 ? '9+' : notifCount}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
+
             {/* Dark Mode / Light Mode Toggle Button */}
             <Tooltip
               content={darkMode ? 'ডে মোড (Theme Toggle)' : 'নাইট মোড (Theme Toggle)'}
@@ -197,6 +236,18 @@ export default function Navbar({
           {/* Mobile Menu Toggle Button */}
           <div className="flex md:hidden items-center space-x-2">
             <button
+              onClick={() => setIsNotifModalOpen(true)}
+              aria-label="Notifications"
+              className="relative p-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+            >
+              <Bell className="h-4 w-4" />
+              {notifCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white">
+                  {notifCount > 9 ? '9+' : notifCount}
+                </span>
+              )}
+            </button>
+            <button
               onClick={toggleDarkMode}
               className="p-2 rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
             >
@@ -228,14 +279,19 @@ export default function Navbar({
                   }}
                   className={`flex items-center justify-between w-full text-left px-3.5 py-2.5 rounded-xl text-base font-medium cursor-pointer transition-all duration-200 ${
                     isActive
-                      ? 'bg-primary/10 text-primary dark:bg-primary/20 font-bold border-l-4 border-primary pl-3'
+                      ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-400 font-bold border-l-4 border-primary dark:border-emerald-400 pl-3'
                       : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                   }`}
                 >
-                  <span>{item.label}</span>
-                  {isActive && (
-                    <span className="w-2 h-2 rounded-full bg-primary dark:bg-emerald-400 shadow-sm shadow-primary/50" />
-                  )}
+                  <span className={isActive ? 'text-primary dark:text-emerald-400 font-bold' : ''}>{item.label}</span>
+                  <span
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      isActive
+                        ? 'w-2 bg-gradient-to-r from-emerald-500 to-teal-500 dark:from-emerald-400 dark:to-teal-300 shadow-sm shadow-emerald-500/50 opacity-100'
+                        : 'w-0 opacity-0'
+                    }`}
+                    aria-hidden="true"
+                  />
                 </a>
               );
             })}
@@ -329,6 +385,14 @@ export default function Navbar({
           </div>
         </div>
       )}
+
+      {/* Global Push Notification Center Modal */}
+      <NotificationModal
+        isOpen={isNotifModalOpen}
+        onClose={() => setIsNotifModalOpen(false)}
+        currentUser={user}
+        onNavigate={setView}
+      />
     </nav>
   );
 }

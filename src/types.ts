@@ -356,6 +356,8 @@ export interface PaymentPlan {
   durationDays: number;
   price: number;
   priceFormatted: string;
+  originalPrice?: number;
+  originalPriceFormatted?: string;
   description: string;
   badge?: string | null;
   popular?: boolean;
@@ -384,5 +386,27 @@ export interface PaymentRequest {
   rejectedAt?: string;
   rejectedBy?: string;
 }
+
+export interface BannerNoticeSettings {
+  enabled: boolean;
+  badgeText: string; // e.g. '📢 বিশেষ বিজ্ঞপ্তি'
+  text: string; // The scrolling announcement text
+  linkUrl?: string; // Optional target link
+  speed?: 'slow' | 'normal' | 'fast';
+  updatedAt?: string;
+}
+
+export interface BroadcastNotification {
+  id?: string;
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+  icon?: string;
+  sentBy?: string;
+  recipientCount?: number;
+  createdAt: string;
+}
+
 
 

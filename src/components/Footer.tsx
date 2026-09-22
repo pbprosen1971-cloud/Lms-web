@@ -270,6 +270,9 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
                 <button onClick={() => setView('login')} className="hover:text-primary transition-colors duration-200">লগইন / রেজিস্টার</button>
               </li>
               <li>
+                <button onClick={() => setView('faq')} className="hover:text-emerald-400 text-slate-300 font-medium transition-colors duration-200">❓ সাধারণ প্রশ্নোত্তর (FAQ)</button>
+              </li>
+              <li>
                 <button onClick={() => setView('privacy-policy')} className="hover:text-primary transition-colors duration-200">🔒 Privacy Policy</button>
               </li>
               <li>

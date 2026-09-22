@@ -1129,6 +1129,107 @@ async function startServer() {
     res.json({ received: true });
   });
 
+  // ==========================================
+  // PUSH NOTIFICATION BROADCAST DISPATCHER
+  // ==========================================
+  app.get("/api/notification-diagnostics", (_req, res) => {
+    const hasServerKey = Boolean(process.env.FCM_SERVER_KEY && process.env.FCM_SERVER_KEY.trim().length > 10);
+    return res.json({
+      success: true,
+      fcmConfigured: hasServerKey,
+      projectId: "medha-exam",
+      messagingSenderId: "580902736257",
+      mode: hasServerKey ? "full_fcm_push" : "firestore_realtime_broadcast",
+      message: hasServerKey 
+        ? "Firebase Cloud Messaging Server Key সক্রিয় রয়েছে। ব্যাকগ্রাউন্ড পুশ সরাসরি Google সার্ভার দিয়ে পাঠানো যাবে।"
+        : "রিয়েল-টাইম পুশ ব্রডকাস্ট সক্রিয় রয়েছে। অফলাইন/ক্লোজড-ব্রাউজার পুশের জন্য FCM_SERVER_KEY প্রয়োজন।"
+    });
+  });
+
+  app.post("/api/send-notification", async (req, res) => {
+    try {
+      const { title, body, url, tag, tokens = [], serverKey } = req.body;
+      if (!title || !body) {
+        return res.status(400).json({ success: false, message: "Title and body are required." });
+      }
+
+      const fcmKey = (process.env.FCM_SERVER_KEY || serverKey || "").trim();
+      const tokenList: string[] = Array.isArray(tokens) 
+        ? tokens.filter((t): t is string => typeof t === "string" && t.trim().length > 10) 
+        : [];
+
+      let deliveredToTokens = 0;
+      let failedTokens = 0;
+      let fcmStatusDetails = "";
+
+      console.log(`[Notification Broadcast] Title: "${title}" | Recipients: ${tokenList.length} devices | ServerKey: ${fcmKey ? 'Present' : 'Not Set'}`);
+
+      // If FCM Server Key is configured and there are tokens, dispatch to Google FCM endpoint
+      if (fcmKey && tokenList.length > 0) {
+        // Batch in groups of 500 (FCM limit is 1000 per request)
+        for (let i = 0; i < tokenList.length; i += 500) {
+          const batch = tokenList.slice(i, i + 500);
+          try {
+            const fcmResponse = await fetch("https://fcm.googleapis.com/fcm/send", {
+              method: "POST",
+              headers: {
+                "Authorization": `key=${fcmKey}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                registration_ids: batch,
+                notification: {
+                  title,
+                  body,
+                  icon: "/logo.svg",
+                  badge: "/logo.svg",
+                  click_action: url || "/"
+                },
+                data: {
+                  title,
+                  body,
+                  url: url || "/",
+                  tag: tag || "general"
+                },
+                priority: "high"
+              })
+            });
+
+            if (fcmResponse.ok) {
+              const fcmData = await fcmResponse.json();
+              deliveredToTokens += fcmData.success || 0;
+              failedTokens += fcmData.failure || 0;
+              console.log(`[FCM Response] Batch ${Math.floor(i / 500) + 1}: Success=${fcmData.success}, Failure=${fcmData.failure}`);
+            } else {
+              const errText = await fcmResponse.text();
+              console.warn(`[FCM HTTP Error] Status ${fcmResponse.status}:`, errText);
+              fcmStatusDetails = `FCM Error HTTP ${fcmResponse.status}`;
+            }
+          } catch (fetchErr: any) {
+            console.warn("[FCM Network Error]:", fetchErr?.message);
+            fcmStatusDetails = fetchErr?.message || "Network Error";
+          }
+        }
+      }
+
+      return res.json({
+        success: true,
+        fcmConfigured: Boolean(fcmKey),
+        totalTokens: tokenList.length,
+        deliveredToTokens,
+        failedTokens,
+        fcmStatusDetails,
+        message: fcmKey 
+          ? `সফলভাবে ${deliveredToTokens}টি ডিভাইসে পুশ নোটিফিকেশন পৌঁছে দেওয়া হয়েছে।`
+          : `নোটিফিকেশন ডাটাবেজে সংরক্ষিত এবং সকল সক্রিয় ডিভাইসে রিয়েল-টাইমে ব্রডকাস্ট হয়েছে।`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err: any) {
+      console.warn("Notification send error in backend:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Failed to dispatch notification" });
+    }
+  });
+
   // Serve public assets directory statically
   app.use(express.static(path.join(process.cwd(), "public")));
 

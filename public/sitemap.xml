@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+
+  <!-- Home Page (Job Exam Portal) -->
+  <url>
+    <loc>https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Online Exams & Model Tests -->
+  <url>
+    <loc>https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/exam</loc>
+    <changefreq>hourly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Exam Results & Merit List -->
+  <url>
+    <loc>https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/result</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Daily Practice & Questions -->
+  <url>
+    <loc>https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/daily-practice</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Study Materials & PDF Question Bank -->
+  <url>
+    <loc>https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/study-materials</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- FAQ & Guidelines -->
+  <url>
+    <loc>https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/faq</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- Terms and Conditions -->
+  <url>
+    <loc>https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/terms-and-conditions</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+  <!-- Privacy Policy -->
+  <url>
+    <loc>https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/privacy-policy</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+</urlset>

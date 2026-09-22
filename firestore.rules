@@ -55,8 +55,18 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Site Settings Collection (e.g. siteSettings/upcomingExam)
+    // Site Settings Collection (e.g. siteSettings/upcomingExam, siteSettings/bannerNotice)
     match /siteSettings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Push Notification Device Tokens
+    match /fcmTokens/{tokenId} {
+      allow read, write: if true;
+    }
+
+    // Broadcast Notifications Collection
+    match /notifications/{notificationId} {
       allow read, write: if true;
     }
 

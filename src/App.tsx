@@ -22,6 +22,12 @@ import SubmissionSuccessAnimation from './components/SubmissionSuccessAnimation'
 import PrivacyPolicyView from './components/PrivacyPolicyView';
 import TermsAndConditionsView from './components/TermsAndConditionsView';
 import DeleteAccountView from './components/DeleteAccountView';
+import NotificationPromptBanner from './components/NotificationPromptBanner';
+import FaqSection from './components/FaqSection';
+import { 
+  syncCurrentDeviceToken, 
+  setupGlobalRealtimeNotificationWatcher 
+} from './services/notificationService';
 
 import { Exam, ExamResult, MinistryQuestionBank, UserProfile, UpcomingExamSettings } from './types';
 import { INITIAL_EXAMS, INITIAL_MINISTRY_BANKS } from './data';
@@ -29,6 +35,8 @@ import {
   subscribeToExams,
   saveExamToFirestore,
   deleteExamFromFirestore,
+  deleteUpcomingExamFromFirestore,
+  deleteUpcomingExamFromSiteSettings,
   saveResultToFirestore,
   subscribeToUpcomingExamSettings,
   saveUpcomingExamSettings,
@@ -76,6 +84,7 @@ const pathToView = (pathname: string): string => {
   if (p === '/privacy-policy' || p === '/privacy') return 'privacy-policy';
   if (p === '/terms-and-conditions' || p === '/terms') return 'terms-and-conditions';
   if (p === '/delete-account' || p === '/deleteaccount') return 'delete-account';
+  if (p === '/faq' || p === '/faqs') return 'faq';
   return 'home';
 };
 
@@ -107,6 +116,8 @@ const viewToPath = (view: string): string => {
       return '/terms-and-conditions';
     case 'delete-account':
       return '/delete-account';
+    case 'faq':
+      return '/faq';
     case 'home':
     default:
       return '/';
@@ -385,6 +396,19 @@ export default function App() {
         unsubscribeDoc();
       }
     };
+  }, []);
+
+  // Sync FCM token when user profile is loaded or on mount
+  useEffect(() => {
+    syncCurrentDeviceToken(user).catch(() => {});
+  }, [user]);
+
+  // Global Realtime Notification Watcher across all open devices
+  useEffect(() => {
+    const unsub = setupGlobalRealtimeNotificationWatcher((newNotif) => {
+      console.log('[Realtime Broadcast Received]:', newNotif.title);
+    });
+    return () => unsub();
   }, []);
 
   // Live listener for Exam Results collection in Firestore (Realtime DB sync)
@@ -761,10 +785,34 @@ export default function App() {
     } catch (e) {}
   };
 
-  const handleDeleteExam = async (examId: string) => {
-    setExams(prev => prev.filter(e => e.id !== examId));
+  const handleDeleteExam = async (examId: string, examTitle?: string) => {
+    const cleanTitle = (examTitle || '').trim().toLowerCase();
+    setExams(prev => prev.filter(e => e.id !== examId && (!cleanTitle || e.title.trim().toLowerCase() !== cleanTitle)));
+    setUpcomingExamSettings(prev => {
+      if (!prev) return null;
+      const isMatch = (it: any) => {
+        if (!it) return false;
+        if (examId && (it.examId === examId || it.id === examId)) return true;
+        if (cleanTitle && it.title && it.title.trim().toLowerCase() === cleanTitle) return true;
+        return false;
+      };
+      const items = Array.isArray(prev.items) ? prev.items.filter(it => !isMatch(it)) : [];
+      if (items.length > 0) {
+        const nextPrimary = items.find(it => it.isPublished !== false) || items[0];
+        return {
+          ...prev,
+          ...nextPrimary,
+          items,
+        };
+      }
+      return null;
+    });
     try {
       await deleteExamFromFirestore(examId);
+      if (cleanTitle) {
+        await deleteUpcomingExamFromFirestore(examId, cleanTitle);
+        await deleteUpcomingExamFromSiteSettings(examId, cleanTitle);
+      }
     } catch (err) {
       console.warn("Failed to delete exam from Firestore:", err);
     }
@@ -1088,6 +1136,8 @@ export default function App() {
         return <TermsAndConditionsView setView={setView} />;
       case 'delete-account':
         return <DeleteAccountView user={user} setView={setView} onLogout={handleLogout} />;
+      case 'faq':
+        return <FaqSection isStandAlone={true} setView={setView} />;
       default:
         return (
           <HomeView
@@ -1126,6 +1176,9 @@ export default function App() {
 
       {/* Global Student Footer */}
       <Footer setView={setView} setSelectedExam={setSelectedExam} exams={exams} />
+
+      {/* Floating 1-Tap Notification Permission Prompt for unregistered devices */}
+      <NotificationPromptBanner user={user} />
     </div>
   );
 }

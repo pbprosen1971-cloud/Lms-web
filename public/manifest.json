@@ -1,0 +1,16 @@
+{
+  "name": "Medha Exam - Job Exam Portal",
+  "short_name": "মেধা এক্সাম",
+  "description": "বিসিএস ও সরকারি চাকরি পরীক্ষার লাইভ প্রস্তুতি ও মডেল টেস্ট পোর্টাল",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0284c7",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

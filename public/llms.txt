@@ -1,0 +1,30 @@
+# Medha Exam (মেধা এক্সাম) - Job Exam Portal
+> বাংলাদেশের শীর্ষস্থানীয় অনলাইন বিসিএস ও সরকারি চাকরি প্রস্তুতি পরীক্ষা পোর্টাল
+
+## Overview
+Medha Exam (মেধা এক্সাম - Job Exam Portal) is a modern, real-time web application dedicated to competitive job exam preparation in Bangladesh. It empowers candidates preparing for BCS (Bangladesh Civil Service), Government Bank recruitment, Primary Assistant Teacher recruitment, NTRCA, and 9th–20th grade government ministry exams.
+
+## Key Capabilities
+- **Live Time-Bound Exams**: Candidates participate in scheduled live model tests with countdown timers, automatic answer submission, and real-time negative marking calculations (0.50 or 0.25 negative marks per incorrect answer).
+- **Archived & Practice Exams**: Completed exams transition automatically to the archive, allowing candidates to practice past papers anytime with question-by-question explanations.
+- **Instant Result & Merit List (শীর্ষ মেধাতালিকা)**: Immediate generation of total score, accuracy percentage, correct/wrong counts, and national/batch merit rankings.
+- **Daily Practice & Question Drills**: Subject-wise practice covering Bangla, English, General Knowledge (Bangladesh & International Affairs), General Science, Mathematics, Mental Ability, and ICT.
+- **Study Materials & Question Banks**: Downloadable PDFs, syllabus breakdowns, and previous years' question banks for all government recruitment exams.
+- **Google Sheets Cloud Integration**: Full bi-directional automated synchronization for student records, exam questions, results, and transactions.
+
+## Exam Categories Covered
+- **46th, 47th & 48th BCS Preliminary & Written**: Full 200-mark model tests and subject-wise sectional tests.
+- **Bank Recruitment**: Combined 8/9 Bank Officer, Senior Officer, and Bangladesh Bank Assistant Director preparation.
+- **Primary Assistant Teacher Recruitment**: 80-mark preliminary model tests with negative marking.
+- **NTRCA Teacher Registration**: School & College level teacher recruitment tests.
+- **Special Ministry & Directorate Jobs**: 10th to 20th grade recruitment exams.
+
+## Target Audience
+Job aspirants, university graduates, and students across Bangladesh seeking a reliable, high-speed, and structured online test platform to measure their preparation against competitors nationwide.
+
+## Contact & Web Access
+- Web Application: https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/
+- Live Exam Portal: /exam
+- Merit List & Results: /result
+- Daily Question Practice: /daily-practice
+- Study Resources: /study-materials

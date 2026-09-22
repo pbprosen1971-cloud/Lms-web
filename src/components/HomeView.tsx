@@ -40,6 +40,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { Exam, LeaderboardUser, MinistryQuestionBank, Question, Review, SubjectStats, UserProfile, UpcomingExamSettings, PaymentPlan } from '../types';
+import { motion } from 'motion/react';
 import { SUBJECTS, MOCK_REVIEWS, MOCK_LEADERBOARD, INITIAL_STATS, INITIAL_MINISTRY_BANKS } from '../data';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -50,6 +51,8 @@ import DailyChallengeWidget from './DailyChallengeWidget';
 import { PlexusHeroBackground } from './PlexusHeroBackground';
 import ManualPaymentModal from './ManualPaymentModal';
 import UpcomingExamCountdown from './UpcomingExamCountdown';
+import ModernNoticeTicker from './ModernNoticeTicker';
+import FaqSection from './FaqSection';
 
 const FALLBACK_SUBJECT_QUESTIONS: Record<string, Question[]> = {
   'বাংলা': [
@@ -337,8 +340,10 @@ const PREMIUM_PLANS: PaymentPlan[] = [
     title: '৩০ দিনের প্যাকেজ',
     duration: '৩০ দিন মেয়াদ',
     durationDays: 30,
-    price: 340,
-    priceFormatted: '৳ ৩৪০',
+    price: 339,
+    priceFormatted: '৳ ৩৩৯',
+    originalPrice: 360,
+    originalPriceFormatted: '৳ ৩৬০',
     description: '১ মাসের নিবিড় প্রস্তুতি ও নিয়মিত কুইজ প্যাকেজ',
     badge: 'জনপ্রিয় (Popular)',
     popular: true,
@@ -355,8 +360,10 @@ const PREMIUM_PLANS: PaymentPlan[] = [
     title: '৬ মাসের প্যাকেজ',
     duration: '৬ মাস মেয়াদ',
     durationDays: 180,
-    price: 1990,
-    priceFormatted: '৳ ১৯৯০',
+    price: 1900,
+    priceFormatted: '৳ ১৯০০',
+    originalPrice: 2040,
+    originalPriceFormatted: '৳ ২০৪০',
     description: '৬ মাসের সম্পূর্ণ নিবিড় প্রস্তুতি ও সকল পরীক্ষার আনলিমিটেড অ্যাক্সেস',
     badge: 'সেরা ডিল (Best Value)',
     popular: false,
@@ -783,6 +790,9 @@ export default function HomeView({
 
   return (
     <div className="space-y-16 pb-16 bg-brand-bg dark:bg-slate-900 text-slate-800 dark:text-slate-100 theme-transition">
+      {/* Horizontal Scrolling Modern Notice Bar right below Header */}
+      <ModernNoticeTicker />
+
       {/* 1. Hero Section (Welcome + Start Exam CTA) */}
       <section className="relative overflow-hidden py-16 sm:py-24 min-h-[460px] flex items-center bg-slate-900 text-white shadow-2xl rounded-b-3xl">
         {/* Background Plexus Video & Image with Readability Overlays */}
@@ -1067,13 +1077,21 @@ export default function HomeView({
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {liveExams.map((exam) => (
-                  <div
+                {liveExams.map((exam, index) => (
+                  <motion.div
                     key={exam.id}
+                    initial={{ opacity: 0, y: 22 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-30px" }}
+                    transition={{
+                      duration: 0.45,
+                      delay: Math.min(index * 0.08, 0.32),
+                      ease: [0.16, 1, 0.3, 1]
+                    }}
                     className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary/40 dark:hover:border-primary/40 transition-all duration-300 flex flex-col justify-between"
                   >
                     {/* Exam Status Badge & Subject */}
-                    <div className="p-6 pb-4 space-y-3 flex-grow">
+                    <div className="p-6 pb-4 space-y-3 flex-grow animate-fade-in-up">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs font-bold text-primary bg-primary/10 dark:bg-primary/20 dark:text-emerald-300 border border-primary/20 px-2.5 py-1 rounded-md capitalize">
@@ -1136,7 +1154,7 @@ export default function HomeView({
                         <ArrowRight className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             )}
@@ -1582,34 +1600,58 @@ export default function HomeView({
           </div>
 
           {/* 3 Package Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 relative z-10 items-stretch">
             {PREMIUM_PLANS.map((plan) => (
               <div
                 key={plan.id}
                 className={`rounded-2xl p-6 transition-all duration-300 flex flex-col justify-between relative shadow-md hover:shadow-xl ${
-                  plan.popular
-                    ? 'animated-mixing-border shadow-amber-500/10'
-                    : 'bg-white dark:bg-slate-900 border-2 border-slate-200/90 dark:border-slate-800 hover:border-amber-500/50'
+                  plan.id === '6_months'
+                    ? 'bg-gradient-to-b from-amber-500/10 via-white to-white dark:from-amber-500/15 dark:via-slate-900 dark:to-slate-900 border-2 border-amber-500/80 dark:border-amber-500/60 shadow-amber-500/10 hover:border-amber-500'
+                    : plan.id === '30_days'
+                    ? 'bg-gradient-to-b from-emerald-500/10 via-white to-white dark:from-emerald-500/15 dark:via-slate-900 dark:to-slate-900 border-2 border-emerald-500/80 dark:border-emerald-500/60 shadow-emerald-500/10 hover:border-emerald-500'
+                    : 'bg-white dark:bg-slate-900 border-2 border-slate-200/90 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-700'
                 }`}
               >
                 {plan.badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-extrabold text-[10px] rounded-full shadow-sm uppercase tracking-wider z-10">
-                    {plan.badge}
+                  <div
+                    className={`absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 font-extrabold text-[11px] rounded-full shadow-md uppercase tracking-wider z-10 flex items-center gap-1 text-white ${
+                      plan.id === '6_months'
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/30 ring-2 ring-white dark:ring-slate-900'
+                        : plan.id === '30_days'
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/30 ring-2 ring-white dark:ring-slate-900'
+                        : 'bg-gradient-to-r from-slate-600 to-slate-700'
+                    }`}
+                  >
+                    <span>{plan.badge}</span>
                   </div>
                 )}
 
                 <div className="space-y-4">
-                  <div>
-                    <h3 className="font-extrabold text-lg text-slate-900 dark:text-slate-100">{plan.title}</h3>
+                  <div className="pt-1">
+                    <h3 className="font-extrabold text-lg text-slate-900 dark:text-slate-100 flex items-center justify-between">
+                      <span>{plan.title}</span>
+                    </h3>
                     <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{plan.duration}</span>
                   </div>
 
-                  <div className="py-3 border-y border-slate-200/80 dark:border-slate-800">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-black text-amber-600 dark:text-amber-400">{plan.priceFormatted}</span>
-                      <span className="text-xs text-slate-600 dark:text-slate-400 font-bold">/ {plan.duration}</span>
+                  <div className="py-3.5 border-y border-slate-200/80 dark:border-slate-800 flex flex-col justify-center min-h-[96px]">
+                    {plan.originalPriceFormatted ? (
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500 line-through decoration-rose-500 decoration-2">
+                          {plan.originalPriceFormatted}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 text-[10px] font-extrabold border border-rose-200/80 dark:border-rose-900/60 shadow-2xs">
+                          বিশেষ ছাড়
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="h-5 mb-1" aria-hidden="true" />
+                    )}
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-3xl font-black text-amber-600 dark:text-amber-400 tracking-tight">{plan.priceFormatted}</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">/ {plan.duration}</span>
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{plan.description}</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-1">{plan.description}</p>
                   </div>
 
                   <ul className="space-y-2.5 text-xs text-slate-700 dark:text-slate-300 font-medium">
@@ -1638,9 +1680,11 @@ export default function HomeView({
                           setShowPaymentModal(true);
                         }
                       }}
-                      className={`w-full py-3 rounded-xl font-extrabold text-xs transition-all shadow-md ${
-                        plan.popular
-                          ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-amber-500/20'
+                      className={`w-full py-3 rounded-xl font-extrabold text-xs transition-all shadow-md active:scale-98 ${
+                        plan.id === '6_months'
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-amber-500/25 ring-1 ring-amber-400/40'
+                          : plan.id === '30_days'
+                          ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-500/25 ring-1 ring-emerald-400/40'
                           : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white border border-slate-700'
                       }`}
                     >
@@ -1779,6 +1823,9 @@ export default function HomeView({
         </div>
 
       </section>
+      
+      {/* 6. Frequently Asked Questions (FAQ Section) */}
+      <FaqSection isStandAlone={false} setView={setView} />
 
       {/* Manual Mobile Banking Payment Modal */}
       <ManualPaymentModal
