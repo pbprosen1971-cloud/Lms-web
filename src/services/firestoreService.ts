@@ -43,6 +43,7 @@ import {
   WrongQuestionRecord
 } from '../types';
 import { INITIAL_EXAMS, INITIAL_MINISTRY_BANKS } from '../data';
+import { detectQuestionSubject } from '../lib/subjectClassifier';
 
 export interface FirestoreQuestion {
   id: string;
@@ -86,14 +87,20 @@ export function mapFirestoreDocToQuestion(docSnap: any): Question {
     }
   }
 
+  const qText = data.questionText || data.question || data.text || '';
+  let sub = (data.subject || data.category || '').trim();
+  if (!sub || sub === 'BCS' || sub === 'Model Test' || sub === 'বিসিএস') {
+    sub = detectQuestionSubject(qText, options, data.explanation);
+  }
+
   return {
     id,
-    text: data.questionText || data.question || data.text || '',
+    text: qText,
     options,
     correctAnswer: correctAnswerIdx,
     explanation: data.explanation || '',
     questionNumber: data.questionNumber || 1,
-    subject: data.subject || '',
+    subject: sub,
   };
 }
 
@@ -230,9 +237,8 @@ export async function saveUpcomingExamScheduleToFirestore(
 
     // 3. Write questions to /Exam/{examId}/questions if provided
     if (examData.questions && examData.questions.length > 0) {
-      for (let i = 0; i < examData.questions.length; i++) {
-        await saveQuestionToExamContent(targetExamId, examData.questions[i], i + 1);
-      }
+      const qBatch = examData.questions.map((q, idx) => ({ q, questionNum: idx + 1 }));
+      await saveQuestionsBatchToExamContent(targetExamId, qBatch);
     }
 
     // 4. Backward compatibility: also sync to /exams/{examId}
@@ -344,6 +350,10 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         ...v,
         questions: (existing?.questions && existing.questions.length > 0) ? existing.questions : (v.questions || []),
         description: v.description || existing?.description,
+        isPinned: v.isPinned ?? existing?.isPinned ?? false,
+        liveOrder: v.liveOrder ?? existing?.liveOrder,
+        sortOrder: v.sortOrder ?? existing?.sortOrder,
+        liveAt: v.liveAt || existing?.liveAt,
       });
     });
 
@@ -357,11 +367,45 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         status: v.status === 'upcoming' ? 'upcoming' : (existing?.status || v.status),
         questions: (existing?.questions && existing.questions.length > 0) ? existing.questions : (v.questions || []),
         description: v.description || existing?.description,
+        isPinned: v.isPinned ?? existing?.isPinned ?? false,
+        liveOrder: v.liveOrder ?? existing?.liveOrder,
+        sortOrder: v.sortOrder ?? existing?.sortOrder,
+        liveAt: v.liveAt || existing?.liveAt,
       });
     });
 
     const list = Array.from(combinedMap.values());
-    list.sort((a, b) => b.id.localeCompare(a.id));
+    list.sort((a, b) => {
+      // 1. Pinned exams always come first
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+
+      // 2. Custom liveOrder or sortOrder if set by admin (1 is highest)
+      const orderA = typeof a.liveOrder === 'number' ? a.liveOrder : (typeof a.sortOrder === 'number' ? a.sortOrder : Infinity);
+      const orderB = typeof b.liveOrder === 'number' ? b.liveOrder : (typeof b.sortOrder === 'number' ? b.sortOrder : Infinity);
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      // 3. Newest timestamp (liveAt, examDateTime, startTime, dateCreated)
+      const getTimestamp = (e: Exam): number => {
+        const timeStr = e.liveAt || e.examDateTime || e.startTime || e.dateCreated;
+        if (timeStr) {
+          const t = new Date(timeStr).getTime();
+          if (!isNaN(t)) return t;
+        }
+        return 0;
+      };
+
+      const timeA = getTimestamp(a);
+      const timeB = getTimestamp(b);
+      if (timeA !== timeB && timeA > 0 && timeB > 0) {
+        return timeB - timeA;
+      }
+
+      // 4. Fallback: descending ID
+      return b.id.localeCompare(a.id);
+    });
     callback(list);
   };
 
@@ -378,6 +422,9 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       const archiveTimeStr = safeTimestampToString(data.archiveDateTime || data.archiveTime || undefined);
       const rawDateStr = data.startDate || data.examDate || data.createdAt || data.dateCreated;
       const dateCreatedStr = rawDateStr ? safeDateOnlyString(rawDateStr) : '';
+      const liveOrderVal = typeof data.liveOrder === 'number' ? data.liveOrder : (typeof data.sortOrder === 'number' ? data.sortOrder : undefined);
+      const isPinnedVal = !!(data.isPinned || data.pinned);
+      const liveAtVal = data.liveAt ? safeTimestampToString(data.liveAt) : undefined;
 
       examDocsMap.set(examId, {
         id: examId,
@@ -396,6 +443,10 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         archiveTime: archiveTimeStr || undefined,
         dateCreated: dateCreatedStr,
         isPremium: data.examType === 'premium' || !!data.isPremium,
+        liveOrder: liveOrderVal,
+        sortOrder: liveOrderVal,
+        isPinned: isPinnedVal,
+        liveAt: liveAtVal,
       });
     });
     emitMergedList();
@@ -416,6 +467,9 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       const archiveTimeStr = safeTimestampToString(data.archiveDateTime || data.archiveTime || undefined);
       const rawDateStr = data.startDate || data.examDate || data.createdAt || data.dateCreated;
       const dateCreatedStr = rawDateStr ? safeDateOnlyString(rawDateStr) : '';
+      const liveOrderVal = typeof data.liveOrder === 'number' ? data.liveOrder : (typeof data.sortOrder === 'number' ? data.sortOrder : undefined);
+      const isPinnedVal = !!(data.isPinned || data.pinned);
+      const liveAtVal = data.liveAt ? safeTimestampToString(data.liveAt) : undefined;
 
       capitalDocsMap.set(examId, {
         id: examId,
@@ -436,6 +490,10 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         archiveDateTime: archiveTimeStr || undefined,
         dateCreated: dateCreatedStr,
         isPremium: data.examType === 'premium' || !!data.isPremium,
+        liveOrder: liveOrderVal,
+        sortOrder: liveOrderVal,
+        isPinned: isPinnedVal,
+        liveAt: liveAtVal,
       });
     });
     emitMergedList();
@@ -456,6 +514,9 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       const archiveTimeStr = safeTimestampToString(data.archiveTime || data.archiveDateTime || undefined);
       const rawDateStr = data.startDate || data.examDate || data.createdAt || data.dateCreated;
       const dateCreatedStr = rawDateStr ? safeDateOnlyString(rawDateStr) : '';
+      const liveOrderVal = typeof data.liveOrder === 'number' ? data.liveOrder : (typeof data.sortOrder === 'number' ? data.sortOrder : undefined);
+      const isPinnedVal = !!(data.isPinned || data.pinned);
+      const liveAtVal = data.liveAt ? safeTimestampToString(data.liveAt) : undefined;
 
       legacyDocsMap.set(examId, {
         id: examId,
@@ -474,6 +535,10 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         archiveTime: archiveTimeStr || undefined,
         dateCreated: dateCreatedStr,
         isPremium: !!data.isPremium,
+        liveOrder: liveOrderVal,
+        sortOrder: liveOrderVal,
+        isPinned: isPinnedVal,
+        liveAt: liveAtVal,
       });
     });
     emitMergedList();
@@ -652,7 +717,7 @@ export async function updateUpcomingExamInFirestore(
 
     // If exam is live or archived, clear upcoming site settings if matching
     if (updates.status === 'live' || updates.status === 'archive' || updates.status === 'completed') {
-      await clearUpcomingExamSettings(examId);
+      await clearUpcomingExamSettings(examId, updates.title);
     }
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, `exam/${examId}`);
@@ -742,12 +807,82 @@ export async function deleteUpcomingExamFromFirestore(examId: string, examTitle?
 // ==========================================
 
 /**
+ * Synchronize Exam metadata, questions array and siteSettings after question additions/deletions
+ */
+export async function syncExamMetadataAndCaches(examId: string): Promise<{ count: number; questions: Question[] }> {
+  try {
+    const qSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
+    const allQuestions: Question[] = [];
+    qSnap.forEach(docSnap => {
+      allQuestions.push(mapFirestoreDocToQuestion(docSnap));
+    });
+    allQuestions.sort((a, b) => (a.questionNumber || 0) - (b.questionNumber || 0));
+    const count = allQuestions.length;
+
+    // 1. Update /Exam/{examId}
+    await setDoc(doc(db, 'Exam', examId), {
+      totalQuestions: count,
+      totalMarks: count,
+      questions: allQuestions,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    // 2. Update /exam/{examId}
+    await setDoc(doc(db, 'exam', examId), {
+      totalQuestions: count,
+      totalMarks: count,
+      questions: allQuestions,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    // 3. Update /exams/{examId} legacy collection
+    await setDoc(doc(db, 'exams', examId), {
+      totalQuestions: count,
+      totalMarks: count,
+      questions: allQuestions,
+    }, { merge: true });
+
+    // 4. Update siteSettings/upcomingExam if referencing this exam
+    try {
+      const siteSettingsRef = doc(db, 'siteSettings', 'upcomingExam');
+      const siteSnap = await getDoc(siteSettingsRef);
+      if (siteSnap.exists()) {
+        const siteData = siteSnap.data();
+        let itemsUpdated = false;
+        let newItems = siteData.items;
+        if (Array.isArray(siteData.items)) {
+          newItems = siteData.items.map((it: any) => {
+            if (it.id === examId || it.examId === examId) {
+              itemsUpdated = true;
+              return { ...it, totalQuestions: count, totalMarks: count };
+            }
+            return it;
+          });
+        }
+        await setDoc(siteSettingsRef, {
+          ...(siteData.examId === examId ? { totalQuestions: count, totalMarks: count } : {}),
+          ...(itemsUpdated ? { items: newItems } : {}),
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      }
+    } catch (e) {}
+
+    return { count, questions: allQuestions };
+  } catch (err) {
+    console.warn(`Warning: failed to sync exam metadata for exam ${examId}:`, err);
+    return { count: 0, questions: [] };
+  }
+}
+
+/**
  * Save a Question into /Exam/{examId}/questions/{questionId}
+ * Pass skipParentSync: true when performing batch/bulk operations to prevent write-stream exhaustion
  */
 export async function saveQuestionToExamContent(
   examId: string,
   q: Partial<ExamQuestionDoc> | Question,
-  questionNum?: number
+  questionNum?: number,
+  options?: { skipParentSync?: boolean }
 ): Promise<void> {
   const qId = (q as any).id || (q as any).questionId || `q-${examId}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   const qRef = doc(db, 'Exam', examId, 'questions', qId);
@@ -781,6 +916,8 @@ export async function saveQuestionToExamContent(
     marks = Number(qDoc.marks || 1);
   }
 
+  const resolvedSubject = ((q as any).subject || (q as any).category || '').trim() || detectQuestionSubject(questionText, [optA, optB, optC, optD], explanation);
+
   const payload: any = {
     questionId: qId,
     questionNumber: questionNum || (q as any).questionNumber || 1,
@@ -794,6 +931,7 @@ export async function saveQuestionToExamContent(
     correctAnswer: correctLetter,
     explanation: explanation,
     marks: marks,
+    subject: resolvedSubject,
     updatedAt: serverTimestamp(),
   };
 
@@ -817,68 +955,45 @@ export async function saveQuestionToExamContent(
       explanation: explanation,
       questionNumber: questionNum || (q as any).questionNumber || 1,
       subject: (q as any).subject || '',
-    }, examId, questionNum);
+    }, examId, questionNum, { skipExamCountSync: options?.skipParentSync });
 
-    // 3. Recalculate and fetch all current questions in this exam
-    const qSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
-    const allQuestions: Question[] = [];
-    qSnap.forEach(docSnap => {
-      allQuestions.push(mapFirestoreDocToQuestion(docSnap));
-    });
-    allQuestions.sort((a, b) => (a.questionNumber || 0) - (b.questionNumber || 0));
-    const count = allQuestions.length;
-
-    // 4. Update /Exam/{examId}
-    await setDoc(doc(db, 'Exam', examId), {
-      totalQuestions: count,
-      totalMarks: count,
-      questions: allQuestions,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-
-    // 5. Update /exam/{examId}
-    await setDoc(doc(db, 'exam', examId), {
-      totalQuestions: count,
-      totalMarks: count,
-      questions: allQuestions,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-
-    // 6. Update /exams/{examId} legacy collection
-    await setDoc(doc(db, 'exams', examId), {
-      totalQuestions: count,
-      totalMarks: count,
-      questions: allQuestions,
-    }, { merge: true });
-
-    // 7. Update siteSettings/upcomingExam if referencing this exam
-    try {
-      const siteSettingsRef = doc(db, 'siteSettings', 'upcomingExam');
-      const siteSnap = await getDoc(siteSettingsRef);
-      if (siteSnap.exists()) {
-        const siteData = siteSnap.data();
-        let itemsUpdated = false;
-        let newItems = siteData.items;
-        if (Array.isArray(siteData.items)) {
-          newItems = siteData.items.map((it: any) => {
-            if (it.id === examId || it.examId === examId) {
-              itemsUpdated = true;
-              return { ...it, totalQuestions: count, totalMarks: count };
-            }
-            return it;
-          });
-        }
-        await setDoc(siteSettingsRef, {
-          ...(siteData.examId === examId ? { totalQuestions: count, totalMarks: count } : {}),
-          ...(itemsUpdated ? { items: newItems } : {}),
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      }
-    } catch (e) {}
+    if (!options?.skipParentSync) {
+      await syncExamMetadataAndCaches(examId);
+    }
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `Exam/${examId}/questions/${qId}`);
     throw err;
   }
+}
+
+/**
+ * Bulk save multiple questions in batches to prevent write stream exhaustion
+ * and sync parent documents only once at the end
+ */
+export async function saveQuestionsBatchToExamContent(
+  examId: string,
+  questions: Array<{ q: Partial<ExamQuestionDoc> | Question; questionNum: number }>,
+  onProgress?: (saved: number, total: number) => void
+): Promise<void> {
+  const total = questions.length;
+  if (total === 0) return;
+
+  // Process in small batches of 5 questions with a micro pause to prevent backpressure
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < total; i += BATCH_SIZE) {
+    const chunk = questions.slice(i, i + BATCH_SIZE);
+    for (const item of chunk) {
+      await saveQuestionToExamContent(examId, item.q, item.questionNum, { skipParentSync: true });
+    }
+    const currentProgress = Math.min(i + chunk.length, total);
+    onProgress?.(currentProgress, total);
+
+    // Yield control to let Firestore write stream flush pending writes smoothly
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  }
+
+  // Once all questions are safely written, do a single atomic sync of parent documents
+  await syncExamMetadataAndCaches(examId);
 }
 
 /**
@@ -916,59 +1031,8 @@ export async function deleteQuestionFromExamContent(examId: string, questionId: 
     // 3. Also delete from legacy questions collection
     await deleteQuestionFromFirestore(questionId, examId, questionText);
 
-    // 4. Recalculate remaining questions and count
-    let count = 0;
-    const remainingQuestions: Question[] = [];
-    try {
-      const remainingSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
-      remainingSnap.forEach(docSnap => {
-        remainingQuestions.push(mapFirestoreDocToQuestion(docSnap));
-      });
-      remainingQuestions.sort((a, b) => (a.questionNumber || 0) - (b.questionNumber || 0));
-      count = remainingQuestions.length;
-    } catch (e) {}
-
-    // 5. Update counts and question array across all exam collection mirrors
-    try {
-      await setDoc(doc(db, 'Exam', examId), {
-        totalQuestions: count,
-        totalMarks: count,
-        questions: remainingQuestions,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-    } catch (e) {}
-
-    try {
-      await setDoc(doc(db, 'exam', examId), {
-        totalQuestions: count,
-        totalMarks: count,
-        questions: remainingQuestions,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-    } catch (e) {}
-
-    try {
-      await setDoc(doc(db, 'exams', examId), {
-        totalQuestions: count,
-        totalMarks: count,
-        questions: remainingQuestions,
-      }, { merge: true });
-    } catch (e) {}
-
-    try {
-      const siteSettingsRef = doc(db, 'siteSettings', 'upcomingExam');
-      const siteSnap = await getDoc(siteSettingsRef);
-      if (siteSnap.exists()) {
-        const siteData = siteSnap.data();
-        if (siteData.examId === examId) {
-          await setDoc(siteSettingsRef, {
-            totalQuestions: count,
-            totalMarks: count,
-            updatedAt: serverTimestamp(),
-          }, { merge: true });
-        }
-      }
-    } catch (e) {}
+    // 4. Update counts and question array across all exam collection mirrors via single helper
+    await syncExamMetadataAndCaches(examId);
 
   } catch (err) {
     console.error(`Failed to delete question ${questionId} from Exam/${examId}:`, err);
@@ -1072,6 +1136,9 @@ export async function updateExamArchiveStatus(
       status,
       updatedAt: serverTimestamp(),
     };
+    if (status === 'live') {
+      updates.liveAt = new Date().toISOString();
+    }
     if (archiveDateTime !== undefined) {
       updates.archiveDateTime = archiveDateTime;
       updates.archiveTime = archiveDateTime;
@@ -1090,8 +1157,8 @@ export async function updateExamArchiveStatus(
       ...(archiveDateTime !== undefined && { archiveTime: archiveDateTime }),
     }, { merge: true });
 
-    // 4. If status is 'archive', clear from upcoming siteSettings if matching
-    if (status === 'archive' || status === 'archived') {
+    // 4. If status is 'archive' or 'live', clear from upcoming siteSettings if matching
+    if (status === 'archive' || status === 'archived' || status === 'live') {
       await clearUpcomingExamSettings(examId);
     }
   } catch (err) {
@@ -1157,6 +1224,81 @@ export async function updateExamArchiveDateTime(
     }, { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, `Exam/${examId}`);
+    throw err;
+  }
+}
+
+/**
+ * Update an exam's live order/position and optional pin status
+ * across /Exam/{examId}, /exam/{examId}, and legacy /exams/{examId}
+ */
+export async function updateExamLiveOrder(
+  examId: string,
+  liveOrder: number,
+  isPinned?: boolean
+): Promise<void> {
+  try {
+    const payload: any = {
+      liveOrder,
+      sortOrder: liveOrder,
+      updatedAt: serverTimestamp(),
+    };
+    if (isPinned !== undefined) {
+      payload.isPinned = isPinned;
+    }
+
+    await setDoc(doc(db, 'Exam', examId), payload, { merge: true });
+    await setDoc(doc(db, 'exam', examId), payload, { merge: true });
+    await setDoc(doc(db, 'exams', examId), payload, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `Exam/${examId}`);
+    throw err;
+  }
+}
+
+/**
+ * Toggle pin status for an exam to keep it at the very top of the live list
+ */
+export async function toggleExamPin(
+  examId: string,
+  isPinned: boolean
+): Promise<void> {
+  try {
+    const payload = {
+      isPinned,
+      updatedAt: serverTimestamp(),
+    };
+    await setDoc(doc(db, 'Exam', examId), payload, { merge: true });
+    await setDoc(doc(db, 'exam', examId), payload, { merge: true });
+    await setDoc(doc(db, 'exams', examId), payload, { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `Exam/${examId}`);
+    throw err;
+  }
+}
+
+/**
+ * Batch save the order of multiple live exams in a single transaction-like flow
+ */
+export async function batchSaveLiveExamsOrder(
+  orderedExams: Array<{ id: string; liveOrder: number; isPinned?: boolean }>
+): Promise<void> {
+  try {
+    for (const item of orderedExams) {
+      const payload: any = {
+        liveOrder: item.liveOrder,
+        sortOrder: item.liveOrder,
+        updatedAt: serverTimestamp(),
+      };
+      if (item.isPinned !== undefined) {
+        payload.isPinned = item.isPinned;
+      }
+      await setDoc(doc(db, 'Exam', item.id), payload, { merge: true });
+      await setDoc(doc(db, 'exam', item.id), payload, { merge: true });
+      await setDoc(doc(db, 'exams', item.id), payload, { merge: true });
+    }
+  } catch (err) {
+    console.error("Failed to batch save live exams order:", err);
     throw err;
   }
 }
@@ -1323,7 +1465,12 @@ export async function fetchDailyChallengeQuestion(seedDate?: string): Promise<{ 
 }
 
 // Save single Question to Firestore questions collection
-export async function saveQuestionToFirestore(q: Question, examId: string, questionNum?: number): Promise<void> {
+export async function saveQuestionToFirestore(
+  q: Question,
+  examId: string,
+  questionNum?: number,
+  options?: { skipExamCountSync?: boolean }
+): Promise<void> {
   const qId = q.id || `q-${examId}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   const qRef = doc(db, 'questions', qId);
 
@@ -1354,15 +1501,17 @@ export async function saveQuestionToFirestore(q: Question, examId: string, quest
   try {
     await setDoc(qRef, payload, { merge: true });
 
-    // Update totalQuestions on the exam document
-    const qCountQuery = query(collection(db, 'questions'), where('examId', '==', examId));
-    const qCountSnap = await getDocs(qCountQuery);
-    const count = qCountSnap.size;
+    if (!options?.skipExamCountSync) {
+      // Update totalQuestions on the exam document
+      const qCountQuery = query(collection(db, 'questions'), where('examId', '==', examId));
+      const qCountSnap = await getDocs(qCountQuery);
+      const count = qCountSnap.size;
 
-    await setDoc(doc(db, 'exams', examId), {
-      totalQuestions: count,
-      totalMarks: count
-    }, { merge: true });
+      await setDoc(doc(db, 'exams', examId), {
+        totalQuestions: count,
+        totalMarks: count
+      }, { merge: true });
+    }
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `questions/${qId}`);
   }

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Question } from '../types';
 import { fetchDailyChallengeQuestion } from '../services/firestoreService';
+import confetti from 'canvas-confetti';
 
 interface DailyChallengeWidgetProps {
   onStartExam?: (examId?: string) => void;
@@ -127,6 +128,68 @@ export const DailyChallengeWidget: React.FC<DailyChallengeWidgetProps> = ({
     loadQuestion(false);
   }, [loadQuestion]);
 
+  // Trigger celebratory particle explosion across the whole website display
+  const triggerCelebrationParticles = () => {
+    try {
+      const colors = ['#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#8B5CF6', '#14B8A6', '#FBBF24', '#06B6D4'];
+
+      // 1. Immediate vibrant burst from center/widget area
+      confetti({
+        particleCount: 100,
+        spread: 90,
+        origin: { y: 0.55 },
+        colors,
+        zIndex: 99999,
+        scalar: 1.1,
+      });
+
+      // 2. High-spread side fireworks cannons for 3.2 seconds
+      const duration = 3200;
+      const animationEnd = Date.now() + duration;
+
+      const interval: any = setInterval(() => {
+        const timeLeft = animationEnd - Date.now();
+        if (timeLeft <= 0) {
+          clearInterval(interval);
+          return;
+        }
+
+        const particleCount = 45 * (timeLeft / duration);
+
+        // Cannon from left
+        confetti({
+          particleCount: Math.floor(particleCount),
+          angle: 60,
+          spread: 75,
+          origin: { x: 0, y: 0.75 },
+          colors,
+          zIndex: 99999,
+        });
+
+        // Cannon from right
+        confetti({
+          particleCount: Math.floor(particleCount),
+          angle: 120,
+          spread: 75,
+          origin: { x: 1, y: 0.75 },
+          colors,
+          zIndex: 99999,
+        });
+
+        // Top sky shower
+        confetti({
+          particleCount: Math.floor(particleCount * 0.4),
+          spread: 100,
+          origin: { x: Math.random(), y: 0.05 },
+          colors,
+          zIndex: 99999,
+        });
+      }, 250);
+    } catch (err) {
+      console.warn('Particle celebration error:', err);
+    }
+  };
+
   // Handle option selection
   const handleSelectOption = (index: number) => {
     if (selectedOption !== null || !question) return; // Prevent multiple answers on same question
@@ -136,6 +199,9 @@ export const DailyChallengeWidget: React.FC<DailyChallengeWidgetProps> = ({
 
     const isCorrect = index === question.correctAnswer;
     if (isCorrect) {
+      // Trigger full website display celebration particles
+      triggerCelebrationParticles();
+
       // Update streak
       try {
         const todayStr = new Date().toISOString().split('T')[0];
@@ -366,10 +432,7 @@ export const DailyChallengeWidget: React.FC<DailyChallengeWidgetProps> = ({
                     <span>চমৎকার! আপনার উত্তরটি একদম সঠিক! 🎉</span>
                   </div>
                   <p className="text-emerald-100/90 text-xs sm:text-sm leading-relaxed">
-                    সঠিক উত্তর: <span className="font-bold text-white underline">{question.options[question.correctAnswer]}</span>।
-                    {hasCompletedToday
-                      ? ' আপনার আজকের ডেইলি স্ট্রিক সক্রিয় রয়েছে!'
-                      : ' আপনার ডেইলি স্ট্রিক বৃদ্ধি পেয়েছে!'}
+                    নিয়মিত মেধা এক্সাম পোর্টালে পরিক্ষা দিন। প্রস্তুতি সবার থেকে এক ধাপ এগিয়ে রাখুন।
                   </p>
                 </div>
               ) : (
@@ -378,6 +441,9 @@ export const DailyChallengeWidget: React.FC<DailyChallengeWidgetProps> = ({
                     <XCircle className="h-5 w-5 text-rose-400 shrink-0" />
                     <span>উত্তরটি সঠিক নয়।</span>
                   </div>
+                  <p className="text-rose-100/90 text-xs sm:text-sm leading-relaxed">
+                    নিয়মিত মেধা এক্সাম পোর্টালে পরিক্ষা দিন। প্রস্তুতি সবার থেকে এক ধাপ এগিয়ে রাখুন।
+                  </p>
                   <p className="text-rose-100/90 text-xs sm:text-sm leading-relaxed">
                     সঠিক উত্তরটি হলো:{' '}
                     <span className="font-bold text-white bg-emerald-900/60 px-2 py-0.5 rounded border border-emerald-500/30">

@@ -18,7 +18,7 @@ export interface Exam {
   examId?: string;
   title: string;
   description?: string;
-  subject: 'বাংলা' | 'ইংরেজি' | 'গণিত' | 'GK' | 'BCS' | '11th - 20th Grade Job' | string;
+  subject: 'বাংলা' | 'ইংরেজি' | 'গণিত' | 'বাংলাদেশ বিষয়াবলি -GK' | 'আন্তর্জাতিক সাধারন জ্ঞান' | 'ICT' | 'বিজ্ঞান' | 'বাংলা ব্যাকরণ' | 'নৈতিকতা মূল্যবোধ ও সুশাসন' | 'ভূগোল' | 'BCS' | 'Bank' | '11th - 20th Grade Job' | 'NTRCA - নিবন্ধন' | 'Primary' | string;
   durationMinutes: number;
   totalQuestions: number;
   totalMarks: number;
@@ -34,6 +34,11 @@ export interface Exam {
   isPremium?: boolean; // True if the exam is premium
   isPublished?: boolean;
   createdBy?: string;
+  liveOrder?: number; // Custom display priority/order in live section (1 = highest)
+  sortOrder?: number; // General sorting order
+  isPinned?: boolean; // If pinned to the top of live section
+  liveAt?: string; // Timestamp when transitioned or made live
+  updatedAt?: any;
 }
 
 export interface SubjectStats {
@@ -245,6 +250,7 @@ export interface ExamQuestionDoc {
   correctAnswer: string;
   explanation?: string;
   marks: number;
+  subject?: string;
   createdAt?: any;
   updatedAt?: any;
 }

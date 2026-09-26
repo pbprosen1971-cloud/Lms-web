@@ -12,7 +12,8 @@ import {
   Clock, 
   Layers, 
   Eye, 
-  RefreshCw 
+  RefreshCw,
+  Loader2 
 } from 'lucide-react';
 import { BroadcastNotification, BannerNoticeSettings } from '../types';
 import { 
@@ -51,6 +52,8 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
 
   // Notifications History
   const [notifications, setNotifications] = useState<BroadcastNotification[]>([]);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Banner Notice State
   const [bannerNotice, setBannerNotice] = useState<BannerNoticeSettings>(DEFAULT_BANNER_NOTICE);
@@ -143,10 +146,39 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
     }
   };
 
-  const handleDeleteNotif = async (id?: string) => {
+  const handleExecuteDelete = async (id?: string) => {
     if (!id) return;
-    if (window.confirm('আপনি কি এই নোটিফিকেশনটি মুছে ফেলতে চান?')) {
-      await deleteNotification(id);
+    try {
+      setDeletingId(id);
+      // Optimistic removal from UI list
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      const res = await deleteNotification(id);
+      if (!res) {
+        console.warn('Failed to delete notification document');
+      }
+    } catch (err) {
+      console.error('Error during notification deletion:', err);
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  };
+
+  const handleOpenUrl = (targetUrl?: string) => {
+    if (!targetUrl || !targetUrl.trim()) return;
+    const cleanUrl = targetUrl.trim();
+    if (cleanUrl.startsWith('#') || cleanUrl.startsWith('/#')) {
+      const hash = cleanUrl.startsWith('/#') ? cleanUrl.slice(1) : cleanUrl;
+      const el = document.querySelector(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        window.location.hash = hash;
+      }
+    } else if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+      window.open(cleanUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      window.location.href = cleanUrl;
     }
   };
 
@@ -361,7 +393,13 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
               </div>
 
               {/* Notification Mockup Card */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 shadow-md space-y-2">
+              <div 
+                onClick={() => url && handleOpenUrl(url)}
+                className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 shadow-md space-y-2 transition-all ${
+                  url ? 'cursor-pointer hover:border-emerald-500 hover:shadow-lg hover:ring-1 hover:ring-emerald-500/30 group' : ''
+                }`}
+                title={url ? 'ক্লিক করে সংযুক্ত লিংক টেস্ট করুন' : undefined}
+              >
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 shadow-xs flex items-center justify-center">
                     <MedhaLogo className="w-full h-full" withBackground={true} />
@@ -375,7 +413,9 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                 </div>
                 <div className="flex items-start justify-between gap-2.5">
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">
+                    <h4 className={`text-xs font-bold text-slate-900 dark:text-white line-clamp-1 transition-colors ${
+                      url ? 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400' : ''
+                    }`}>
                       {title || 'নোটিফিকেশনের শিরোনাম এখানে দেখা যাবে'}
                     </h4>
                     <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug line-clamp-2 mt-0.5">
@@ -387,9 +427,11 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                   </div>
                 </div>
                 {url && (
-                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 pt-0.5">
-                    <span>ক্লিক করুন: {url}</span>
-                    <ExternalLink className="h-2.5 w-2.5" />
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 pt-0.5">
+                    <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800/80 px-2 py-0.5 rounded-md">
+                      <ExternalLink className="h-2.5 w-2.5" />
+                      <span>ট্যাপ করলেই লিংকে নিয়ে যাবে</span>
+                    </span>
                   </div>
                 )}
               </div>
@@ -606,13 +648,24 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800 overflow-x-auto">
               {notifications.map((notif) => (
-                <div key={notif.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div 
+                  key={notif.id} 
+                  onClick={() => notif.url && handleOpenUrl(notif.url)}
+                  className={`py-3.5 px-3 rounded-xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    notif.url 
+                      ? 'cursor-pointer hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:border-emerald-200/60 dark:hover:border-emerald-800/40 border border-transparent group' 
+                      : ''
+                  }`}
+                  title={notif.url ? 'ক্লিক করলে সংযুক্ত লিংকে নিয়ে যাবে' : undefined}
+                >
                   <div className="space-y-1 max-w-2xl">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
                         {notif.tag || 'নোটিশ'}
                       </span>
-                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                      <h4 className={`text-xs sm:text-sm font-bold text-slate-900 dark:text-white transition-colors ${
+                        notif.url ? 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400' : ''
+                      }`}>
                         {notif.title}
                       </h4>
                       <span className="text-[10px] text-slate-400 font-medium">
@@ -623,9 +676,12 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                       {notif.body}
                     </p>
                     {notif.url && (
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
-                        লিঙ্ক: {notif.url}
-                      </span>
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:underline">
+                          <ExternalLink className="h-3 w-3" />
+                          <span>ক্লিক করলেই ফিচারে নিয়ে যাবে</span>
+                        </span>
+                      </div>
                     )}
                   </div>
 
@@ -633,13 +689,56 @@ export const AdminNotificationManager: React.FC<AdminNotificationManagerProps> =
                     <span className="text-[11px] text-slate-400">
                       প্রাপক: <strong>{notif.recipientCount || 0}</strong>
                     </span>
-                    <button
-                      onClick={() => handleDeleteNotif(notif.id)}
-                      title="মুছে ফেলুন"
-                      className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {confirmDeleteId === notif.id ? (
+                      <div 
+                        onClick={(e) => e.stopPropagation()} 
+                        className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/70 py-1 px-2 rounded-lg border border-rose-200 dark:border-rose-800 shadow-sm"
+                      >
+                        <span className="text-[11px] text-rose-700 dark:text-rose-300 font-bold whitespace-nowrap">মুছে ফেলবেন?</span>
+                        <button
+                          type="button"
+                          disabled={deletingId === notif.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExecuteDelete(notif.id);
+                          }}
+                          className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          {deletingId === notif.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            'হ্যাঁ'
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteId(null);
+                          }}
+                          className="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-[11px] font-medium transition-colors cursor-pointer"
+                        >
+                          না
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={deletingId === notif.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteId(notif.id || null);
+                        }}
+                        title="মুছে ফেলুন"
+                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 transition-colors cursor-pointer"
+                      >
+                        {deletingId === notif.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-rose-500" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

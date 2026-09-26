@@ -26,6 +26,12 @@ import {
   Filter,
   Flame,
   BookOpen,
+  Pin,
+  ArrowUp,
+  ArrowDown,
+  MoveVertical,
+  SlidersHorizontal,
+  Zap,
 } from 'lucide-react';
 import { Exam, UserProfile } from '../types';
 import {
@@ -33,6 +39,9 @@ import {
   updateExamArchiveDateTime,
   deleteExamPermanently,
   updateExamToUpcoming,
+  updateExamLiveOrder,
+  toggleExamPin,
+  batchSaveLiveExamsOrder,
 } from '../services/firestoreService';
 import {
   safeTimestampToString,
@@ -79,12 +88,13 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
   const [successMsg, setSuccessMsg] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [copiedExamId, setCopiedExamId] = useState<string | null>(null);
+  const [orderInputs, setOrderInputs] = useState<Record<string, string>>({});
 
   // Calculate Live & Archived Exams based on Firestore status & archiveDateTime
   const now = Date.now();
 
   const allLiveExams = useMemo(() => {
-    return exams.filter((exam) => {
+    const list = exams.filter((exam) => {
       if (exam.status === 'archive' || exam.status === 'archived') return false;
       if (exam.status === 'upcoming') return false;
       
@@ -96,6 +106,34 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
         }
       }
       return exam.status === 'live';
+    });
+
+    return list.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+
+      const orderA = typeof a.liveOrder === 'number' ? a.liveOrder : (typeof a.sortOrder === 'number' ? a.sortOrder : Infinity);
+      const orderB = typeof b.liveOrder === 'number' ? b.liveOrder : (typeof b.sortOrder === 'number' ? b.sortOrder : Infinity);
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      const getTimestamp = (e: Exam): number => {
+        const timeStr = e.liveAt || e.examDateTime || e.startTime || e.dateCreated;
+        if (timeStr) {
+          const t = new Date(timeStr).getTime();
+          if (!isNaN(t)) return t;
+        }
+        return 0;
+      };
+
+      const timeA = getTimestamp(a);
+      const timeB = getTimestamp(b);
+      if (timeA !== timeB && timeA > 0 && timeB > 0) {
+        return timeB - timeA;
+      }
+
+      return b.id.localeCompare(a.id);
     });
   }, [exams, now]);
 
@@ -283,6 +321,149 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
     }
   };
 
+  // 1. Move exam order up or down
+  const handleMoveExamOrder = async (examId: string, direction: 'up' | 'down') => {
+    const currentIndex = allLiveExams.findIndex(e => e.id === examId);
+    if (currentIndex === -1) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= allLiveExams.length) return;
+
+    setIsProcessing(true);
+    try {
+      const reordered = [...allLiveExams];
+      const temp = reordered[currentIndex];
+      reordered[currentIndex] = reordered[targetIndex];
+      reordered[targetIndex] = temp;
+
+      const updates = reordered.map((e, idx) => ({
+        id: e.id,
+        liveOrder: idx + 1,
+        isPinned: e.isPinned,
+      }));
+
+      await batchSaveLiveExamsOrder(updates);
+
+      if (onUpdateExam) {
+        updates.forEach(u => {
+          const original = exams.find(e => e.id === u.id);
+          if (original) {
+            onUpdateExam({ ...original, liveOrder: u.liveOrder, sortOrder: u.liveOrder });
+          }
+        });
+      }
+
+      showNotification('লাইভ পরীক্ষার ক্রম সফলভাবে আপডেট করা হয়েছে!');
+    } catch (err) {
+      console.error(err);
+      showNotification('ক্রম পরিবর্তন করতে ব্যর্থ হয়েছে।', true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 2. Toggle Pin Status
+  const handleTogglePin = async (exam: Exam) => {
+    const nextPinned = !exam.isPinned;
+    setIsProcessing(true);
+    try {
+      await toggleExamPin(exam.id, nextPinned);
+      if (onUpdateExam) {
+        onUpdateExam({ ...exam, isPinned: nextPinned });
+      }
+      showNotification(
+        nextPinned 
+          ? `"${exam.title}" পরীক্ষাটি সবার উপরে পিন করা হয়েছে!`
+          : `"${exam.title}" পরীক্ষার পিন তুলে নেওয়া হয়েছে!`
+      );
+    } catch (err) {
+      console.error(err);
+      showNotification('পিন স্ট্যাটাস পরিবর্তন করতে সমস্যা হয়েছে।', true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 3. Set Direct Position Number
+  const handleSetDirectOrder = async (examId: string) => {
+    const rawVal = orderInputs[examId];
+    const num = parseInt(rawVal, 10);
+    if (isNaN(num) || num < 1) {
+      showNotification('অনুগ্রহ করে সঠিক ক্রম নম্বর দিন (যেমন: ১, ২, ৩...)', true);
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      await updateExamLiveOrder(examId, num);
+      const original = exams.find(e => e.id === examId);
+      if (original && onUpdateExam) {
+        onUpdateExam({ ...original, liveOrder: num, sortOrder: num });
+      }
+      showNotification(`পরীক্ষার ক্রম সফলভাবে #${toBengaliDigits(num)} নির্ধারণ করা হয়েছে!`);
+      setOrderInputs(prev => {
+        const next = { ...prev };
+        delete next[examId];
+        return next;
+      });
+    } catch (err) {
+      console.error(err);
+      showNotification('ক্রম সংরক্ষণ করতে ত্রুটি হয়েছে।', true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // 4. Auto-sort by newest first
+  const handleAutoSortByNewest = async () => {
+    if (allLiveExams.length <= 1) return;
+    setIsProcessing(true);
+    try {
+      const sorted = [...allLiveExams].sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+
+        const getTimestamp = (e: Exam): number => {
+          const timeStr = e.liveAt || e.examDateTime || e.startTime || e.dateCreated;
+          if (timeStr) {
+            const t = new Date(timeStr).getTime();
+            if (!isNaN(t)) return t;
+          }
+          return 0;
+        };
+
+        const timeA = getTimestamp(a);
+        const timeB = getTimestamp(b);
+        if (timeA !== timeB) {
+          return timeB - timeA;
+        }
+        return b.id.localeCompare(a.id);
+      });
+
+      const updates = sorted.map((e, idx) => ({
+        id: e.id,
+        liveOrder: idx + 1,
+        isPinned: e.isPinned,
+      }));
+
+      await batchSaveLiveExamsOrder(updates);
+
+      if (onUpdateExam) {
+        updates.forEach(u => {
+          const original = exams.find(e => e.id === u.id);
+          if (original) {
+            onUpdateExam({ ...original, liveOrder: u.liveOrder, sortOrder: u.liveOrder });
+          }
+        });
+      }
+
+      showNotification('সর্বশেষ লাইভ হওয়া পরীক্ষা অনুযায়ী ক্রম সফলভাবে সাজানো হয়েছে!');
+    } catch (err) {
+      console.error(err);
+      showNotification('ক্রম সাজাতে ত্রুটি হয়েছে।', true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Tab Header Banner */}
@@ -434,6 +615,42 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
         </div>
       </div>
 
+      {/* Live Exams Ordering Management Banner */}
+      {subTab === 'live' && allLiveExams.length > 0 && (
+        <div className="bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/90 dark:border-emerald-800/60 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 shrink-0 mt-0.5">
+              <SlidersHorizontal className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-extrabold text-sm sm:text-base text-emerald-950 dark:text-emerald-200">
+                  লাইভ এক্সাম তালিকা ও ডিসপ্লে ক্রম নিয়ন্ত্রণ
+                </h4>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-200/80 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                  মোট {toBengaliDigits(allLiveExams.length)} টি চলমান পরীক্ষা
+                </span>
+              </div>
+              <p className="text-xs text-emerald-800/80 dark:text-emerald-300/80 mt-1 leading-relaxed">
+                হোম পেজে লাইভ পরীক্ষাগুলোর প্রদর্শন ক্রম এখান থেকে সাজান। যেকোনো পরীক্ষাকে উপরে (⬆️) বা নিচে (⬇️) নিতে পারেন, অথবা 📌 পিন করে সবার শীর্ষে রাখতে পারেন।
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+            <button
+              onClick={handleAutoSortByNewest}
+              disabled={isProcessing || allLiveExams.length <= 1}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+              title="নতুন লাইভ হওয়া পরীক্ষাগুলো স্বয়ংক্রিয়ভাবে সবার আগে সাজান"
+            >
+              <Zap className="h-3.5 w-3.5 fill-current" />
+              <span>নতুন লাইভ আগে সাজান</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Exam Cards List */}
       <div className="space-y-4">
         {currentList.length === 0 ? (
@@ -458,6 +675,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
             const archiveDateFormatted = formatBengaliDateTime(exam.archiveDateTime || exam.archiveTime);
             const questionCount = exam.questions?.length || exam.totalQuestions || 0;
             const marksCount = exam.totalMarks || questionCount;
+            const allLiveIndex = subTab === 'live' ? allLiveExams.findIndex(e => e.id === exam.id) : -1;
 
             return (
               <div
@@ -478,6 +696,21 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                           <Archive className="h-3 w-3" />
                           আর্কাইভ (Archived)
+                        </span>
+                      )}
+
+                      {/* Live Rank Pill */}
+                      {subTab === 'live' && allLiveIndex !== -1 && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs">
+                          পজিশন: #{toBengaliDigits(allLiveIndex + 1)}
+                        </span>
+                      )}
+
+                      {/* Pinned Badge */}
+                      {subTab === 'live' && exam.isPinned && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 shadow-2xs">
+                          <Pin className="h-3 w-3 fill-amber-500 text-amber-600" />
+                          শীর্ষে পিন করা
                         </span>
                       )}
 
@@ -565,6 +798,91 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
                     </span>
                   </div>
                 </div>
+
+                {/* Live Order Control Bar */}
+                {subTab === 'live' && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50/90 dark:bg-slate-950/60 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-extrabold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                        <MoveVertical className="h-3.5 w-3.5 text-primary" />
+                        হোম পেজে ডিসপ্লে অবস্থান:
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-md font-black bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs shadow-2xs">
+                        #{toBengaliDigits(allLiveIndex + 1)}
+                      </span>
+                      {exam.isPinned && (
+                        <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-100/90 dark:bg-amber-900/60 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-800">
+                          📌 শীর্ষে পিনড
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Pin / Unpin button */}
+                      <button
+                        onClick={() => handleTogglePin(exam)}
+                        disabled={isProcessing}
+                        className={`px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border ${
+                          exam.isPinned
+                            ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 border-amber-300 hover:bg-amber-200'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-300'
+                        }`}
+                        title={exam.isPinned ? 'পিন তুলে নিন' : 'সবার উপরে পিন করুন'}
+                      >
+                        <Pin className={`h-3.5 w-3.5 ${exam.isPinned ? 'fill-amber-500 text-amber-600' : 'text-slate-400'}`} />
+                        <span>{exam.isPinned ? 'আনপিন করুন' : 'শীর্ষে পিন'}</span>
+                      </button>
+
+                      {/* Move Up ⬆️ */}
+                      <button
+                        onClick={() => handleMoveExamOrder(exam.id, 'up')}
+                        disabled={isProcessing || allLiveIndex <= 0}
+                        className="px-2.5 py-1.5 rounded-lg font-bold text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-all cursor-pointer"
+                        title="তালিকার ১ ধাপ উপরে নিন"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>উপরে নিন</span>
+                      </button>
+
+                      {/* Move Down ⬇️ */}
+                      <button
+                        onClick={() => handleMoveExamOrder(exam.id, 'down')}
+                        disabled={isProcessing || allLiveIndex === -1 || allLiveIndex >= allLiveExams.length - 1}
+                        className="px-2.5 py-1.5 rounded-lg font-bold text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-all cursor-pointer"
+                        title="তালিকার ১ ধাপ নিচে নামান"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5 text-rose-600" />
+                        <span>নিচে নামান</span>
+                      </button>
+
+                      {/* Direct order input */}
+                      <div className="flex items-center gap-1 pl-1">
+                        <input
+                          type="number"
+                          min="1"
+                          max={allLiveExams.length}
+                          placeholder={String(allLiveIndex + 1)}
+                          value={orderInputs[exam.id] ?? ''}
+                          onChange={(e) => setOrderInputs(prev => ({ ...prev, [exam.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSetDirectOrder(exam.id);
+                            }
+                          }}
+                          className="w-14 px-2 py-1 text-center font-extrabold text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary"
+                          title="নির্দিষ্ট ক্রম নম্বর লিখুন"
+                        />
+                        <button
+                          onClick={() => handleSetDirectOrder(exam.id)}
+                          disabled={isProcessing || !orderInputs[exam.id]}
+                          className="px-2.5 py-1 rounded-lg font-bold text-xs bg-primary hover:bg-primary-dark text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        >
+                          সেট
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Action Buttons Bar */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800">

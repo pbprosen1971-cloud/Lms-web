@@ -28,9 +28,16 @@ export const SUBJECTS: SubjectStats[] = [
     colorClass: 'from-amber-500/10 to-amber-500/20 text-amber-600 dark:text-amber-400',
   },
   {
-    subject: 'GK',
+    subject: 'বাংলাদেশ বিষয়াবলি -GK',
     examsCount: 12,
     questionsCount: 240,
+    iconName: 'Landmark',
+    colorClass: 'from-rose-500/10 to-rose-500/20 text-rose-600 dark:text-rose-400',
+  },
+  {
+    subject: 'আন্তর্জাতিক সাধারন জ্ঞান',
+    examsCount: 10,
+    questionsCount: 200,
     iconName: 'Globe',
     colorClass: 'from-purple-500/10 to-purple-500/20 text-purple-600 dark:text-purple-400',
   },
@@ -317,7 +324,7 @@ export const INITIAL_EXAMS: Exam[] = [
   {
     id: 'exam-4',
     title: 'বিশ্ব পরিচিতি ও সাধারণ জ্ঞান (General Knowledge) মডেল টেস্ট',
-    subject: 'GK',
+    subject: 'আন্তর্জাতিক সাধারন জ্ঞান',
     durationMinutes: 10,
     totalQuestions: 6,
     totalMarks: 6,
@@ -385,7 +392,7 @@ export const INITIAL_EXAMS: Exam[] = [
     totalMarks: 5,
     status: 'upcoming',
     dateCreated: '2026-07-19',
-    startTime: '2026-09-22T10:00:00',
+    startTime: '2026-10-25T10:00:00',
     isPremium: true,
     questions: [
       {
@@ -439,7 +446,7 @@ export const INITIAL_EXAMS: Exam[] = [
     totalMarks: 5,
     status: 'upcoming',
     dateCreated: '2026-07-20',
-    startTime: '2026-09-21T18:30:00',
+    startTime: '2026-10-28T18:30:00',
     questions: [
       {
         id: 'q-6-1',
@@ -613,7 +620,7 @@ export const INITIAL_MINISTRY_BANKS: MinistryQuestionBank[] = [
         options: ['মন্ত্রিপরিষদ বিভাগ', 'জনপ্রশাসন মন্ত্রণালয়', 'গৃহায়ন ও গণপূর্ত মন্ত্রণালয়', 'অর্থ মন্ত্রণালয়'],
         correctAnswer: 1,
         explanation: 'বাংলাদেশ সচিবালয়ের সার্বিক প্রশাসনিক ও সিভিল সার্ভিস ব্যবস্থাপনা জনপ্রশাসন মন্ত্রণালয়ের অধীন।',
-        subject: 'সাধারণ জ্ঞান'
+        subject: 'বাংলাদেশ বিষয়াবলি -GK'
       },
       {
         id: 'mbq-2-3',
@@ -648,7 +655,7 @@ export const INITIAL_MINISTRY_BANKS: MinistryQuestionBank[] = [
         options: ['২০১৮ সালে', '২০১৯ সালে', '২০২০ সালে', '২০২১ সালে'],
         correctAnswer: 2,
         explanation: '২০২০ সালের ২২ জানুয়ারি বাংলাদেশে আনুষ্ঠানিকভাবে ই-পাসপোর্ট (e-Passport) সেবার উদ্বোধন করা হয়।',
-        subject: 'সাধারণ জ্ঞান'
+        subject: 'বাংলাদেশ বিষয়াবলি -GK'
       },
       {
         id: 'mbq-3-2',
@@ -656,7 +663,7 @@ export const INITIAL_MINISTRY_BANKS: MinistryQuestionBank[] = [
         options: ['স্বরাষ্ট্র মন্ত্রণালয়', 'দুর্যোগ ব্যবস্থাপনা ও ত্রাণ মন্ত্রণালয়', 'প্রতিরক্ষা মন্ত্রণালয়', 'গৃহায়ন মন্ত্রণালয়'],
         correctAnswer: 0,
         explanation: 'ফায়ার সার্ভিস ও সিভিল ডিফেন্স অধিদপ্তর স্বরাষ্ট্র মন্ত্রণালয়ের সুরক্ষা সেবা বিভাগের অধীনে পরিচালিত হয়।',
-        subject: 'সাধারণ জ্ঞান'
+        subject: 'বাংলাদেশ বিষয়াবলি -GK'
       },
       {
         id: 'mbq-3-3',

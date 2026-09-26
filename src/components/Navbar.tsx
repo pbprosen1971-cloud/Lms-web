@@ -50,6 +50,9 @@ export default function Navbar({
   const handleNavClick = (view: string) => {
     setView(view);
     setIsOpen(false);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
   };
 
   return (
@@ -57,7 +60,15 @@ export default function Navbar({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo Section */}
-          <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setView('home')}>
+          <div 
+            className="flex items-center gap-2 cursor-pointer group" 
+            onClick={() => {
+              setView('home');
+              window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+              document.documentElement.scrollTop = 0;
+              document.body.scrollTop = 0;
+            }}
+          >
             <div className="rounded-xl overflow-hidden shadow-md shadow-[#00a854]/25 group-hover:scale-105 transition-transform duration-200">
               <MedhaLogo className="h-10 w-10" withBackground />
             </div>

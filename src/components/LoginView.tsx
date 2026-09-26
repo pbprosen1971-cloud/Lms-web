@@ -456,7 +456,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           // Operation not allowed fallback: store session & direct access
           localStorage.setItem('active_user_session', JSON.stringify(newUserProfile));
           onLoginSuccess(newUserProfile);
-          setView('dashboard');
+          setView('home');
         }
         setLoading(false);
         return;
@@ -647,7 +647,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
         localStorage.setItem('active_user_session', JSON.stringify(profile));
         onLoginSuccess(profile);
-        setView(profile.role === 'admin' ? 'admin' : 'dashboard');
+        setView(profile.role === 'admin' ? 'admin' : 'home');
       }
     } catch (err: any) {
       console.error('Firebase Auth Error:', err);
@@ -686,7 +686,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         } catch (e) {}
         localStorage.setItem('active_user_session', JSON.stringify(fallbackProfile));
         onLoginSuccess(fallbackProfile);
-        setView(isAdmin ? 'admin' : 'dashboard');
+        setView(isAdmin ? 'admin' : 'home');
         return;
       }
       setError(getBengaliErrorMessage(err.code || err.message));
@@ -827,7 +827,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
       localStorage.setItem('active_user_session', JSON.stringify(profile));
       onLoginSuccess(profile);
-      setView(profile.role === 'admin' ? 'admin' : 'dashboard');
+      setView(profile.role === 'admin' ? 'admin' : 'home');
     } catch (err: any) {
       console.warn('Google Sign-In error:', err);
       const errorCode = (err?.code || '').toLowerCase();

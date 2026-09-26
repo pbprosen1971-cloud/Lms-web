@@ -69,16 +69,24 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   };
 
   const handleItemClick = (item: BroadcastNotification) => {
-    if (item.url) {
-      if (item.url.startsWith('#')) {
-        const el = document.querySelector(item.url);
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
+    if (item.url && item.url.trim()) {
+      const cleanUrl = item.url.trim();
+      if (cleanUrl.startsWith('#') || cleanUrl.startsWith('/#')) {
+        const hash = cleanUrl.startsWith('/#') ? cleanUrl.slice(1) : cleanUrl;
+        const el = document.querySelector(hash);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          window.location.hash = hash;
+        }
         onClose();
+      } else if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+        window.open(cleanUrl, '_blank', 'noopener,noreferrer');
       } else if (onNavigate) {
-        onNavigate(item.url);
+        onNavigate(cleanUrl);
         onClose();
       } else {
-        window.location.href = item.url;
+        window.location.href = cleanUrl;
       }
     }
   };
@@ -202,8 +210,8 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
                       {item.body}
                     </p>
                     {item.url && item.url !== '/' && (
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 pt-1">
-                        <span>বিস্তারিত দেখুন</span>
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 pt-1 group-hover:underline">
+                        <span>ক্লিক করলেই ফিচারে নিয়ে যাবে</span>
                         <ExternalLink className="h-3 w-3" />
                       </div>
                     )}

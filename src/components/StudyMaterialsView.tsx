@@ -132,6 +132,9 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
 
   // Realtime subscription to published materials
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
     setLoading(true);
     const unsub = subscribeToStudyMaterials((data) => {
       setMaterials(data && data.length > 0 ? data : DEFAULT_STUDY_MATERIALS);

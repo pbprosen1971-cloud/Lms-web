@@ -491,15 +491,34 @@ export default function App() {
 
   // 2. Real-time Subscription to Exams Collection in Firestore
   useEffect(() => {
+    const normalizeExamSubject = (exam: Exam): Exam => {
+      const raw = exam.subject?.trim();
+      if (raw === 'GK' || raw === 'সাধারণ জ্ঞান') {
+        const isIntl = !!(exam.title && (exam.title.includes('বিশ্ব') || exam.title.includes('আন্তর্জাতিক') || exam.title.toLowerCase().includes('international')));
+        const newSubject = isIntl ? 'আন্তর্জাতিক সাধারন জ্ঞান' : 'বাংলাদেশ বিষয়াবলি -GK';
+        const updated: Exam = {
+          ...exam,
+          subject: newSubject,
+          questions: (exam.questions || []).map(q => ({
+            ...q,
+            subject: (q.subject === 'GK' || q.subject === 'সাধারণ জ্ঞান') ? newSubject : (q.subject || newSubject)
+          }))
+        };
+        saveExamToFirestore(updated, exam.createdBy || 'system-admin').catch(() => {});
+        return updated;
+      }
+      return exam;
+    };
+
     const unsubscribeExams = subscribeToExams((firestoreExams) => {
       if (firestoreExams.length > 0) {
-        setExams(firestoreExams);
+        setExams(firestoreExams.map(normalizeExamSubject));
       } else {
         console.log("Seeding initial exams into Firestore database...");
         INITIAL_EXAMS.forEach((exam) => {
           saveExamToFirestore(exam, 'system-admin').catch(console.warn);
         });
-        setExams(INITIAL_EXAMS);
+        setExams(INITIAL_EXAMS.map(normalizeExamSubject));
       }
     });
 
@@ -944,6 +963,22 @@ export default function App() {
     setCurrentView(matchedView);
   }, [location.pathname, location.search, user, selectedExam, selectedResult, exams, navigate]);
 
+  // Automatically scroll to the top on every page/view or route change
+  useEffect(() => {
+    // If navigating to a specific in-page anchor hash (e.g. #live-exams), scroll smoothly to that element
+    if (window.location.hash) {
+      const el = document.querySelector(window.location.hash);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+    }
+    // Otherwise immediately scroll window and document to the top (0, 0)
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [currentView, location.pathname]);
+
   const setView = (nextView: string) => {
     setCurrentView(nextView);
     const targetPath = viewToPath(nextView);
@@ -957,6 +992,10 @@ export default function App() {
       }
       navigate(targetPath);
     }
+    // Instant scroll to top when changing view
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
   };
 
   // Render current view content

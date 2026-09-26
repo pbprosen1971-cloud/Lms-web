@@ -43,6 +43,7 @@ import {
   Loader2,
   Filter,
   Bell,
+  Zap,
 } from 'lucide-react';
 import {
   Exam,
@@ -61,6 +62,7 @@ import {
   safeTimestampToString,
   safeDateOnlyString,
   formatSafeDisplay,
+  isScheduledLiveTimeReached,
 } from '../lib/dateUtils';
 import SheetsSync from './SheetsSync';
 import AdminGoogleSheetsTab from './AdminGoogleSheetsTab';
@@ -82,6 +84,7 @@ import {
   subscribeToExamQuestions,
   clearUpcomingExamSettings,
   deleteUpcomingExamFromSiteSettings,
+  updateExamArchiveStatus,
 } from '../services/firestoreService';
 import {
   readAndValidateQuestionsFromSheet,
@@ -96,6 +99,8 @@ import {
 import AdminStudyMaterials from './AdminStudyMaterials';
 import AdminPaymentManagement from './AdminPaymentManagement';
 import AdminNotificationManager from './AdminNotificationManager';
+import { CsvQuestionImport } from './CsvQuestionImport';
+import AdminCsvDiagnosticsTab from './AdminCsvDiagnosticsTab';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -131,8 +136,19 @@ interface AdminViewProps {
   onSaveUpcomingExamSettings?: (settings: UpcomingExamSettings) => Promise<void> | void;
 }
 
-const SUBJECT_OPTIONS = ['বাংলা', 'ইংরেজি', 'গণিত', 'GK', 'ICT', 'বিজ্ঞান'];
-const DOPTOR_OPTIONS = ['BCS', 'Bank', '11th - 20th Grade Job'];
+const SUBJECT_OPTIONS = [
+  'বাংলা',
+  'ইংরেজি',
+  'গণিত',
+  'বাংলাদেশ বিষয়াবলি -GK',
+  'আন্তর্জাতিক সাধারন জ্ঞান',
+  'ICT',
+  'বিজ্ঞান',
+  'বাংলা ব্যাকরণ',
+  'নৈতিকতা মূল্যবোধ ও সুশাসন',
+  'ভূগোল'
+];
+const DOPTOR_OPTIONS = ['BCS', 'Bank', '11th - 20th Grade Job', 'NTRCA - নিবন্ধন', 'Primary'];
 
 export default function AdminView({
   exams,
@@ -149,7 +165,7 @@ export default function AdminView({
   upcomingExamSettings,
   onSaveUpcomingExamSettings,
 }: AdminViewProps) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications' | 'csv_diagnostics'>('analytics');
 
   // Ministry Question Bank Admin Form State
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
@@ -606,6 +622,7 @@ export default function AdminView({
   const [upcomingSuccessMsg, setUpcomingSuccessMsg] = useState<string>('');
   const [upcomingErrorMsg, setUpcomingErrorMsg] = useState<string>('');
   const [selectedUpcomingExamForQuestions, setSelectedUpcomingExamForQuestions] = useState<Exam | null>(null);
+  const [showCsvQuestionImport, setShowCsvQuestionImport] = useState<boolean>(false);
 
   // Dedicated Firestore siteSettings/upcomingExam multi-exam persistent state
   const [isEditingFeatured, setIsEditingFeatured] = useState<boolean>(false);
@@ -676,7 +693,22 @@ export default function AdminView({
         return;
       }
 
-      const matchExam = exams.find(e => e.id === examId || e.title.trim().toLowerCase() === tKey);
+      const matchExam = exams.find(e => e.id === examId || (e.title && e.title.trim().toLowerCase() === tKey));
+
+      // CRITICAL: If this exam is already live, archive, archived, or completed, it must NOT show in upcoming
+      if (matchExam && (matchExam.status === 'live' || matchExam.status === 'archive' || matchExam.status === 'archived' || matchExam.status === 'completed')) {
+        return;
+      }
+      if ((item as any).status === 'live' || (item as any).status === 'archive' || (item as any).status === 'archived' || (item as any).status === 'completed') {
+        return;
+      }
+
+      // Also check if scheduled time has arrived and it transitioned to live
+      if (isScheduledLiveTimeReached(item.startTime, (item as any).examDateTime || item.examDate) ||
+          (matchExam && isScheduledLiveTimeReached(matchExam.startTime, (matchExam as any).examDateTime))) {
+        return;
+      }
+
       const qCount = matchExam?.questions?.length || matchExam?.totalQuestions || item.totalQuestions || 0;
 
       list.push({
@@ -702,6 +734,10 @@ export default function AdminView({
     exams.filter(e => e.status === 'upcoming').forEach(exam => {
       const tKey = (exam.title || '').trim().toLowerCase();
       if (isLocallyDeleted(exam.id, exam.title)) {
+        return;
+      }
+      // If scheduled time has arrived, this exam has transitioned to live
+      if (isScheduledLiveTimeReached(exam.startTime, (exam as any).examDateTime)) {
         return;
       }
       if (!seenIds.has(exam.id) && !seenTitles.has(tKey)) {
@@ -883,12 +919,12 @@ export default function AdminView({
 
   const handleMakeUpcomingExamLive = async (item: any) => {
     const targetExamId = item.examId || item.id || `upcoming-exam-${Date.now()}`;
-    const existingExam = exams.find(e => e.id === targetExamId || e.title === item.title);
+    const existingExam = exams.find(e => e.id === targetExamId || (e.title && e.title.trim().toLowerCase() === item.title.trim().toLowerCase()));
     const qList = item.questions || existingExam?.questions || [];
     const liveExam: Exam = {
       id: targetExamId,
       title: item.title,
-      subject: item.subject || 'BCS',
+      subject: item.subject || existingExam?.subject || 'BCS',
       durationMinutes: item.durationMinutes || 30,
       totalQuestions: qList.length,
       totalMarks: qList.length,
@@ -900,7 +936,17 @@ export default function AdminView({
       questions: qList,
     };
 
+    // Immediately remove from local upcoming list so UI updates without waiting
+    setLocallyDeletedUpcomingIds(prev => {
+      const next = new Set(prev);
+      next.add(targetExamId);
+      if (item.id) next.add(item.id);
+      if (item.title) next.add(item.title.trim().toLowerCase());
+      return next;
+    });
+
     try {
+      await updateExamArchiveStatus(targetExamId, 'live');
       await updateUpcomingExamInFirestore(targetExamId, {
         status: 'live',
         isPublished: true,
@@ -908,11 +954,12 @@ export default function AdminView({
         totalQuestions: qList.length,
         totalMarks: qList.length,
       });
-      await clearUpcomingExamSettings(targetExamId);
+      await clearUpcomingExamSettings(targetExamId, item.title);
       if (onUpdateExam) {
         onUpdateExam(liveExam);
       }
       setSettingSuccessMsg(`"${item.title}" পরীক্ষাটি সরাসরি লাইভ করা হয়েছে এবং চলমান পরীক্ষায় স্থানান্তরিত হয়েছে!`);
+      showAdminToast(`"${item.title}" পরীক্ষাটি সরাসরি লাইভ করা হয়েছে!`, 'success');
       setTimeout(() => setSettingSuccessMsg(''), 6000);
     } catch (err) {
       console.error('Error making live:', err);
@@ -1942,6 +1989,17 @@ export default function AdminView({
           </button>
 
           <button
+            onClick={() => { setActiveTab('csv_diagnostics'); setSearchQuery(''); }}
+            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+              activeTab === 'csv_diagnostics'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/25'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-emerald-800 dark:text-emerald-300'
+            }`}
+          >
+            <Zap className="h-4.5 w-4.5 text-amber-400" /> 🔍 CSV ও বিষয় ডায়াগনস্টিক
+          </button>
+
+          <button
             onClick={() => { setActiveTab('referral_leaderboard'); setSearchQuery(''); }}
             className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
               activeTab === 'referral_leaderboard'
@@ -2669,7 +2727,11 @@ export default function AdminView({
                         <span>📚 বিষয়সমূহ ক্যাটাগরি</span>
                       </label>
                       <select
-                        value={SUBJECT_OPTIONS.includes(newSubject) ? newSubject : ''}
+                        value={
+                          newSubject === 'GK' || newSubject === 'সাধারণ জ্ঞান'
+                            ? 'বাংলাদেশ বিষয়াবলি -GK'
+                            : (SUBJECT_OPTIONS.includes(newSubject) ? newSubject : '')
+                        }
                         onChange={(e) => {
                           if (e.target.value) {
                             setNewSubject(e.target.value);
@@ -2681,9 +2743,13 @@ export default function AdminView({
                         <option value="বাংলা">বাংলা (Bangla)</option>
                         <option value="ইংরেজি">ইংরেজি (English)</option>
                         <option value="গণিত">গণিত (Math)</option>
-                        <option value="GK">সাধারণ জ্ঞান (GK)</option>
+                        <option value="বাংলাদেশ বিষয়াবলি -GK">বাংলাদেশ বিষয়াবলি -GK</option>
+                        <option value="আন্তর্জাতিক সাধারন জ্ঞান">আন্তর্জাতিক সাধারন জ্ঞান</option>
                         <option value="ICT">ICT (তথ্যপ্রযুক্তি)</option>
                         <option value="বিজ্ঞান">বিজ্ঞান (Science)</option>
+                        <option value="বাংলা ব্যাকরণ">বাংলা ব্যাকরণ</option>
+                        <option value="নৈতিকতা মূল্যবোধ ও সুশাসন">নৈতিকতা মূল্যবোধ ও সুশাসন</option>
+                        <option value="ভূগোল">ভূগোল (Geography)</option>
                       </select>
                     </div>
 
@@ -2705,6 +2771,8 @@ export default function AdminView({
                         <option value="BCS">BCS (বিসিএস)</option>
                         <option value="Bank">Bank (ব্যাংক চাকরি)</option>
                         <option value="11th - 20th Grade Job">11th - 20th Grade (১১তম-২০তম গ্রেড)</option>
+                        <option value="NTRCA - নিবন্ধন">NTRCA - নিবন্ধন (শিক্ষক নিবন্ধন)</option>
+                        <option value="Primary">Primary (প্রাথমিক সহকারী শিক্ষক)</option>
                       </select>
                     </div>
                   </div>
@@ -3603,14 +3671,25 @@ export default function AdminView({
                     </div>
 
                     {!isAddingNewUpcoming && !editingUpcomingExamId && (
-                      <button
-                        type="button"
-                        onClick={handleStartAddNewUpcoming}
-                        className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer hover:shadow-lg shrink-0"
-                      >
-                        <Plus className="h-4 w-4" />
-                        <span>নতুন আপকামিং পরীক্ষা যুক্ত করুন</span>
-                      </button>
+                      <div className="flex items-center gap-2 flex-wrap shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('csv_diagnostics')}
+                          className="px-3.5 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Zap className="h-3.5 w-3.5 text-amber-500 fill-current" />
+                          <span>বিষয় ডায়াগনস্টিক</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleStartAddNewUpcoming}
+                          className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer hover:shadow-lg shrink-0"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>নতুন আপকামিং পরীক্ষা যুক্ত করুন</span>
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -3657,20 +3736,26 @@ export default function AdminView({
                               বিষয় / দপ্তর ক্যাটাগরি
                             </label>
                             <select
-                              value={settingSubject}
+                              value={settingSubject === 'GK' || settingSubject === 'সাধারণ জ্ঞান' ? 'বাংলাদেশ বিষয়াবলি -GK' : settingSubject}
                               onChange={(e) => setSettingSubject(e.target.value)}
                               className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
                             >
                               <option value="BCS">BCS (বিসিএস)</option>
                               <option value="Bank">Bank (ব্যাংক চাকরি)</option>
                               <option value="11th - 20th Grade Job">11th - 20th Grade (১১তম-২০তম গ্রেড)</option>
+                              <option value="NTRCA - নিবন্ধন">NTRCA - নিবন্ধন (শিক্ষক নিবন্ধন)</option>
+                              <option value="Primary">Primary (প্রাথমিক সহকারী শিক্ষক)</option>
                               <option value="মন্ত্রণালয় প্রস্তুতি">মন্ত্রণালয় প্রস্তুতি</option>
-                              <option value="সাধারণ জ্ঞান">সাধারণ জ্ঞান</option>
+                              <option value="বাংলাদেশ বিষয়াবলি -GK">বাংলাদেশ বিষয়াবলি -GK</option>
+                              <option value="আন্তর্জাতিক সাধারন জ্ঞান">আন্তর্জাতিক সাধারন জ্ঞান</option>
                               <option value="বাংলা">বাংলা</option>
                               <option value="ইংরেজি">ইংরেজি</option>
                               <option value="গণিত">গণিত</option>
                               <option value="ICT">ICT (তথ্যপ্রযুক্তি)</option>
                               <option value="বিজ্ঞান">বিজ্ঞান</option>
+                              <option value="বাংলা ব্যাকরণ">বাংলা ব্যাকরণ</option>
+                              <option value="নৈতিকতা মূল্যবোধ ও সুশাসন">নৈতিকতা মূল্যবোধ ও সুশাসন</option>
+                              <option value="ভূগোল">ভূগোল</option>
                             </select>
                           </div>
 
@@ -4018,113 +4103,157 @@ export default function AdminView({
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     {/* Add New Question Form (Left: 5 cols) */}
                     <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 space-y-4 shadow-sm">
-                      <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
                         <h4 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
                           <PlusCircle className="h-4 w-4 text-emerald-600" />
                           <span>নতুন প্রশ্ন যোগ করুন (Add Question)</span>
                         </h4>
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded">
-                          /Exam/{'{examId}'}/questions
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">বিষয় / টপিক</label>
-                          <select
-                            value={newQuestSubject}
-                            onChange={(e) => setNewQuestSubject(e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowCsvQuestionImport(prev => !prev)}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                              showCsvQuestionImport
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                            }`}
+                            title="CSV ফাইল আপলোড করে এক ক্লিকে অনেক প্রশ্ন যুক্ত করুন"
                           >
-                            <option value="বাংলা">বাংলা (Bangla)</option>
-                            <option value="ইংরেজি">ইংরেজি (English)</option>
-                            <option value="গণিত">গণিত (Math)</option>
-                            <option value="সাধারণ জ্ঞান">সাধারণ জ্ঞান (GK)</option>
-                            <option value="ICT">ICT (তথ্যপ্রযুক্তি)</option>
-                            <option value="বিজ্ঞান">বিজ্ঞান (Science)</option>
-                            <option value="ভূগোল">ভূগোল (Geography)</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">নম্বর (Marks)</label>
-                          <input
-                            type="number"
-                            min="0.5"
-                            step="0.5"
-                            value={newQuestMarks}
-                            onChange={(e) => setNewQuestMarks(Number(e.target.value))}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
+                            <FileSpreadsheet className="h-3.5 w-3.5" />
+                            <span>{showCsvQuestionImport ? 'ম্যানুয়াল ফর্ম দেখুন' : '📄 CSV দিয়ে Import'}</span>
+                          </button>
                         </div>
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300">প্রশ্নের বিবরণ (Question Text) *</label>
-                        <textarea
-                          rows={3}
-                          required
-                          placeholder="প্রশ্নটি এখানে বাংলায় বা ইংরেজিতে লিখুন..."
-                          value={newQuestText}
-                          onChange={(e) => setNewQuestText(e.target.value)}
-                          className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      {/* CSV Import Component View */}
+                      {showCsvQuestionImport ? (
+                        <CsvQuestionImport
+                          selectedExam={selectedUpcomingExamForQuestions}
+                          onClose={() => setShowCsvQuestionImport(false)}
+                          onQuestionsImported={(newQuestions) => {
+                            const updated = [
+                              ...(selectedUpcomingExamForQuestions.questions || []),
+                              ...newQuestions,
+                            ];
+                            const updatedExam: Exam = {
+                              ...selectedUpcomingExamForQuestions,
+                              questions: updated,
+                              totalQuestions: updated.length,
+                              totalMarks: updated.length,
+                            };
+                            setSelectedUpcomingExamForQuestions(updatedExam);
+                            if (onUpdateExam) {
+                              onUpdateExam(updatedExam);
+                            }
+                            setCreateSuccessMsg(`✅ ${newQuestions.length}টি প্রশ্ন সফলভাবে Import হয়েছে এবং সংরক্ষিত হয়েছে!`);
+                            setTimeout(() => setCreateSuccessMsg(''), 5000);
+                          }}
                         />
-                      </div>
+                      ) : (
+                        /* Manual Question Add Form */
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">বিষয় / টপিক</label>
+                              <select
+                                value={newQuestSubject === 'GK' || newQuestSubject === 'সাধারণ জ্ঞান' ? 'বাংলাদেশ বিষয়াবলি -GK' : newQuestSubject}
+                                onChange={(e) => setNewQuestSubject(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              >
+                                <option value="বাংলা">বাংলা (Bangla)</option>
+                                <option value="ইংরেজি">ইংরেজি (English)</option>
+                                <option value="গণিত">গণিত (Math)</option>
+                                <option value="বাংলাদেশ বিষয়াবলি -GK">বাংলাদেশ বিষয়াবলি -GK</option>
+                                <option value="আন্তর্জাতিক সাধারন জ্ঞান">আন্তর্জাতিক সাধারন জ্ঞান</option>
+                                <option value="ICT">ICT (তথ্যপ্রযুক্তি)</option>
+                                <option value="বিজ্ঞান">বিজ্ঞান (Science)</option>
+                                <option value="বাংলা ব্যাকরণ">বাংলা ব্যাকরণ</option>
+                                <option value="নৈতিকতা মূল্যবোধ ও সুশাসন">নৈতিকতা মূল্যবোধ ও সুশাসন</option>
+                                <option value="ভূগোল">ভূগোল (Geography)</option>
+                              </select>
+                            </div>
 
-                      {/* Options */}
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                          অপশনসমূহ পূরণ করুন এবং সঠিক উত্তর নির্বাচন করুন *
-                        </label>
-                        {[0, 1, 2, 3].map((optIdx) => (
-                          <div key={optIdx} className="flex items-center gap-2">
-                            <label className="cursor-pointer">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">নম্বর (Marks)</label>
                               <input
-                                type="radio"
-                                name="upcomingCorrectOpt"
-                                checked={newQuestCorrect === optIdx}
-                                onChange={() => setNewQuestCorrect(optIdx)}
-                                className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                value={newQuestMarks}
+                                onChange={(e) => setNewQuestMarks(Number(e.target.value))}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                               />
-                            </label>
-                            <input
-                              type="text"
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">প্রশ্নের বিবরণ (Question Text) *</label>
+                            <textarea
+                              rows={3}
                               required
-                              placeholder={`অপশন ${optIdx === 0 ? 'ক (Option A)' : optIdx === 1 ? 'খ (Option B)' : optIdx === 2 ? 'গ (Option C)' : 'ঘ (Option D)'}`}
-                              value={newQuestOptions[optIdx]}
-                              onChange={(e) => {
-                                const copy = [...newQuestOptions];
-                                copy[optIdx] = e.target.value;
-                                setNewQuestOptions(copy);
-                              }}
-                              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white font-medium"
+                              placeholder="প্রশ্নটি এখানে বাংলায় বা ইংরেজিতে লিখুন..."
+                              value={newQuestText}
+                              onChange={(e) => setNewQuestText(e.target.value)}
+                              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             />
                           </div>
-                        ))}
-                      </div>
 
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                          প্রশ্নের ব্যাখ্যা / সমাধান (Explanation - Optional)
-                        </label>
-                        <textarea
-                          rows={2}
-                          placeholder="পরীক্ষার্থীদের সঠিক উত্তর বুঝতে সাহায্য করতে বিস্তারিত ব্যাখ্যা দিন..."
-                          value={newQuestExplanation}
-                          onChange={(e) => setNewQuestExplanation(e.target.value)}
-                          className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
-                      </div>
+                          {/* Options */}
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                              অপশনসমূহ পূরণ করুন এবং সঠিক উত্তর নির্বাচন করুন *
+                            </label>
+                            {[0, 1, 2, 3].map((optIdx) => (
+                              <div key={optIdx} className="flex items-center gap-2">
+                                <label className="cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name="upcomingCorrectOpt"
+                                    checked={newQuestCorrect === optIdx}
+                                    onChange={() => setNewQuestCorrect(optIdx)}
+                                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                  />
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder={`অপশন ${optIdx === 0 ? 'ক (Option A)' : optIdx === 1 ? 'খ (Option B)' : optIdx === 2 ? 'গ (Option C)' : 'ঘ (Option D)'}`}
+                                  value={newQuestOptions[optIdx]}
+                                  onChange={(e) => {
+                                    const copy = [...newQuestOptions];
+                                    copy[optIdx] = e.target.value;
+                                    setNewQuestOptions(copy);
+                                  }}
+                                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900 dark:text-white font-medium"
+                                />
+                              </div>
+                            ))}
+                          </div>
 
-                      <button
-                        type="button"
-                        onClick={handleAddQuestionToUpcoming}
-                        disabled={!newQuestText.trim() || newQuestOptions.some(o => !o.trim())}
-                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <PlusCircle className="h-4 w-4" />
-                        <span>ফায়ারস্টোরে প্রশ্নটি সংরক্ষণ করুন (Save to Firestore)</span>
-                      </button>
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                              প্রশ্নের ব্যাখ্যা / সমাধান (Explanation - Optional)
+                            </label>
+                            <textarea
+                              rows={2}
+                              placeholder="পরীক্ষার্থীদের সঠিক উত্তর বুঝতে সাহায্য করতে বিস্তারিত ব্যাখ্যা দিন..."
+                              value={newQuestExplanation}
+                              onChange={(e) => setNewQuestExplanation(e.target.value)}
+                              className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleAddQuestionToUpcoming}
+                            disabled={!newQuestText.trim() || newQuestOptions.some(o => !o.trim())}
+                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-extrabold rounded-xl shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <PlusCircle className="h-4 w-4" />
+                            <span>ফায়ারস্টোরে প্রশ্নটি সংরক্ষণ করুন (Save to Firestore)</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Question List View (Right: 7 cols) */}
@@ -4308,6 +4437,11 @@ export default function AdminView({
           {/* TAB 12: PUSH NOTIFICATIONS & HOME BANNER NOTICE */}
           {activeTab === 'notifications' && (
             <AdminNotificationManager currentUser={currentUser} />
+          )}
+
+          {/* TAB 13: CSV QUESTION & SUBJECT DIAGNOSTICS */}
+          {activeTab === 'csv_diagnostics' && (
+            <AdminCsvDiagnosticsTab exams={exams} onRefreshExams={() => {}} />
           )}
 
         </div>

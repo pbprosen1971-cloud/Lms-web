@@ -40,6 +40,12 @@ import {
   Layers,
   Share2,
   Copy,
+  Filter,
+  FileCheck,
+  School,
+  Landmark,
+  Scale,
+  Compass,
 } from 'lucide-react';
 import { Exam, LeaderboardUser, MinistryQuestionBank, Question, Review, SubjectStats, UserProfile, UpcomingExamSettings, PaymentPlan } from '../types';
 import { motion } from 'motion/react';
@@ -55,251 +61,7 @@ import ManualPaymentModal from './ManualPaymentModal';
 import UpcomingExamCountdown from './UpcomingExamCountdown';
 import ModernNoticeTicker from './ModernNoticeTicker';
 import FaqSection from './FaqSection';
-
-const FALLBACK_SUBJECT_QUESTIONS: Record<string, Question[]> = {
-  'বাংলা': [
-    {
-      id: 'fb-bn-1',
-      text: 'বাংলা সাহিত্যের প্রথম সার্থক উপন্যাস কোনটি?',
-      options: ['আলালের ঘরের দুলাল', 'দুর্গেশনন্দিনী', 'কপালকুণ্ডলা', 'বিষবৃক্ষ'],
-      correctAnswer: 1,
-      explanation: 'বঙ্কিমচন্দ্র চট্টোপাধ্যায় রচিত "দুর্গেশনন্দিনী" (১৮৬৫) বাংলা সাহিত্যের প্রথম সার্থক উপন্যাস।',
-      subject: 'বাংলা'
-    },
-    {
-      id: 'fb-bn-2',
-      text: 'চর্যাপদ কত সালে আবিষ্কৃত হয়?',
-      options: ['১৯০৭', '১৯১৬', '১৮৯৭', '১৯২০'],
-      correctAnswer: 0,
-      explanation: 'মহামহোপাধ্যায় হরপ্রসাদ শাস্ত্রী ১৯০৭ সালে নেপালের রাজদরবারের রয়েল লাইব্রেরি থেকে চর্যাপদ আবিষ্কার করেন।',
-      subject: 'বাংলা'
-    },
-    {
-      id: 'fb-bn-3',
-      text: 'কোনটি শুদ্ধ বানান?',
-      options: ['স্বায়ত্বশাসন', 'স্বায়ত্তশাসন', 'স্বায়ত্বশাসণ', 'শ্বায়ত্বশাসন'],
-      correctAnswer: 1,
-      explanation: 'সঠিক শুদ্ধ বানান হলো "স্বায়ত্তশাসন" (স্বায়ত্ত + শাসন)।',
-      subject: 'বাংলা'
-    },
-    {
-      id: 'fb-bn-4',
-      text: 'বাংলা ভাষায় ব্যবহৃত মৌলিক স্বরধ্বনি কয়টি?',
-      options: ['৭টি', '১১টি', '৯টি', '২৫টি'],
-      correctAnswer: 0,
-      explanation: 'বাংলা ভাষায় মৌলিক স্বরধ্বনি মোট ৭টি: অ, আ, ই, উ, এ, ও এবং এ্যা।',
-      subject: 'বাংলা'
-    },
-    {
-      id: 'fb-bn-5',
-      text: '‘অগ্নিবীণা’ কাব্যের প্রথম কবিতা কোনটি?',
-      options: ['ধূমকেতু', 'খেয়াপারের তরণী', 'প্রলয়োল্লাস', 'বিদ্রোহী'],
-      correctAnswer: 2,
-      explanation: 'কাজী নজরুল ইসলামের "অগ্নিবীণা" কাব্যের প্রথম কবিতা "প্রলয়োল্লাস"।',
-      subject: 'বাংলা'
-    }
-  ],
-  'ইংরেজি': [
-    {
-      id: 'fb-en-1',
-      text: 'Choose the correct form of verb: Many a student ___ failed in the exam.',
-      options: ['have', 'has', 'were', 'are'],
-      correctAnswer: 1,
-      explanation: '"Many a" is followed by a singular noun and a singular verb. Therefore, "has" is correct.',
-      subject: 'ইংরেজি'
-    },
-    {
-      id: 'fb-en-2',
-      text: 'Which one is the correct spelling?',
-      options: ['Questionaire', 'Questionnaire', 'Questionair', 'Questionarrie'],
-      correctAnswer: 1,
-      explanation: 'The correct spelling is "Questionnaire" with double "n".',
-      subject: 'ইংরেজি'
-    },
-    {
-      id: 'fb-en-3',
-      text: 'What is the synonym of "Competent"?',
-      options: ['Incapable', 'Capable', 'Lazy', 'Clumsy'],
-      correctAnswer: 1,
-      explanation: '"Competent" means having necessary ability or skill, synonym is "Capable".',
-      subject: 'ইংরেজি'
-    },
-    {
-      id: 'fb-en-4',
-      text: 'Hardly had he seen the police ___ he ran away.',
-      options: ['than', 'then', 'when', 'before'],
-      correctAnswer: 2,
-      explanation: 'Structure with "Hardly had..." takes "when" in the clause.',
-      subject: 'ইংরেজি'
-    }
-  ],
-  'গণিত': [
-    {
-      id: 'fb-math-1',
-      text: '১ থেকে ১০০ পর্যন্ত মৌলিক সংখ্যা কয়টি?',
-      options: ['২০টি', '২৫টি', '২৪টি', '২৬টি'],
-      correctAnswer: 1,
-      explanation: '১ থেকে ১০০ পর্যন্ত মোট মৌলিক সংখ্যা ২৫টি (যেমন: ২, ৩, ৫, ৭, ১১, ১৩, ১৭, ১৯, ২৩, ২৯, ৩১, ৩৭, ৪১, ৪৩, ৪৭, ৫৩, ৫৯, ৬১, ৬৭, ৭১, ৭৩, ৭৯, ৮৩, ৮৯, ৯৭)।',
-      subject: 'গণিত'
-    },
-    {
-      id: 'fb-math-2',
-      text: 'দুইটি সংখ্যার গ.সা.গু ৭ এবং ল.সা.গু ৮৪। একটি সংখ্যা ২১ হলে অপর সংখ্যাটি কত?',
-      options: ['১৪', '২৮', '৪২', '৫৬'],
-      correctAnswer: 1,
-      explanation: 'অপর সংখ্যা = (গ.সা.গু × ল.সা.গু) / প্রথম সংখ্যা = (৭ × ৮৪) / ২১ = ২৮।',
-      subject: 'গণিত'
-    },
-    {
-      id: 'fb-math-3',
-      text: 'ত্রিভুজের তিনটি কোণের সমষ্টি কত ডিগ্রী?',
-      options: ['৯০°', '১৮০°', '৩৬০°', '২৭০°'],
-      correctAnswer: 1,
-      explanation: 'যেকোনো ত্রিভুজের তিন কোণের সমষ্টি দুই সমকোণ বা ১৮০ ডিগ্রী।',
-      subject: 'গণিত'
-    },
-    {
-      id: 'fb-math-4',
-      text: '০.১ × ০.০১ × ০.০০১ = কত?',
-      options: ['০.০০০১', '০.০০০০০১', '০.০০০১', '০.০০০১০'],
-      correctAnswer: 1,
-      explanation: '১ × ১ × ১ = ১। দশমিকের পর মোট ঘর ১ + ২ + ৩ = ৬টি। সুতরাং উত্তর ০.০০০০০১।',
-      subject: 'গণিত'
-    }
-  ],
-  'GK': [
-    {
-      id: 'fb-gk-1',
-      text: 'বাংলাদেশের একমাত্র প্রবাল দ্বীপ কোনটি?',
-      options: ['সন্দ্বীপ', 'মনপুরা', 'সেন্টমার্টিন', 'হাতিয়া'],
-      correctAnswer: 2,
-      explanation: 'কক্সবাজার জেলায় অবস্থিত সেন্টমার্টিন দ্বীপ বাংলাদেশের একমাত্র সামুদ্রিক প্রবাল দ্বীপ।',
-      subject: 'GK'
-    },
-    {
-      id: 'fb-gk-2',
-      text: 'মুক্তিযুদ্ধে ১ নম্বর সেক্টর কোনটি ছিল?',
-      options: ['ঢাকা', 'চট্টগ্রাম ও পার্বত্য চট্টগ্রাম', 'সিলেট', 'কুষ্টিয়া'],
-      correctAnswer: 1,
-      explanation: '১ নম্বর সেক্টর ছিল চট্টগ্রাম, পার্বত্য চট্টগ্রাম ও ফেনী নদী পর্যন্ত এলাকা।',
-      subject: 'GK'
-    },
-    {
-      id: 'fb-gk-3',
-      text: 'বাংলাদেশের জাতীয় পতাকার দৈর্ঘ্য ও প্রস্থের সঠিক অনুপাত কোনটি?',
-      options: ['১০:৬', '১০:৮', '৪:৩', '৫:৪'],
-      correctAnswer: 0,
-      explanation: 'বাংলাদেশের জাতীয় পতাকার দৈর্ঘ্য ও প্রস্থের অনুপাত ১০:৬ (অথবা ৫:৩)।',
-      subject: 'GK'
-    }
-  ],
-  'BCS': [
-    {
-      id: 'fb-bcs-1',
-      text: 'আন্তর্জাতিক আদালতের (ICJ) বিচারক সংখ্যা কতজন?',
-      options: ['১০ জন', '১২ জন', '১৫ জন', '১৮ জন'],
-      correctAnswer: 2,
-      explanation: 'নেদারল্যান্ডসের হেগে অবস্থিত আন্তর্জাতিক আদালতের স্থায়ী বিচারক সংখ্যা ১৫ জন।',
-      subject: 'BCS'
-    },
-    {
-      id: 'fb-bcs-2',
-      text: 'বিশ্বের সবচেয়ে বড় ম্যানগ্রোভ বন কোনটি?',
-      options: ['আমাজন', 'সুন্দরবন', 'ব্ল্যাক ফরেস্ট', 'তৈগা'],
-      correctAnswer: 1,
-      explanation: 'বাংলাদেশ ও ভারতের সীমান্তে অবস্থিত সুন্দরবন বিশ্বের সর্ববৃহৎ ম্যানগ্রোভ বন।',
-      subject: 'BCS'
-    }
-  ],
-  'ICT': [
-    {
-      id: 'fb-ict-1',
-      text: 'URL এর পূর্ণরূপ কোনটি?',
-      options: ['Uniform Resource Locator', 'Universal Resource Link', 'Unified Resource Language', 'United Resource Locator'],
-      correctAnswer: 0,
-      explanation: 'URL = Uniform Resource Locator, যা ওয়েবসাইটের ওয়েব ঠিকানা নির্দেশ করে।',
-      subject: 'ICT'
-    },
-    {
-      id: 'fb-ict-2',
-      text: 'কম্পিউটারের স্থায়ী মেমোরি কোনটি?',
-      options: ['RAM', 'ROM', 'Cache', 'Hard Disk'],
-      correctAnswer: 1,
-      explanation: 'ROM (Read Only Memory) হলো কম্পিউটারের স্থায়ী মেমোরি যা বিদ্যুৎ চলে গেলেও তথ্য মুছে যায় না।',
-      subject: 'ICT'
-    }
-  ],
-  'Bank': [
-    {
-      id: 'fb-bank-1',
-      text: 'বাংলাদেশ ব্যাংক কত সালে তার কেন্দ্রীয় ব্যাংকিং কার্যক্রম শুরু করে?',
-      options: ['১৯৭১ সালে', '১৯৭২ সালে', '১৯৭৩ সালে', '১৯৭৫ সালে'],
-      correctAnswer: 1,
-      explanation: '১৯৭২ সালের বাংলাদেশ ব্যাংক আদেশ অনুযায়ী ১৬ ডিসেম্বর ১৯৭১ থেকে কার্যকর হিসেবে বাংলাদেশ ব্যাংক গঠিত হয়।',
-      subject: 'Bank'
-    },
-    {
-      id: 'fb-bank-2',
-      text: 'ব্যাংকিং খাতে SWIFT কোডের দৈর্ঘ্য সাধারণত কত অক্ষরের হয়?',
-      options: ['৪-৬ অক্ষর', '৮-১১ অক্ষর', '১২-১৫ অক্ষর', '১৬ অক্ষর'],
-      correctAnswer: 1,
-      explanation: 'SWIFT (Society for Worldwide Interbank Financial Telecommunication) কোড ৮ থেকে ১১ টি অক্ষরের হয়।',
-      subject: 'Bank'
-    }
-  ],
-  '11th - 20th Grade Job': [
-    {
-      id: 'fb-grade-1',
-      text: 'জাতীয় স্মৃতিসৌধের স্থপতি কে?',
-      options: ['হামিদুর রহমান', 'সৈয়দ মাইনুল হোসেন', 'মাজহারুল ইসলাম', 'শামীম সিকদার'],
-      correctAnswer: 1,
-      explanation: 'সাভারে অবস্থিত জাতীয় স্মৃতিসৌধের স্থপতি স্থপতি সৈয়দ মাইনুল হোসেন।',
-      subject: '11th - 20th Grade Job'
-    }
-  ],
-  'বিজ্ঞান': [
-    {
-      id: 'fb-sci-1',
-      text: 'কোনটি সাধারণ তাপমাত্রায় তরল ধাতু?',
-      options: ['পারদ', 'সোডিয়াম', 'সীসা', 'অ্যালুমিনিয়াম'],
-      correctAnswer: 0,
-      explanation: 'পারদ (Mercury / Hg) হলো একমাত্র ধাতু যা সাধারণ ঘরের তাপমাত্রায় তরল অবস্থায় থাকে।',
-      subject: 'বিজ্ঞান'
-    },
-    {
-      id: 'fb-sci-2',
-      text: 'কোষের "পাওয়ার হাউস" বা শক্তিঘর বলা হয় কোনটিকে?',
-      options: ['সাইটোপ্লাজম', 'মাইটোকন্ড্রিয়া', 'রাইবোজোম', 'গলগি বডি'],
-      correctAnswer: 1,
-      explanation: 'মাইটোকন্ড্রিয়ায় কোষের যাবতীয় শক্তি উৎপাদিত ও সঞ্চিত হয় বলে একে কোষের পাওয়ার হাউস বলা হয়।',
-      subject: 'বিজ্ঞান'
-    },
-    {
-      id: 'fb-sci-3',
-      text: 'সূর্যের আলো থেকে আমরা কোন ভিটামিন পাই?',
-      options: ['ভিটামিন এ', 'ভিটামিন সি', 'ভিটামিন ডি', 'ভিটামিন কে'],
-      correctAnswer: 2,
-      explanation: 'সূর্যের অতিবেগুনী রশ্মির সাহায্যে মানুষের ত্বকে ভিটামিন ডি (Vitamin D) তৈরি হয়।',
-      subject: 'বিজ্ঞান'
-    },
-    {
-      id: 'fb-sci-4',
-      text: 'বায়ুমণ্ডলে কোন গ্যাসের পরিমাণ সবচেয়ে বেশি?',
-      options: ['অক্সিজেন', 'নাইট্রোজেন', 'কার্বন ডাই অক্সাইড', 'আর্গন'],
-      correctAnswer: 1,
-      explanation: 'বায়ুমণ্ডলে প্রায় ৭৮.০৮% নাইট্রোজেন এবং ২০.৯৫% অক্সিজেন থাকে।',
-      subject: 'বিজ্ঞান'
-    },
-    {
-      id: 'fb-sci-5',
-      text: 'পানির রাসায়নিক সংকেত কোনটি?',
-      options: ['H2O', 'CO2', 'NaCl', 'O2'],
-      correctAnswer: 0,
-      explanation: 'পানির রাসায়নিক সংকেত হলো H₂O (দুইটি হাইড্রোজেন পরমাণু ও একটি অক্সিজেন পরমাণু)।',
-      subject: 'বিজ্ঞান'
-    }
-  ]
-};
+import { detectQuestionSubject } from '../lib/subjectClassifier';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -575,48 +337,157 @@ export default function HomeView({
   const [practiceSearch, setPracticeSearch] = useState('');
   const [practiceTab, setPracticeTab] = useState<'qa' | 'interactive'>('qa');
   const [interactiveAnswers, setInteractiveAnswers] = useState<Record<string, number>>({});
+  const [selectedExamCount, setSelectedExamCount] = useState<number>(10);
+
+  // Helper to determine if a question matches a subject or department category
+  const isQuestionMatchForSubject = (q: Question, subjectName: string, exam?: Exam): boolean => {
+    let qSub = (q.subject || '').trim();
+
+    // If question subject is empty or generic, infer it
+    if (!qSub || qSub === 'BCS' || qSub === 'Model Test' || qSub === 'বিসিএস') {
+      if (exam && exam.subject && !['BCS', 'Bank', '11th - 20th Grade Job', 'NTRCA - নিবন্ধন', 'Primary'].includes(exam.subject)) {
+        qSub = exam.subject;
+      } else {
+        qSub = detectQuestionSubject(q.text, q.options, q.explanation);
+      }
+    }
+
+    // Exact match
+    if (qSub === subjectName) return true;
+
+    // GK specialization
+    if (subjectName === 'বাংলাদেশ বিষয়াবলি -GK') {
+      if (qSub === 'বাংলাদেশ বিষয়াবলি -GK' || qSub === 'বাংলাদেশ বিষয়াবলী' || qSub === 'বাংলাদেশ বিষয়াবলি') return true;
+      if (qSub === 'GK' || qSub === 'সাধারণ জ্ঞান') {
+        const isWorld = q.text && (q.text.includes('জাতিসংঘ') || q.text.includes('মহাসাগর') || q.text.includes('নোবেল') || q.text.includes('বিশ্ব'));
+        return !isWorld;
+      }
+    }
+
+    if (subjectName === 'আন্তর্জাতিক সাধারন জ্ঞান') {
+      if (qSub === 'আন্তর্জাতিক সাধারন জ্ঞান' || qSub === 'আন্তর্জাতিক বিষয়াবলি' || qSub === 'আন্তর্জাতিক বিষয়াবলী' || qSub === 'আন্তর্জাতিক') return true;
+      if (qSub === 'GK' || qSub === 'সাধারণ জ্ঞান') {
+        const isWorld = q.text && (q.text.includes('জাতিসংঘ') || q.text.includes('মহাসাগর') || q.text.includes('নোবেল') || q.text.includes('বিশ্ব'));
+        return !!isWorld;
+      }
+    }
+
+    if (subjectName === 'বাংলা ব্যাকরণ') {
+      return qSub === 'বাংলা ব্যাকরণ' || qSub.includes('ব্যাকরণ');
+    }
+
+    if (subjectName === 'বাংলা') {
+      return qSub === 'বাংলা' || qSub === 'বাংলা সাহিত্য';
+    }
+
+    if (subjectName === 'ইংরেজি') {
+      return qSub === 'ইংরেজি' || qSub.toLowerCase() === 'english';
+    }
+
+    if (subjectName === 'গণিত') {
+      return qSub === 'গণিত' || qSub.toLowerCase() === 'math' || qSub.toLowerCase() === 'mathematics';
+    }
+
+    if (subjectName === 'ICT') {
+      return qSub === 'ICT' || qSub.toLowerCase() === 'ict' || qSub.includes('কম্পিউটার') || qSub.includes('তথ্যপ্রযুক্তি');
+    }
+
+    if (subjectName === 'বিজ্ঞান') {
+      return qSub === 'বিজ্ঞান' || qSub.toLowerCase() === 'science' || qSub.includes('সাধারণ বিজ্ঞান');
+    }
+
+    if (subjectName === 'নৈতিকতা মূল্যবোধ ও সুশাসন') {
+      return qSub.includes('নৈতিকতা') || qSub.includes('সুশাসন');
+    }
+
+    if (subjectName === 'ভূগোল') {
+      return qSub.includes('ভূগোল');
+    }
+
+    // Doptor categories:
+    // CRITICAL for Primary: Only match if explicitly for Primary department category
+    if (subjectName === 'Primary') {
+      return qSub === 'Primary' || qSub === 'প্রাথমিক সহকারী শিক্ষক' || (exam ? (exam.subject === 'Primary' || exam.subject === 'প্রাথমিক সহকারী শিক্ষক') : false);
+    }
+
+    if (subjectName === 'BCS') {
+      return qSub === 'BCS' || (exam ? (exam.subject === 'BCS' || exam.title.toUpperCase().includes('BCS') || exam.title.includes('বিসিএস')) : false);
+    }
+
+    if (subjectName === 'Bank') {
+      return qSub === 'Bank' || (exam ? (exam.subject === 'Bank' || exam.title.toLowerCase().includes('bank') || exam.title.includes('ব্যাংক')) : false);
+    }
+
+    if (subjectName === '11th - 20th Grade Job') {
+      return qSub === '11th - 20th Grade Job' || (exam ? (exam.subject === '11th - 20th Grade Job' || exam.title.toLowerCase().includes('11th') || exam.title.includes('গ্রেড')) : false);
+    }
+
+    if (subjectName === 'NTRCA - নিবন্ধন') {
+      return qSub === 'NTRCA - নিবন্ধন' || (exam ? (exam.subject === 'NTRCA - নিবন্ধন' || exam.title.toLowerCase().includes('ntrca') || exam.title.includes('নিবন্ধন')) : false);
+    }
+
+    return false;
+  };
 
   // Get practice questions for a specific subject or department category
   const getQuestionsForSubject = (subjectName: string): { question: Question; examTitle: string }[] => {
     const result: { question: Question; examTitle: string }[] = [];
 
     exams.forEach(exam => {
-      // Exclude upcoming exams so questions aren't leaked before live date
-      if (exam.status === 'upcoming') return;
+      // Exclude upcoming exams only if they are draft/unpublished
+      if (exam.status === 'upcoming' && exam.isPublished === false) return;
 
       if (exam.questions && exam.questions.length > 0) {
         exam.questions.forEach(q => {
-          const effSub = q.subject || exam.subject || '';
-          
-          const isMatch = 
-            effSub === subjectName ||
-            exam.subject === subjectName ||
-            (subjectName === 'GK' && (effSub === 'সাধারণ জ্ঞান' || effSub === 'GK' || exam.subject === 'সাধারণ জ্ঞান' || exam.subject === 'GK')) ||
-            (subjectName === 'Bank' && (effSub.toLowerCase().includes('bank') || (exam.subject && exam.subject.toLowerCase().includes('bank')))) ||
-            (subjectName === 'BCS' && (effSub === 'BCS' || exam.subject === 'BCS')) ||
-            (effSub && (effSub.includes(subjectName) || subjectName.includes(effSub)));
-
-          if (isMatch) {
-            result.push({
-              question: q,
-              examTitle: exam.title
-            });
+          if (isQuestionMatchForSubject(q, subjectName, exam)) {
+            if (!result.some(it => (it.question.id && it.question.id === q.id) || it.question.text === q.text)) {
+              result.push({
+                question: q,
+                examTitle: exam.title
+              });
+            }
           }
         });
       }
     });
 
-    const fallbacks = FALLBACK_SUBJECT_QUESTIONS[subjectName] || [];
-    fallbacks.forEach(fq => {
-      if (!result.some(item => item.question.id === fq.id || item.question.text === fq.text)) {
-        result.push({
-          question: fq,
-          examTitle: `${subjectName} স্ট্যান্ডার্ড প্রশ্ন ব্যাংক`
-        });
-      }
-    });
-
     return result;
+  };
+
+  const handleStartCustomExam = (count?: number) => {
+    if (!practiceSubject) return;
+    const allItems = getQuestionsForSubject(practiceSubject);
+    const allQuestions = allItems.map(item => item.question);
+    if (allQuestions.length === 0) {
+      return;
+    }
+
+    const questionCount = count || selectedExamCount || 10;
+    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+    const selectedQuestions = shuffled.slice(0, Math.min(questionCount, shuffled.length));
+    const durationMinutes = Math.max(5, Math.ceil(selectedQuestions.length * 1));
+
+    const customExam: Exam = {
+      id: `custom-practice-${Date.now()}`,
+      title: `${practiceSubject} - বিষয়ভিত্তিক মডেল টেস্ট (${selectedQuestions.length}টি প্রশ্ন)`,
+      description: `${practiceSubject} বিষয়ের সংগৃহীত প্রশ্ন ব্যাংক থেকে নির্বাচিত ${selectedQuestions.length} টি প্রশ্নের বিশেষ মডেল টেস্ট।`,
+      subject: practiceSubject,
+      durationMinutes: durationMinutes,
+      totalQuestions: selectedQuestions.length,
+      totalMarks: selectedQuestions.length,
+      status: 'live',
+      dateCreated: new Date().toISOString(),
+      isPremium: false,
+      questions: selectedQuestions,
+    };
+
+    setPracticeSubject(null);
+    setSelectedExam(customExam);
+    if (!user) {
+      setView('login');
+    } else {
+      setView('exam');
+    }
   };
 
   // Dynamic Subjects calculation based on exams and question bank
@@ -625,26 +496,91 @@ export default function HomeView({
       'বাংলা': { iconName: 'BookOpen', colorClass: 'from-emerald-500/10 to-emerald-500/20 text-emerald-600 dark:text-emerald-400' },
       'ইংরেজি': { iconName: 'Languages', colorClass: 'from-blue-500/10 to-blue-500/20 text-blue-600 dark:text-blue-400' },
       'গণিত': { iconName: 'Calculator', colorClass: 'from-amber-500/10 to-amber-500/20 text-amber-600 dark:text-amber-400' },
-      'GK': { iconName: 'Globe', colorClass: 'from-purple-500/10 to-purple-500/20 text-purple-600 dark:text-purple-400' },
-      'BCS': { iconName: 'GraduationCap', colorClass: 'from-rose-500/10 to-rose-500/20 text-rose-600 dark:text-rose-400' },
+      'বাংলাদেশ বিষয়াবলি -GK': { iconName: 'Landmark', colorClass: 'from-rose-500/10 to-rose-500/20 text-rose-600 dark:text-rose-400' },
+      'আন্তর্জাতিক সাধারন জ্ঞান': { iconName: 'Globe', colorClass: 'from-purple-500/10 to-purple-500/20 text-purple-600 dark:text-purple-400' },
       'ICT': { iconName: 'Cpu', colorClass: 'from-cyan-500/10 to-cyan-500/20 text-cyan-600 dark:text-cyan-400' },
       'বিজ্ঞান': { iconName: 'FlaskConical', colorClass: 'from-teal-500/10 to-teal-500/20 text-teal-600 dark:text-teal-400' },
+      'বাংলা ব্যাকরণ': { iconName: 'BookMarked', colorClass: 'from-emerald-600/10 to-emerald-600/20 text-emerald-700 dark:text-emerald-300' },
+      'নৈতিকতা মূল্যবোধ ও সুশাসন': { iconName: 'Scale', colorClass: 'from-violet-500/10 to-violet-500/20 text-violet-600 dark:text-violet-400' },
+      'ভূগোল': { iconName: 'Compass', colorClass: 'from-lime-500/10 to-lime-500/20 text-lime-600 dark:text-lime-400' },
+      'BCS': { iconName: 'GraduationCap', colorClass: 'from-rose-500/10 to-rose-500/20 text-rose-600 dark:text-rose-400' },
       'Bank': { iconName: 'Briefcase', colorClass: 'from-indigo-500/10 to-indigo-500/20 text-indigo-600 dark:text-indigo-400' },
       '11th - 20th Grade Job': { iconName: 'Award', colorClass: 'from-orange-500/10 to-orange-500/20 text-orange-600 dark:text-orange-400' },
+      'NTRCA - নিবন্ধন': { iconName: 'FileCheck', colorClass: 'from-sky-500/10 to-sky-500/20 text-sky-600 dark:text-sky-400' },
+      'Primary': { iconName: 'School', colorClass: 'from-teal-500/10 to-teal-500/20 text-teal-600 dark:text-teal-400' },
     };
 
-    const ALL_KNOWN_SUBJECTS = ['বাংলা', 'ইংরেজি', 'গণিত', 'GK', 'ICT', 'বিজ্ঞান', 'BCS', 'Bank', '11th - 20th Grade Job'];
-    const examSubjects = exams.map(e => e.subject).filter(Boolean);
-    const uniqueSubjects = Array.from(new Set([...ALL_KNOWN_SUBJECTS, ...examSubjects]));
+    const ALL_KNOWN_SUBJECTS = [
+      'বাংলা',
+      'ইংরেজি',
+      'গণিত',
+      'বাংলাদেশ বিষয়াবলি -GK',
+      'আন্তর্জাতিক সাধারন জ্ঞান',
+      'ICT',
+      'বিজ্ঞান',
+      'বাংলা ব্যাকরণ',
+      'নৈতিকতা মূল্যবোধ ও সুশাসন',
+      'ভূগোল',
+      'BCS',
+      'Bank',
+      '11th - 20th Grade Job',
+      'NTRCA - নিবন্ধন',
+      'Primary'
+    ];
+    const examSubjects = exams.map(e => {
+      const raw = e.subject?.trim();
+      if (!raw) return '';
+      if (raw === 'GK' || raw === 'সাধারণ জ্ঞান') {
+        return (raw.includes('আন্তর্জাতিক') || e.title?.includes('বিশ্ব') || e.title?.includes('আন্তর্জাতিক'))
+          ? 'আন্তর্জাতিক সাধারন জ্ঞান'
+          : 'বাংলাদেশ বিষয়াবলি -GK';
+      }
+      return raw;
+    }).filter(Boolean);
+    const uniqueSubjects = Array.from(new Set([...ALL_KNOWN_SUBJECTS, ...examSubjects]))
+      .filter(sub => sub !== 'GK' && sub !== 'সাধারণ জ্ঞান');
+
+    const DOPTOR_LIST = ['BCS', 'Bank', '11th - 20th Grade Job', 'NTRCA - নিবন্ধন', 'Primary'];
 
     return uniqueSubjects.map(subName => {
-      const matchingExams = exams.filter(e => 
-        e.subject === subName || 
-        (subName === 'GK' && (e.subject === 'সাধারণ জ্ঞান' || e.subject === 'GK')) ||
-        (subName === 'Bank' && e.subject?.toLowerCase().includes('bank'))
-      );
-      
+      const isDoptor = DOPTOR_LIST.includes(subName);
+
+      // Matching exams for this subject / doptor category
+      const matchingExams = exams.filter(e => {
+        if (e.status === 'upcoming' && e.isPublished === false) return false;
+
+        if (isDoptor) {
+          const examSub = (e.subject || '').trim();
+          const examTitle = (e.title || '').trim();
+
+          // CRITICAL: Primary must strictly match Primary department exams only.
+          // Do NOT match unrelated exams (like math or general prep) just because title mentions 'প্রাথমিক'
+          if (subName === 'Primary') {
+            return examSub === 'Primary' || examSub === 'প্রাথমিক সহকারী শিক্ষক' || (examSub === 'প্রাথমিক' && !examTitle.includes('গণিত') && !examTitle.includes('বাংলা'));
+          }
+          if (subName === 'BCS') {
+            return examSub.toUpperCase().includes('BCS') || examTitle.toUpperCase().includes('BCS') || examSub.includes('বিসিএস') || examTitle.includes('বিসিএস');
+          }
+          if (subName === 'Bank') {
+            return examSub.toLowerCase().includes('bank') || examTitle.toLowerCase().includes('bank') || examSub.includes('ব্যাংক') || examTitle.includes('ব্যাংক');
+          }
+          if (subName === '11th - 20th Grade Job') {
+            return examSub.toLowerCase().includes('11th') || examSub.toLowerCase().includes('grade') || examSub.includes('গ্রেড') || examTitle.toLowerCase().includes('11th') || examTitle.includes('গ্রেড');
+          }
+          if (subName === 'NTRCA - নিবন্ধন') {
+            return examSub.toLowerCase().includes('ntrca') || examSub.includes('নিবন্ধন') || examTitle.toLowerCase().includes('ntrca') || examTitle.includes('নিবন্ধন');
+          }
+          return examSub === subName;
+        }
+
+        // Subject Category: Exam matches if dedicated to this subject OR has questions for this subject
+        if (e.subject === subName) return true;
+        if (e.questions && e.questions.some(q => isQuestionMatchForSubject(q, subName, e))) return true;
+        return false;
+      });
+
       const questionsForSub = getQuestionsForSubject(subName);
+      const realQuestionsCount = questionsForSub.length;
 
       const config = DEFAULT_SUBJECT_CONFIGS[subName] || {
         iconName: 'BookOpen',
@@ -653,15 +589,15 @@ export default function HomeView({
 
       return {
         subject: subName,
-        examsCount: matchingExams.length || 1,
-        questionsCount: questionsForSub.length,
+        examsCount: matchingExams.length,
+        questionsCount: realQuestionsCount,
         iconName: config.iconName,
         colorClass: config.colorClass,
       };
     });
   }, [exams]);
 
-  const DOPTOR_LIST = ['BCS', 'Bank', '11th - 20th Grade Job'];
+  const DOPTOR_LIST = ['BCS', 'Bank', '11th - 20th Grade Job', 'NTRCA - নিবন্ধন', 'Primary'];
 
   const subjectCategories = useMemo(() => {
     return dynamicSubjects.filter(s => !DOPTOR_LIST.includes(s.subject));
@@ -726,25 +662,110 @@ export default function HomeView({
         return <FlaskConical className="h-6 w-6" />;
       case 'Award':
         return <Award className="h-6 w-6" />;
+      case 'FileCheck':
+        return <FileCheck className="h-6 w-6" />;
+      case 'School':
+        return <School className="h-6 w-6" />;
+      case 'Landmark':
+        return <Landmark className="h-6 w-6" />;
+      case 'Scale':
+        return <Scale className="h-6 w-6" />;
+      case 'Compass':
+        return <Compass className="h-6 w-6" />;
+      case 'BookMarked':
+        return <BookMarked className="h-6 w-6" />;
       default:
         return <BookOpen className="h-6 w-6" />;
     }
   };
 
+  // Dynamic category options for featured exams filter
+  const featuredCategoryOptions = useMemo(() => {
+    const base = [
+      { id: 'ALL', label: 'সবগুলো' },
+      { id: 'BCS', label: 'BCS' },
+      { id: 'Bank', label: 'Bank' },
+      { id: '11th - 20th Grade Job', label: '11th - 20th Grade' },
+      { id: 'NTRCA - নিবন্ধন', label: 'NTRCA - নিবন্ধন' },
+      { id: 'Primary', label: 'Primary' },
+      { id: 'বাংলা', label: 'বাংলা' },
+      { id: 'ইংরেজি', label: 'ইংরেজি' },
+      { id: 'গণিত', label: 'গণিত' },
+      { id: 'বাংলাদেশ বিষয়াবলি -GK', label: 'বাংলাদেশ বিষয়াবলি -GK' },
+      { id: 'আন্তর্জাতিক সাধারন জ্ঞান', label: 'আন্তর্জাতিক সাধারন জ্ঞান' },
+      { id: 'ICT', label: 'ICT' },
+      { id: 'বিজ্ঞান', label: 'বিজ্ঞান' },
+      { id: 'বাংলা ব্যাকরণ', label: 'বাংলা ব্যাকরণ' },
+      { id: 'নৈতিকতা মূল্যবোধ ও সুশাসন', label: 'নৈতিকতা মূল্যবোধ ও সুশাসন' },
+      { id: 'ভূগোল', label: 'ভূগোল' },
+    ];
+    const registered = new Set(base.map(b => b.id.toLowerCase()));
+    exams.forEach(e => {
+      if (e.subject && e.subject.trim()) {
+        const rawSubject = e.subject.trim();
+        const mappedSubject = (rawSubject === 'GK' || rawSubject === 'সাধারণ জ্ঞান') ? 'বাংলাদেশ বিষয়াবলি -GK' : rawSubject;
+        const lower = mappedSubject.toLowerCase();
+        if (!registered.has(lower)) {
+          registered.add(lower);
+          base.push({ id: mappedSubject, label: mappedSubject });
+        }
+      }
+    });
+    return base;
+  }, [exams]);
+
   // Filter exams based on search query and subject card selection
   const filteredExams = useMemo(() => {
     return exams.filter((exam) => {
-      const matchesSearch =
-        exam.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        exam.subject.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesSubject = selectedSubject ? exam.subject === selectedSubject : true;
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q ||
+        (exam.title && exam.title.toLowerCase().includes(q)) ||
+        (exam.subject && exam.subject.toLowerCase().includes(q)) ||
+        (exam.description && exam.description.toLowerCase().includes(q));
+
+      if (!selectedSubject || selectedSubject === 'ALL' || selectedSubject === 'সবগুলো') {
+        return matchesSearch;
+      }
+
+      const sub = selectedSubject.toLowerCase();
+      const examSub = (exam.subject || '').toLowerCase();
+      const examTitle = (exam.title || '').toLowerCase();
+
+      let matchesSubject = examSub === sub;
+
+      if (!matchesSubject) {
+        if (sub === 'bcs') {
+          matchesSubject = examSub.includes('bcs') || examSub.includes('বিসিএস') || examTitle.includes('bcs') || examTitle.includes('বিসিএস');
+        } else if (sub === 'bank') {
+          matchesSubject = examSub.includes('bank') || examSub.includes('ব্যাংক') || examTitle.includes('bank') || examTitle.includes('ব্যাংক');
+        } else if (sub === 'বাংলাদেশ বিষয়াবলি -gk' || sub.includes('বাংলাদেশ')) {
+          matchesSubject = examSub.includes('বাংলাদেশ') || examTitle.includes('বাংলাদেশ');
+        } else if (sub === 'আন্তর্জাতিক সাধারন জ্ঞান' || sub.includes('আন্তর্জাতিক')) {
+          matchesSubject = examSub.includes('আন্তর্জাতিক') || examTitle.includes('আন্তর্জাতিক');
+        } else if (sub === 'বাংলা ব্যাকরণ' || sub.includes('ব্যাকরণ')) {
+          matchesSubject = examSub.includes('ব্যাকরণ') || examTitle.includes('ব্যাকরণ');
+        } else if (sub === 'নৈতিকতা মূল্যবোধ ও সুশাসন' || sub.includes('নৈতিকতা')) {
+          matchesSubject = examSub.includes('নৈতিকতা') || examSub.includes('সুশাসন') || examTitle.includes('নৈতিকতা') || examTitle.includes('সুশাসন');
+        } else if (sub === 'ভূগোল') {
+          matchesSubject = examSub.includes('ভূগোল') || examTitle.includes('ভূগোল');
+        } else if (sub === 'ict' || sub === 'তথ্য ও যোগাযোগ প্রযুক্তি') {
+          matchesSubject = examSub.includes('ict') || examSub.includes('কম্পিউটার') || examSub.includes('তথ্য') || examTitle.includes('ict');
+        } else if (sub.includes('grade') || sub.includes('গ্রেড')) {
+          matchesSubject = examSub.includes('grade') || examSub.includes('গ্রেড') || examTitle.includes('grade') || examTitle.includes('গ্রেড');
+        } else if (sub === 'বাংলা' || sub === 'ইংরেজি' || sub === 'গণিত' || sub === 'বিজ্ঞান') {
+          matchesSubject = examSub.includes(sub) || examTitle.includes(sub);
+        } else {
+          matchesSubject = examSub.includes(sub) || examTitle.includes(sub);
+        }
+      }
+
       return matchesSearch && matchesSubject;
     });
   }, [exams, searchQuery, selectedSubject]);
 
   const liveExams = useMemo(() => {
     const now = Date.now();
-    return filteredExams.filter((exam) => {
+    const list = filteredExams.filter((exam) => {
       if (exam.status === 'archive' || exam.status === 'archived') return false;
 
       // Check if this upcoming exam's scheduled time has arrived -> auto-transition to live
@@ -776,6 +797,39 @@ export default function HomeView({
         }
       }
       return exam.status === 'live';
+    });
+
+    // Intelligent sorting:
+    // 1. Pinned to top
+    // 2. Custom manual order (liveOrder: 1, 2, 3...)
+    // 3. Newest live / scheduled / created first
+    // 4. Alphabetical / ID fallback
+    return list.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+
+      const orderA = typeof a.liveOrder === 'number' ? a.liveOrder : (typeof a.sortOrder === 'number' ? a.sortOrder : Infinity);
+      const orderB = typeof b.liveOrder === 'number' ? b.liveOrder : (typeof b.sortOrder === 'number' ? b.sortOrder : Infinity);
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      const getTimestamp = (e: Exam): number => {
+        const timeStr = e.liveAt || e.examDateTime || e.startTime || e.dateCreated;
+        if (timeStr) {
+          const t = new Date(timeStr).getTime();
+          if (!isNaN(t)) return t;
+        }
+        return 0;
+      };
+
+      const timeA = getTimestamp(a);
+      const timeB = getTimestamp(b);
+      if (timeA !== timeB && timeA > 0 && timeB > 0) {
+        return timeB - timeA;
+      }
+
+      return b.id.localeCompare(a.id);
     });
   }, [filteredExams]);
 
@@ -876,7 +930,7 @@ export default function HomeView({
               </h1>
               
               <p className="text-base sm:text-lg text-slate-200/90 max-w-2xl font-normal leading-relaxed drop-shadow-sm">
-                মেধা এক্সাম পোর্টালের মাধ্যমে BCS, ব্যাংক, আইসিটি ও সাধারণ জ্ঞানের রিয়েল-টাইম পরীক্ষা দিন। নিজেকে যাচাই করুন এবং লিডারবোর্ডে এগিয়ে থাকুন।
+                মেধা এক্সাম পোর্টালের মাধ্যমে BCS, ব্যাংক, প্রাইমারি, বাংলা ও ইংরেজী বিষয়ে রিয়েল-টাইম পরীক্ষা দিন। নিজেকে যাচাই করুন এবং লিডারবোর্ডে এগিয়ে থাকুন।
               </p>
 
               {/* Subtle decorative gradient divider separating top hero content */}
@@ -980,44 +1034,37 @@ export default function HomeView({
               )}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-5 gap-3 sm:gap-4">
               {subjectCategories.map((subject) => {
-                const isSelected = selectedSubject === subject.subject;
                 return (
                   <div
                     key={subject.subject}
                     onClick={() => {
-                      handleSubjectClick(subject.subject);
                       setPracticeSubject(subject.subject);
                       setInteractiveAnswers({});
                       setPracticeSearch('');
                     }}
-                    className={`group relative cursor-pointer rounded-2xl p-4 border text-center transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl ${
-                      isSelected
-                        ? 'bg-primary text-white border-primary shadow-lg shadow-primary/25'
-                        : 'bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 hover:border-primary/50'
-                    }`}
+                    className="group relative cursor-pointer rounded-2xl p-3.5 sm:p-4 border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-center transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl hover:border-primary/60 flex flex-col justify-between items-center select-none outline-none focus:outline-none"
                   >
-                    <div
-                      className={`inline-flex p-3 rounded-xl mb-2.5 transition-transform group-hover:scale-110 ${
-                        isSelected
-                          ? 'bg-white/20 text-white'
-                          : subject.colorClass
-                      }`}
-                    >
-                      {getSubjectIcon(subject.iconName)}
-                    </div>
-                    <h4 className="font-extrabold text-sm sm:text-base leading-tight line-clamp-1 text-slate-900 dark:text-slate-100">{subject.subject}</h4>
-                    <div className={`text-[11px] mt-1 space-y-0.5 ${isSelected ? 'text-white font-semibold' : 'text-slate-600 dark:text-slate-400 font-medium'}`}>
-                      <p>{subject.examsCount} টি এক্সাম</p>
-                      <p className="font-bold text-slate-800 dark:text-slate-200">{subject.questionsCount} টি প্রশ্ন</p>
+                    <div className="flex flex-col items-center w-full">
+                      <div
+                        className={`inline-flex p-3 rounded-xl mb-2.5 transition-transform duration-300 group-hover:scale-110 ${subject.colorClass}`}
+                      >
+                        {getSubjectIcon(subject.iconName)}
+                      </div>
+                      <h4 
+                        title={subject.subject}
+                        className="font-extrabold text-xs sm:text-sm leading-tight line-clamp-2 min-h-[2.25rem] flex items-center justify-center text-slate-900 dark:text-slate-100 group-hover:text-primary transition-colors"
+                      >
+                        {subject.subject}
+                      </h4>
+                      <div className="text-[11px] mt-1 space-y-0.5 text-slate-600 dark:text-slate-400 font-medium">
+                        <p>{toBengaliDigits(subject.examsCount)} টি এক্সাম</p>
+                        <p className="font-bold text-slate-800 dark:text-slate-200">{toBengaliDigits(subject.questionsCount)} টি প্রশ্ন</p>
+                      </div>
                     </div>
 
-                    <div className={`mt-3 py-1 px-2 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1 ${
-                      isSelected 
-                        ? 'bg-white/20 text-white' 
-                        : 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-300 group-hover:bg-primary group-hover:text-white'
-                    }`}>
+                    <div className="mt-3 py-1 px-2.5 w-full rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1 bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-300 group-hover:bg-primary group-hover:text-white">
                       <span>অনুশীলন করুন</span>
                       <ArrowRight className="h-2.5 w-2.5" />
                     </div>
@@ -1038,53 +1085,41 @@ export default function HomeView({
                     জব প্রিপারেশন
                   </span>
                 </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400">বিসিএস, ব্যাংক ও ১১তম-২০তম গ্রেডের স্পেশাল মডেল টেস্ট ও প্রশ্ন ব্যাংক</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400">বিসিএস, ব্যাংক, শিক্ষক নিবন্ধন, প্রাইমারি ও ১১তম-২০তম গ্রেডের স্পেশাল মডেল টেস্ট ও প্রশ্ন ব্যাংক</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {doptorCategories.map((subject) => {
-                const isSelected = selectedSubject === subject.subject;
                 return (
                   <div
                     key={subject.subject}
                     onClick={() => {
-                      handleSubjectClick(subject.subject);
                       setPracticeSubject(subject.subject);
                       setInteractiveAnswers({});
                       setPracticeSearch('');
                     }}
-                    className={`group relative cursor-pointer rounded-2xl p-4 sm:p-5 border text-left transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl flex items-center justify-between gap-4 ${
-                      isSelected
-                        ? 'bg-gradient-to-r from-[#0D47A1] to-[#2196F3] text-white border-primary shadow-lg shadow-primary/25'
-                        : 'bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 hover:border-amber-500/50'
-                    }`}
+                    className="group relative cursor-pointer rounded-2xl p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-left transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl hover:border-amber-500/60 flex items-center justify-between gap-4 select-none outline-none focus:outline-none"
                   >
                     <div className="flex items-center gap-3.5">
                       <div
-                        className={`p-3.5 rounded-2xl shrink-0 transition-transform group-hover:scale-110 ${
-                          isSelected
-                            ? 'bg-white/20 text-white'
-                            : subject.colorClass
-                        }`}
+                        className={`p-3.5 rounded-2xl shrink-0 transition-transform duration-300 group-hover:scale-110 ${subject.colorClass}`}
                       >
                         {getSubjectIcon(subject.iconName)}
                       </div>
                       <div className="space-y-1">
-                        <h4 className="font-extrabold text-base sm:text-lg leading-tight text-slate-900 dark:text-slate-100">{subject.subject}</h4>
-                        <div className={`text-xs space-x-2 ${isSelected ? 'text-white/90' : 'text-slate-600 dark:text-slate-400'}`}>
-                          <span>{subject.examsCount} টি এক্সাম</span>
+                        <h4 className="font-extrabold text-base sm:text-lg leading-tight text-slate-900 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                          {subject.subject}
+                        </h4>
+                        <div className="text-xs space-x-2 text-slate-600 dark:text-slate-400">
+                          <span>{toBengaliDigits(subject.examsCount)} টি এক্সাম</span>
                           <span>•</span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">{subject.questionsCount} টি প্রশ্ন</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{toBengaliDigits(subject.questionsCount)} টি প্রশ্ন</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className={`p-2 rounded-xl shrink-0 transition-all flex items-center gap-1 text-[11px] font-bold ${
-                      isSelected 
-                        ? 'bg-white/20 text-white' 
-                        : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 group-hover:bg-amber-500 group-hover:text-white'
-                    }`}>
+                    <div className="p-2 rounded-xl shrink-0 transition-all flex items-center gap-1 text-[11px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 group-hover:bg-amber-500 group-hover:text-white">
                       <span className="hidden sm:inline">অনুশীলন</span>
                       <ArrowRight className="h-4 w-4" />
                     </div>
@@ -1098,19 +1133,126 @@ export default function HomeView({
 
       {/* 3. Featured Exams Section */}
       <section id="featured-exams" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 scroll-mt-20">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <TrendingUp className="h-6 w-6 text-primary" />
-              চলতি ও আসন্ন পরীক্ষা সমূহ
-            </h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">আপনার সুবিধাজনক সময়ে পরীক্ষায় অংশ নিয়ে মেধা যাচাই করুন।</p>
-          </div>
-          {selectedSubject && (
-            <div className="self-start px-3 py-1 bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-300 text-xs font-bold rounded-lg border border-primary/20">
-              ফিল্টার: {selectedSubject}
+        <div className="space-y-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md p-4 sm:p-6 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-sm transition-all">
+          {/* Header Row: Title, Subtitle and Filter Status */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="p-2 rounded-xl bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-400">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+                  চলতি ও আসন্ন পরীক্ষা সমূহ
+                </h2>
+                <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold rounded-full">
+                  {toBengaliDigits(filteredExams.length)} টি পরীক্ষা
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
+                আপনার সুবিধাজনক সময়ে পরীক্ষায় অংশ নিয়ে মেধা যাচাই করুন।
+              </p>
             </div>
-          )}
+
+            {/* Active Filter Indicators and Reset Button */}
+            {(selectedSubject || searchQuery) && (
+              <div className="flex items-center gap-2 self-start md:self-center flex-wrap">
+                {selectedSubject && (
+                  <span className="px-2.5 py-1 bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-300 text-xs font-bold rounded-lg border border-primary/20">
+                    বিষয়: {selectedSubject}
+                  </span>
+                )}
+                {searchQuery && (
+                  <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700">
+                    সার্চ: "{searchQuery}"
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    setSelectedSubject(null);
+                    setSearchQuery('');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-xs font-semibold rounded-xl border border-rose-200 dark:border-rose-900/50 transition-colors shadow-2xs"
+                  title="সব ফিল্টার রিসেট করুন"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  <span>রিসেট</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Search Bar within #featured-exams */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-slate-400" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="পরীক্ষার নাম বা বিষয় দিয়ে দ্রুত খুঁজুন (যেমন: BCS, Bank, বাংলা, ইংরেজি, গণিত...)"
+              className="w-full pl-10 pr-10 py-2.5 sm:py-3 bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 rounded-2xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all shadow-inner/10"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                title="সার্চ মুছুন"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Category Filters row */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5 text-primary" />
+                <span>ক্যাটাগরি অনুযায়ী ফিল্টার:</span>
+              </span>
+              {selectedSubject && (
+                <button
+                  onClick={() => setSelectedSubject(null)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  ফিল্টার তুলুন
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 no-scrollbar scroll-smooth">
+              {featuredCategoryOptions.map((cat) => {
+                const isAll = cat.id === 'ALL';
+                const isSelected = isAll
+                  ? !selectedSubject
+                  : selectedSubject === cat.id;
+
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => {
+                      if (isAll) {
+                        setSelectedSubject(null);
+                      } else {
+                        setSelectedSubject(isSelected ? null : cat.id);
+                      }
+                    }}
+                    className={`shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-primary text-white shadow-sm shadow-primary/30 ring-2 ring-primary/20 scale-[1.02]'
+                        : 'bg-white dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/90 dark:border-slate-700/80 hover:border-primary/40'
+                    }`}
+                  >
+                    <span>{cat.label}</span>
+                    {isSelected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -1918,140 +2060,184 @@ export default function HomeView({
 
       {/* Subject Q&A & Practice Modal */}
       {practiceSubject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto animate-fade-in">
-          <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden my-6 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden h-[95vh] sm:h-[92vh] flex flex-col">
             
-            {/* Modal Header Banner */}
-            <div className="p-5 sm:p-6 bg-gradient-to-r from-primary/10 via-emerald-500/10 to-transparent border-b border-slate-200/60 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="p-2 bg-primary text-white rounded-xl shadow-md">
-                    <BookMarked className="h-5 w-5" />
-                  </span>
-                  <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                    {practiceSubject} - বিষয়ভিত্তিক প্রশ্ন-উত্তর ও অনুশীলন
+            {/* Top Compact Header - Reduced blank space for maximum question visibility */}
+            <div className="px-3.5 py-2.5 sm:px-5 sm:py-3 bg-gradient-to-r from-primary/10 via-emerald-500/5 to-transparent border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="p-1.5 sm:p-2 bg-primary text-white rounded-xl shadow-xs shrink-0">
+                  <BookMarked className="h-4 w-4 sm:h-5 sm:w-5" />
+                </span>
+                <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white truncate">
+                    {practiceSubject}
                   </h3>
+                  <span className="text-[11px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">
+                    মোট {activePracticeQuestions.length}টি প্রশ্ন
+                  </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 pl-1">
-                  এই বিষয়ের সকল প্রশ্ন, সঠিক উত্তর ও ব্যাখ্যা বিস্তারিত দেখুন এবং অনুশীলনের মাধ্যমে মেধা যাচাই করুন।
-                </p>
               </div>
 
-              <div className="flex items-center gap-2 self-end sm:self-auto">
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => handleStartCustomExam(selectedExamCount)}
+                  disabled={activePracticeQuestions.length === 0}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all disabled:opacity-50"
+                  title="নির্বাচিত প্রশ্নের সংখ্যা অনুযায়ী মডেল টেস্ট শুরু করুন"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                  <span>{Math.min(selectedExamCount, activePracticeQuestions.length || selectedExamCount)}টি প্রশ্নে পরীক্ষা শুরু করুন</span>
+                </button>
                 <button
                   onClick={() => setPracticeSubject(null)}
-                  className="p-2 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title="বন্ধ করুন"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4 w-4 sm:h-5 sm:w-5" />
                 </button>
               </div>
             </div>
 
-            {/* Subject Selector Bar & Search Bar */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-950/50 border-b border-slate-200/60 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-              {/* Subject & Doptor Quick Selector */}
-              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-                <span className="text-xs font-bold text-slate-400 shrink-0">ক্যাটাগরি:</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase shrink-0">বিষয়:</span>
-                  {subjectCategories.map(s => (
-                    <button
-                      key={s.subject}
-                      onClick={() => {
-                        setPracticeSubject(s.subject);
-                        setSelectedSubject(s.subject);
-                        setInteractiveAnswers({});
-                        setPracticeSearch('');
-                      }}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                        practiceSubject === s.subject
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      {s.subject} ({s.questionsCount})
-                    </button>
-                  ))}
-
-                  <span className="text-slate-300 dark:text-slate-700 mx-1">|</span>
-                  <span className="text-[10px] font-bold text-amber-500 uppercase shrink-0">দপ্তর:</span>
-                  {doptorCategories.map(s => (
-                    <button
-                      key={s.subject}
-                      onClick={() => {
-                        setPracticeSubject(s.subject);
-                        setSelectedSubject(s.subject);
-                        setInteractiveAnswers({});
-                        setPracticeSearch('');
-                      }}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                        practiceSubject === s.subject
-                          ? 'bg-amber-500 text-white shadow-sm'
-                          : 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-50 dark:hover:bg-amber-950/30'
-                      }`}
-                    >
-                      {s.subject} ({s.questionsCount})
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Mode Tabs */}
-              <div className="flex items-center p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full sm:w-auto shrink-0">
+            {/* Action & Filter Toolbar */}
+            <div className="px-3.5 py-2 sm:px-5 sm:py-2.5 bg-slate-50/90 dark:bg-slate-950/70 border-b border-slate-200/70 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 shrink-0">
+              {/* Left: Mode Tabs */}
+              <div className="flex items-center gap-1 p-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shrink-0">
                 <button
                   onClick={() => setPracticeTab('qa')}
-                  className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                     practiceTab === 'qa'
-                      ? 'bg-primary text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <FileText className="h-3.5 w-3.5" />
-                  <span>প্রশ্ন-উত্তর ও ব্যাখ্যা</span>
+                  <span>প্রশ্ন ও উত্তর (ব্যাখ্যা)</span>
                 </button>
                 <button
                   onClick={() => setPracticeTab('interactive')}
-                  className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                     practiceTab === 'interactive'
-                      ? 'bg-primary text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <Sparkles className="h-3.5 w-3.5" />
-                  <span>ইন্টারেক্টিভ কুইজ</span>
+                  <span>অনুশীলন / কুইজ</span>
+                </button>
+              </div>
+
+              {/* Right: Question Count Selector & Inline Search */}
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-between md:justify-end flex-1">
+                {/* Specific Question Count Selection for Exam */}
+                <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    পরীক্ষার প্রশ্ন সংখ্যা:
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {[5, 10, 15, 20].filter(c => c <= Math.max(5, activePracticeQuestions.length)).map(count => (
+                      <button
+                        key={count}
+                        onClick={() => setSelectedExamCount(count)}
+                        className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all ${
+                          selectedExamCount === count
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {count}টি
+                      </button>
+                    ))}
+                    {activePracticeQuestions.length > 0 && (
+                      <button
+                        onClick={() => setSelectedExamCount(activePracticeQuestions.length)}
+                        className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all ${
+                          selectedExamCount === activePracticeQuestions.length
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        সবগুলো ({activePracticeQuestions.length})
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Inline Compact Search */}
+                <div className="relative min-w-[120px] sm:min-w-[160px] flex-1 sm:flex-none">
+                  <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="প্রশ্ন খুঁজুন..."
+                    value={practiceSearch}
+                    onChange={(e) => setPracticeSearch(e.target.value)}
+                    className="w-full pl-8 pr-6 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  {practiceSearch && (
+                    <button
+                      onClick={() => setPracticeSearch('')}
+                      className="absolute right-2 top-1.5 text-xs text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Mobile Button to Start Exam */}
+                <button
+                  onClick={() => handleStartCustomExam(selectedExamCount)}
+                  disabled={activePracticeQuestions.length === 0}
+                  className="sm:hidden flex items-center justify-center gap-1.5 w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl text-xs font-bold shadow-xs"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                  <span>{Math.min(selectedExamCount, activePracticeQuestions.length || selectedExamCount)}টি প্রশ্নে পরীক্ষা শুরু করুন</span>
                 </button>
               </div>
             </div>
 
-            {/* Filter / Search Bar inside Modal */}
-            <div className="p-4 pb-2 shrink-0">
-              <div className="relative">
-                <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder={`${practiceSubject} বিষয়ের প্রশ্ন বা উত্তর লিখে খুঁজুন...`}
-                  value={practiceSearch}
-                  onChange={(e) => setPracticeSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                {practiceSearch && (
+            {/* Interactive Mode Score Tracking Ribbon */}
+            {practiceTab === 'interactive' && (
+              <div className="px-3.5 py-1.5 sm:px-5 bg-emerald-50/70 dark:bg-emerald-950/20 border-b border-emerald-100 dark:border-emerald-900/30 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 shrink-0">
+                <div className="flex items-center gap-3">
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                    <Check className="h-3.5 w-3.5" /> সঠিক: {
+                      Object.entries(interactiveAnswers).filter(([qId, ansIdx]) => {
+                        const it = activePracticeQuestions.find(i => i.question.id === qId);
+                        return it && it.question.correctAnswer === ansIdx;
+                      }).length
+                    }
+                  </span>
+                  <span className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1">
+                    <X className="h-3.5 w-3.5" /> ভুল: {
+                      Object.entries(interactiveAnswers).filter(([qId, ansIdx]) => {
+                        const it = activePracticeQuestions.find(i => i.question.id === qId);
+                        return it && it.question.correctAnswer !== ansIdx;
+                      }).length
+                    }
+                  </span>
+                  <span className="text-slate-400 font-medium">
+                    উত্তর দেওয়া হয়েছে: {Object.keys(interactiveAnswers).length}/{activePracticeQuestions.length}
+                  </span>
+                </div>
+                {Object.keys(interactiveAnswers).length > 0 && (
                   <button
-                    onClick={() => setPracticeSearch('')}
-                    className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                    onClick={() => setInteractiveAnswers({})}
+                    className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
                   >
-                    মুছে ফেলুন
+                    <RotateCcw className="h-3 w-3" />
+                    <span>উত্তর রিসেট করুন</span>
                   </button>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* Questions Content List (Scrollable) */}
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-6 sm:space-y-8 flex-grow">
+            {/* Questions Content List (Scrollable - Expanded screen area for Questions & Answers) */}
+            <div className="p-3.5 sm:p-5 overflow-y-auto space-y-4 sm:space-y-6 flex-1">
               {activePracticeQuestions.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 space-y-2">
                   <FileText className="h-10 w-10 mx-auto text-slate-300" />
-                  <p className="text-sm font-bold">এই মুহূর্তে কোনো প্রশ্ন খুঁজে পাওয়া যায়নি।</p>
-                  <p className="text-xs">সার্চ টার্মটি পরিবর্তন করুন অথবা অন্য বিষয় সিলেক্ট করুন।</p>
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">এই বিষয়ে বর্তমানে কোনো প্রশ্ন যুক্ত নেই।</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">ডাটাবেজে নতুন পরীক্ষা বা প্রশ্ন যুক্ত হলে এখানে স্বয়ংক্রিয়ভাবে সিঙ্ক হবে।</p>
                 </div>
               ) : (
                 activePracticeQuestions.map((item, idx) => {
@@ -2168,23 +2354,35 @@ export default function HomeView({
             </div>
 
             {/* Modal Bottom Footer */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-4 shrink-0">
+            <div className="p-3 sm:p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
               <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold hidden sm:inline">
-                মোট {activePracticeQuestions.length} টি প্রশ্ন সংরক্ষিত আছে
+                {practiceSubject} বিষয়ে মোট {activePracticeQuestions.length}টি প্রশ্ন সংরক্ষিত আছে
               </span>
-              <button
-                onClick={() => {
-                  const targetSub = practiceSubject;
-                  setPracticeSubject(null);
-                  setSelectedSubject(targetSub);
-                  const el = document.getElementById('featured-exams');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="w-full sm:w-auto px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2"
-              >
-                <span>{practiceSubject} এর লাইভ পরীক্ষাগুলোতে যান</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
+              
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => {
+                    const targetSub = practiceSubject;
+                    setPracticeSubject(null);
+                    setSelectedSubject(targetSub);
+                    const el = document.getElementById('featured-exams');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="flex-1 sm:flex-none px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span>সকল লাইভ পরীক্ষা</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+
+                <button
+                  onClick={() => handleStartCustomExam(selectedExamCount)}
+                  disabled={activePracticeQuestions.length === 0}
+                  className="flex-1 sm:flex-none px-4 sm:px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Play className="h-4 w-4 fill-current" />
+                  <span>{Math.min(selectedExamCount, activePracticeQuestions.length || selectedExamCount)}টি প্রশ্নে পরীক্ষা দিন</span>
+                </button>
+              </div>
             </div>
 
           </div>
