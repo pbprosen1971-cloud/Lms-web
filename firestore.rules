@@ -55,6 +55,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Dedicated QuestionBank Collection (Standalone Admin Question Repository)
+    match /QuestionBank/{questionId} {
+      allow read, write: if true;
+    }
+
     // Site Settings Collection (e.g. siteSettings/upcomingExam, siteSettings/bannerNotice)
     match /siteSettings/{settingId} {
       allow read, write: if true;

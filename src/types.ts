@@ -10,6 +10,7 @@ export interface Question {
   correctAnswer: number; // 0 to 3 index
   explanation?: string;
   subject: string;
+  category?: string;
   questionNumber?: number;
 }
 
@@ -164,6 +165,7 @@ export interface MinistryQuestionBank {
   durationMinutes?: number;
   questions: MinistryBankQuestion[];
   dateCreated: string;
+  examHeldDate?: string; // পরীক্ষা অনুষ্ঠিত তারিখ
   isPublished?: boolean;
   isPremium?: boolean;
 }

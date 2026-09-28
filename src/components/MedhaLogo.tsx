@@ -4,6 +4,7 @@ interface MedhaLogoProps extends React.SVGProps<SVGSVGElement> {
   className?: string;
   size?: number | string;
   withBackground?: boolean;
+  style?: React.CSSProperties;
 }
 
 /**

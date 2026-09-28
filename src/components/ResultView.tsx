@@ -8,6 +8,8 @@ import { Award, CheckCircle, CheckCircle2, XCircle, HelpCircle, Download, FileTe
 import { ExamResult, Question, Exam } from '../types';
 import { formatSafeDisplay } from '../lib/dateUtils';
 import { subscribeToQuestionsByExamId } from '../services/firestoreService';
+import ResultPdfSheet from './ResultPdfSheet';
+import { downloadExamResultPdf } from '../services/examResultPdfService';
 
 interface ResultViewProps {
   result: ExamResult;
@@ -19,6 +21,9 @@ interface ResultViewProps {
 export default function ResultView({ result, setView, user, exams }: ResultViewProps) {
   const [copied, setCopied] = useState(false);
   const [reviewFilter, setReviewFilter] = useState<'all' | 'correct' | 'wrong' | 'unanswered'>('all');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const percentage = Math.round((result.score / result.totalQuestions) * 100);
 
   const optionLabels = ['ক', 'খ', 'গ', 'ঘ'];
@@ -126,9 +131,35 @@ export default function ResultView({ result, setView, user, exams }: ResultViewP
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  // Print results / simulated PDF download
-  const handlePrintResult = () => {
-    window.print();
+  // Real PDF download engine with authentic theme, watermark, Bengali fonts, and multi-column questions
+  const handleDownloadPdf = async () => {
+    setIsGeneratingPdf(true);
+    setDownloadError(null);
+    setDownloadSuccess(false);
+
+    try {
+      await downloadExamResultPdf({
+        result,
+        questions: questionsList,
+        userAnswers,
+        percentage,
+        computedRank,
+      });
+
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 6000);
+    } catch (err: any) {
+      console.error('PDF generation error:', err);
+      // Fallback: trigger standard browser print dialog
+      try {
+        window.print();
+      } catch (printErr) {
+        console.error('Fallback print error:', printErr);
+      }
+      setDownloadError('সরাসরি ডাউনলোড হতে কিছুটা সময় নিচ্ছে, বিকল্প হিসেবে প্রিন্ট উইন্ডো চালু হয়েছে।');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   return (
@@ -571,59 +602,71 @@ export default function ResultView({ result, setView, user, exams }: ResultViewP
         </div>
 
         {/* Action Controls Footer */}
-        <div className="flex flex-wrap gap-4 items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800 print:hidden">
-          <button
-            onClick={() => setView('dashboard')}
-            className="px-5 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:text-white text-xs sm:text-sm font-bold rounded-xl transition-all shadow-sm"
-          >
-            ড্যাশবোর্ডে ফিরে যান
-          </button>
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 print:hidden space-y-3">
+          <div className="flex flex-wrap gap-3 items-center justify-between">
+            <button
+              onClick={() => setView('dashboard')}
+              className="px-5 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:text-white text-xs sm:text-sm font-bold rounded-xl transition-all shadow-sm cursor-pointer"
+            >
+              ড্যাশবোর্ডে ফিরে যান
+            </button>
 
-          {/* Trigger browser PDF generation / print view */}
-          <button
-            onClick={handlePrintResult}
-            className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-emerald-500/10 hover:shadow-emerald-500/20 transform hover:-translate-y-0.5 transition-all flex items-center gap-2"
-          >
-            <Download className="h-4.5 w-4.5" />
-            রেজাল্ট পিডিএফ ডাউনলোড
-          </button>
+            <div className="flex items-center gap-2.5">
+              {/* Trigger browser PDF generation / direct download */}
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isGeneratingPdf}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-75 disabled:cursor-wait text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transform hover:-translate-y-0.5 transition-all flex items-center gap-2 cursor-pointer"
+                title="ওয়েবসাইট থিম অনুযায়ী ওয়াটারমার্ক সহ অফিসিয়াল রেজাল্ট শিট পিডিএফ ডাউনলোড করুন"
+              >
+                {isGeneratingPdf ? (
+                  <>
+                    <RefreshCw className="h-4.5 w-4.5 animate-spin" />
+                    <span>পিডিএফ তৈরি হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4.5 w-4.5" />
+                    <span>রেজাল্ট পিডিএফ ডাউনলোড</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Download Success Notice */}
+          {downloadSuccess && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
+              <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>রেজাল্ট শীট পিডিএফ সফলভাবে প্রস্তুত ও ডাউনলোড হয়েছে! আপনার ডিভাইসের ডাউনলোড ফোল্ডার চেক করুন।</span>
+            </div>
+          )}
+
+          {/* Download Error Notice with fallback */}
+          {downloadError && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-300 text-xs font-medium flex items-center justify-between gap-2 animate-in fade-in duration-200">
+              <span>{downloadError}</span>
+              <button
+                onClick={() => window.print()}
+                className="px-3 py-1 bg-amber-600 text-white rounded-lg font-bold text-xs hover:bg-amber-700 transition-colors"
+              >
+                প্রিন্ট করুন
+              </button>
+            </div>
+          )}
         </div>
 
       </div>
 
-      {/* Decorative Simulated Certificate (Print Only / Hidden in Browser) */}
-      <div className="hidden print:block border-[12px] border-double border-emerald-600 p-12 text-center bg-white text-slate-800 max-w-4xl mx-auto rounded-none relative">
-        <div className="absolute top-4 left-4 text-[10px] text-slate-400 font-mono">MEDHA-PORTAL-OFFICIAL</div>
-        <div className="space-y-6">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 bg-emerald-100 text-emerald-800 rounded-full">
-              <Award className="h-10 w-10 text-emerald-600" />
-            </div>
-          </div>
-          <h1 className="text-3xl font-serif text-slate-900 font-extrabold uppercase tracking-wide">কৃতিত্বের সনদপত্র</h1>
-          <p className="text-xs text-slate-400 italic">Certificate of Excellence</p>
-
-          <p className="text-sm pt-4 max-w-lg mx-auto leading-relaxed">
-            এই মর্মে প্রত্যয়ন করা যাচ্ছে যে, <strong className="text-lg font-bold text-slate-900">{result.studentName}</strong> মেধা কুইজ পোর্টালে সফলতার সাথে <strong className="text-slate-900">"{result.examTitle}"</strong> সম্পন্ন করেছেন।
-          </p>
-
-          <div className="py-4">
-            <span className="text-slate-400 block text-xs">অর্জিত মার্কস</span>
-            <span className="text-3xl font-black text-emerald-600">{result.score} / {result.totalQuestions}</span>
-            <span className="text-xs text-slate-500 block font-semibold">({percentage}% শতকরা)</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-8 pt-8 border-t border-slate-200 text-xs">
-            <div className="text-left space-y-1">
-              <span className="text-slate-400 block">ইস্যুর তারিখ</span>
-              <strong className="text-slate-800">{result.dateTaken}</strong>
-            </div>
-            <div className="text-right space-y-1">
-              <span className="text-slate-400 block">পরিচালক (মেধা এক্সাম)</span>
-              <strong className="text-slate-800">এম. আশরাফ</strong>
-            </div>
-          </div>
-        </div>
+      {/* Official Print Layout for Browser Print (Ctrl+P / Save as PDF) */}
+      <div className="hidden print:block w-full bg-white text-slate-900">
+        <ResultPdfSheet
+          result={result}
+          questions={questionsList}
+          userAnswers={userAnswers}
+          percentage={percentage}
+          computedRank={computedRank}
+        />
       </div>
 
     </div>

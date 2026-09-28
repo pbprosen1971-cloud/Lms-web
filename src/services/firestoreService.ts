@@ -88,8 +88,12 @@ export function mapFirestoreDocToQuestion(docSnap: any): Question {
   }
 
   const qText = data.questionText || data.question || data.text || '';
-  let sub = (data.subject || data.category || '').trim();
+  let sub = (data.subject || '').trim();
+  let cat = (data.category || '').trim();
   if (!sub || sub === 'BCS' || sub === 'Model Test' || sub === 'বিসিএস') {
+    if (!cat && (sub === 'BCS' || sub === 'Model Test' || sub === 'বিসিএস')) {
+      cat = sub;
+    }
     sub = detectQuestionSubject(qText, options, data.explanation);
   }
 
@@ -101,6 +105,7 @@ export function mapFirestoreDocToQuestion(docSnap: any): Question {
     explanation: data.explanation || '',
     questionNumber: data.questionNumber || 1,
     subject: sub,
+    category: cat || undefined,
   };
 }
 
@@ -766,13 +771,20 @@ export async function deleteUpcomingExamFromFirestore(examId: string, examTitle?
     snap3.forEach(checkDoc);
   } catch (e) {}
 
-  // For every identified doc id, remove from /Exam (with subquestions), /exam, /exams, and /questions
+  // For every identified doc id, remove from /Exam (with subquestions), /exam (with subquestions), /exams, and legacy /questions
   for (const id of Array.from(idsToDelete)) {
     try {
-      // 1. Delete /Exam/{id}/questions subcollection
+      // 1a. Delete /Exam/{id}/questions subcollection
       const subQSnap = await getDocs(collection(db, 'Exam', id, 'questions'));
       const subQDeletes = subQSnap.docs.map(d => deleteDoc(d.ref));
       await Promise.all(subQDeletes);
+    } catch (e) {}
+
+    try {
+      // 1b. Delete /exam/{id}/questions subcollection if exists
+      const subQSnap2 = await getDocs(collection(db, 'exam', id, 'questions'));
+      const subQDeletes2 = subQSnap2.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(subQDeletes2);
     } catch (e) {}
 
     try {
@@ -786,8 +798,16 @@ export async function deleteUpcomingExamFromFirestore(examId: string, examTitle?
     } catch (e) {}
 
     try {
-      // 4. Delete legacy /exams/{id} and /questions
-      await deleteExamFromFirestore(id);
+      // 4. Delete legacy /exams/{id}
+      await deleteDoc(doc(db, 'exams', id));
+    } catch (e) {}
+
+    try {
+      // 4b. Delete legacy questions where examId == id
+      const qQuery = query(collection(db, 'questions'), where('examId', '==', id));
+      const qSnapshot = await getDocs(qQuery);
+      const deletePromises = qSnapshot.docs.map(qDoc => deleteDoc(doc(db, 'questions', qDoc.id)));
+      await Promise.all(deletePromises);
     } catch (e) {}
 
     try {
@@ -1037,6 +1057,159 @@ export async function deleteQuestionFromExamContent(examId: string, questionId: 
   } catch (err) {
     console.error(`Failed to delete question ${questionId} from Exam/${examId}:`, err);
     handleFirestoreError(err, OperationType.DELETE, `Exam/${examId}/questions/${questionId}`);
+    throw err;
+  }
+}
+
+/**
+ * Update Question Subject, Category, and Content in /Exam/{examId}/questions/{questionId},
+ * sync across /Exam, /exam, /exams and legacy /questions, and return the updated Exam object.
+ */
+export async function updateQuestionInFirestore(
+  examId: string,
+  questionId: string,
+  updates: {
+    subject: string;
+    category?: string;
+    text?: string;
+    options?: string[];
+    correctAnswer?: number;
+    explanation?: string;
+    questionNumber?: number;
+  },
+  currentExams?: Exam[]
+): Promise<{ updatedExam: Exam | null }> {
+  try {
+    // 1. Update direct subcollection /Exam/{examId}/questions/{questionId}
+    const qDocRef = doc(db, 'Exam', examId, 'questions', questionId);
+    const qPayload: any = {
+      subject: updates.subject,
+      category: updates.category || updates.subject,
+      updatedAt: serverTimestamp(),
+    };
+    if (updates.text !== undefined) {
+      qPayload.questionText = updates.text;
+      qPayload.question = updates.text;
+      qPayload.text = updates.text;
+    }
+    if (updates.options !== undefined && Array.isArray(updates.options)) {
+      qPayload.options = updates.options;
+      qPayload.optionA = updates.options[0] || '';
+      qPayload.optionB = updates.options[1] || '';
+      qPayload.optionC = updates.options[2] || '';
+      qPayload.optionD = updates.options[3] || '';
+    }
+    if (updates.correctAnswer !== undefined) {
+      qPayload.correctAnswer = ['A', 'B', 'C', 'D'][updates.correctAnswer] || 'A';
+    }
+    if (updates.explanation !== undefined) {
+      qPayload.explanation = updates.explanation;
+    }
+    if (updates.questionNumber !== undefined) {
+      qPayload.questionNumber = updates.questionNumber;
+    }
+
+    await setDoc(qDocRef, qPayload, { merge: true });
+
+    // 1.5 Scan subcollection in case doc ID differs from questionId (fallback)
+    try {
+      const qSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
+      for (const qDoc of qSnap.docs) {
+        const d = qDoc.data();
+        if (
+          qDoc.id !== questionId &&
+          (d.questionId === questionId || d.id === questionId || (updates.text && (d.question === updates.text || d.questionText === updates.text)))
+        ) {
+          await setDoc(doc(db, 'Exam', examId, 'questions', qDoc.id), qPayload, { merge: true });
+        }
+      }
+    } catch (e) {
+      console.warn("Subcollection scan fallback:", e);
+    }
+
+    // 2. Also check if doc exists under legacy /questions/{questionId}
+    try {
+      const legacyDocRef = doc(db, 'questions', questionId);
+      const legSnap = await getDoc(legacyDocRef);
+      if (legSnap.exists()) {
+        await setDoc(legacyDocRef, qPayload, { merge: true });
+      }
+    } catch (e) {
+      console.warn("Legacy question update error (non-fatal):", e);
+    }
+
+    // 3. Update the questions array in the parent exam documents (/Exam/{examId}, /exam/{examId}, /exams/{examId})
+    const targetExam = currentExams?.find(e => e.id === examId) || null;
+    let updatedQuestionsList: Question[] = [];
+
+    if (targetExam && Array.isArray(targetExam.questions) && targetExam.questions.length > 0) {
+      let found = false;
+      updatedQuestionsList = targetExam.questions.map(q => {
+        if (q.id === questionId || (updates.text && q.text === updates.text)) {
+          found = true;
+          return {
+            ...q,
+            subject: updates.subject,
+            category: updates.category !== undefined ? updates.category : q.category,
+            text: updates.text !== undefined ? updates.text : q.text,
+            options: updates.options !== undefined ? updates.options : q.options,
+            correctAnswer: updates.correctAnswer !== undefined ? updates.correctAnswer : q.correctAnswer,
+            explanation: updates.explanation !== undefined ? updates.explanation : q.explanation,
+          };
+        }
+        return q;
+      });
+
+      if (!found) {
+        // Reload from subcollection
+        const qSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
+        const freshList: Question[] = [];
+        qSnap.forEach(d => freshList.push(mapFirestoreDocToQuestion(d)));
+        freshList.sort((a, b) => (a.questionNumber || 0) - (b.questionNumber || 0));
+        updatedQuestionsList = freshList;
+      }
+    } else {
+      // Reload from subcollection
+      const qSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
+      const freshList: Question[] = [];
+      qSnap.forEach(d => freshList.push(mapFirestoreDocToQuestion(d)));
+      freshList.sort((a, b) => (a.questionNumber || 0) - (b.questionNumber || 0));
+      updatedQuestionsList = freshList;
+    }
+
+    // Sync to parent documents
+    const parentUpdates = {
+      questions: updatedQuestionsList,
+      totalQuestions: updatedQuestionsList.length,
+      totalMarks: updatedQuestionsList.length,
+      updatedAt: serverTimestamp(),
+    };
+
+    await setDoc(doc(db, 'Exam', examId), parentUpdates, { merge: true });
+    await setDoc(doc(db, 'exam', examId), parentUpdates, { merge: true });
+    await setDoc(doc(db, 'exams', examId), parentUpdates, { merge: true });
+
+    const updatedExamResult: Exam = targetExam ? {
+      ...targetExam,
+      questions: updatedQuestionsList,
+      totalQuestions: updatedQuestionsList.length,
+      totalMarks: updatedQuestionsList.length,
+    } : {
+      id: examId,
+      title: examId,
+      subject: updates.subject,
+      durationMinutes: 15,
+      totalQuestions: updatedQuestionsList.length,
+      totalMarks: updatedQuestionsList.length,
+      status: 'live',
+      dateCreated: new Date().toISOString(),
+      questions: updatedQuestionsList,
+    };
+
+    return { updatedExam: updatedExamResult };
+  } catch (err) {
+    console.error(`Failed to update question ${questionId} in Exam/${examId}:`, err);
+    handleFirestoreError(err, OperationType.WRITE, `Exam/${examId}/questions/${questionId}`);
     throw err;
   }
 }
@@ -1926,7 +2099,7 @@ export async function deleteUpcomingExamFromSiteSettings(examId: string, examTit
       const data = snap.data();
       let items: UpcomingExamSettings[] = Array.isArray(data.items) ? [...data.items] : [];
 
-      if (items.length === 0 && data.title) {
+      if (items.length === 0 && (data.title || data.examId || data.id)) {
         if (isMatch(data)) {
           await deleteDoc(docRef);
           try {

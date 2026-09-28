@@ -63,6 +63,7 @@ import {
   safeDateOnlyString,
   formatSafeDisplay,
   isScheduledLiveTimeReached,
+  toBengaliDigits,
 } from '../lib/dateUtils';
 import SheetsSync from './SheetsSync';
 import AdminGoogleSheetsTab from './AdminGoogleSheetsTab';
@@ -101,6 +102,8 @@ import AdminPaymentManagement from './AdminPaymentManagement';
 import AdminNotificationManager from './AdminNotificationManager';
 import { CsvQuestionImport } from './CsvQuestionImport';
 import AdminCsvDiagnosticsTab from './AdminCsvDiagnosticsTab';
+import QuestionManagementView from './QuestionManagementView';
+import { AdminQuestionBankView } from './AdminQuestionBankView';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -165,13 +168,14 @@ export default function AdminView({
   upcomingExamSettings,
   onSaveUpcomingExamSettings,
 }: AdminViewProps) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications' | 'csv_diagnostics'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'question_management' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications' | 'csv_diagnostics'>('analytics');
 
   // Ministry Question Bank Admin Form State
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
   const [selectedMinistryDropdown, setSelectedMinistryDropdown] = useState<string>('');
   const [customMinistryName, setCustomMinistryName] = useState<string>('');
   const [mbTitle, setMbTitle] = useState<string>('');
+  const [mbExamHeldDate, setMbExamHeldDate] = useState<string>('');
   const [mbDuration, setMbDuration] = useState<number>(10);
 
   // Single question input state for ministry question bank
@@ -217,6 +221,7 @@ export default function AdminView({
     setSelectedMinistryDropdown('');
     setCustomMinistryName('');
     setMbTitle('');
+    setMbExamHeldDate('');
     setMbDuration(10);
     setMbQuestionsList([]);
     setQText('');
@@ -234,6 +239,7 @@ export default function AdminView({
     setSelectedMinistryDropdown(bank.ministryName);
     setCustomMinistryName('');
     setMbTitle(bank.title);
+    setMbExamHeldDate(bank.examHeldDate || '');
     setMbDuration(bank.durationMinutes || 10);
     setMbQuestionsList(bank.questions ? [...bank.questions] : []);
 
@@ -459,6 +465,7 @@ export default function AdminView({
       durationMinutes: mbDuration || 10,
       questions: mbQuestionsList,
       dateCreated: existingBank?.dateCreated || new Date().toLocaleDateString('bn-BD'),
+      examHeldDate: mbExamHeldDate.trim() || undefined,
       isPublished: existingBank ? (existingBank.isPublished ?? true) : true, // published by default
     };
 
@@ -644,6 +651,7 @@ export default function AdminView({
   // Local state for toast notification and immediate UI deletion
   const [adminToast, setAdminToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [locallyDeletedUpcomingIds, setLocallyDeletedUpcomingIds] = useState<Set<string>>(new Set());
+  const [deletingUpcomingId, setDeletingUpcomingId] = useState<string | null>(null);
 
   const showAdminToast = (message: string, type: 'success' | 'error' = 'success') => {
     setAdminToast({ message, type });
@@ -813,16 +821,6 @@ export default function AdminView({
   };
 
   const handleDeleteUpcomingExamItem = async (examId: string, examTitle: string, itemObj?: any) => {
-    let confirmed = false;
-    try {
-      confirmed = window.confirm(`আপনি কি নিশ্চিত যে "${examTitle || 'এই'}" আপকামিং পরীক্ষাটি মুছে ফেলতে চান? এটি ডেটাবেজ থেকেও মুছে যাবে।`);
-    } catch (e) {
-      confirmed = true;
-    }
-    if (!confirmed) {
-      return;
-    }
-
     const cleanTitle = (examTitle || '').trim().toLowerCase();
 
     // Optimistically remove from UI immediately for seamless UX
@@ -835,7 +833,16 @@ export default function AdminView({
       return updated;
     });
 
+    if (editingUpcomingExamId === examId || (itemObj?.id && editingUpcomingExamId === itemObj.id)) {
+      setEditingUpcomingExamId(null);
+      setIsAddingNewUpcoming(false);
+    }
+    if (selectedUpcomingExamForQuestions?.id === examId || (itemObj?.id && selectedUpcomingExamForQuestions?.id === itemObj.id)) {
+      setSelectedUpcomingExamForQuestions(null);
+    }
+
     try {
+      setDeletingUpcomingId(examId);
       setSettingSaving(true);
 
       // Collect all candidate IDs for this exam
@@ -846,19 +853,19 @@ export default function AdminView({
         ...(exams.filter(e => e.id === examId || (e.title && e.title.trim().toLowerCase() === cleanTitle)).map(e => e.id))
       ].filter(Boolean) as string[]));
 
-      // 1. Delete from siteSettings/upcomingExam and any individual docs
-      await deleteUpcomingExamFromSiteSettings(examId, examTitle);
-      for (const tid of targetIds) {
-        if (tid !== examId) {
-          await deleteUpcomingExamFromSiteSettings(tid, examTitle);
-        }
-      }
-
-      // 2. Delete from Firestore collections (/exam, /Exam, /exams, questions)
+      // 1. Delete from Firestore collections (/exam, /Exam, /exams, and legacy questions)
       await deleteUpcomingExamFromFirestore(examId, examTitle);
       for (const tid of targetIds) {
         if (tid !== examId) {
           await deleteUpcomingExamFromFirestore(tid, examTitle);
+        }
+      }
+
+      // 2. Delete from siteSettings/upcomingExam and any individual docs
+      await deleteUpcomingExamFromSiteSettings(examId, examTitle);
+      for (const tid of targetIds) {
+        if (tid !== examId) {
+          await deleteUpcomingExamFromSiteSettings(tid, examTitle);
         }
       }
 
@@ -872,17 +879,18 @@ export default function AdminView({
         }
       }
 
-      const successText = `"${examTitle}" আপকামিং পরীক্ষাটি সফলভাবে মুছে ফেলা হয়েছে।`;
+      const successText = `"${examTitle || 'আপকামিং পরীক্ষাটি'}" ফায়ারস্টোর ডেটাবেস সহ সফলভাবে মুছে ফেলা হয়েছে!`;
       setSettingSuccessMsg(successText);
       showAdminToast(successText, 'success');
       setTimeout(() => setSettingSuccessMsg(''), 5000);
     } catch (err) {
       console.error("Error deleting upcoming exam item:", err);
-      const errorText = `"${examTitle}" পরীক্ষাটি মুছতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।`;
+      const errorText = `"${examTitle || 'পরীক্ষাটি'}" মুছতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।`;
       setSettingErrorMsg(errorText);
       showAdminToast(errorText, 'error');
     } finally {
       setSettingSaving(false);
+      setDeletingUpcomingId(null);
     }
   };
 
@@ -1261,28 +1269,7 @@ export default function AdminView({
 
   // Delete an upcoming exam permanently from Firestore
   const handleDeleteUpcomingExam = async (exam: Exam) => {
-    let confirmed = true;
-    try {
-      confirmed = window.confirm(`আপনি কি নিশ্চিত যে "${exam.title}" পরীক্ষাটি ফায়ারস্টোর ডেটাবেস থেকে স্থায়ীভাবে মুছে ফেলতে চান? এর সকল প্রশ্নও মুছে যাবে।`);
-    } catch (e) {
-      confirmed = true;
-    }
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await deleteUpcomingExamFromFirestore(exam.id, exam.title);
-      await deleteUpcomingExamFromSiteSettings(exam.id, exam.title);
-      if (onDeleteExam) {
-        onDeleteExam(exam.id, exam.title);
-      }
-      setUpcomingSuccessMsg(`"${exam.title}" পরীক্ষাটি ফায়ারস্টোর থেকে সফলভাবে মুছে ফেলা হয়েছে!`);
-      setTimeout(() => setUpcomingSuccessMsg(''), 5000);
-    } catch (err) {
-      console.error("Failed to delete upcoming exam:", err);
-      setUpcomingErrorMsg('পরীক্ষাটি মুছতে সমস্যা হয়েছে।');
-    }
+    await handleDeleteUpcomingExamItem(exam.id, exam.title, exam);
   };
 
   // Toggle publish status of upcoming exam
@@ -1946,13 +1933,33 @@ export default function AdminView({
 
           <button
             onClick={() => { setActiveTab('questions'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between gap-2.5 transition-all ${
               activeTab === 'questions'
                 ? 'bg-primary text-white shadow-md shadow-primary/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <BookOpen className="h-4.5 w-4.5" /> কোশ্চেন ব্যাংক (প্রশ্নাবলী)
+            <span className="flex items-center gap-2">
+              <BookOpen className="h-4.5 w-4.5" /> কোশ্চেন ব্যাংক ও হোম পেজ ব্যাংক নিয়ন্ত্রণ
+            </span>
+            {ministryBanks && ministryBanks.length > 0 && (
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                activeTab === 'questions' ? 'bg-white/20 text-white' : 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+              }`}>
+                {toBengaliDigits(ministryBanks.length)}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('question_management'); setSearchQuery(''); }}
+            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+              activeTab === 'question_management'
+                ? 'bg-gradient-to-r from-indigo-600 to-primary text-white shadow-md shadow-indigo-600/25'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
+            }`}
+          >
+            <ListPlus className="h-4.5 w-4.5 text-indigo-500" /> 📝 প্রশ্ন ও বিষয় ব্যবস্থাপনা
           </button>
 
           <button
@@ -2889,727 +2896,15 @@ export default function AdminView({
             </div>
           )}
 
-          {/* TAB 5: MINISTRY QUESTION BANK CREATION DASHBOARD */}
+          {/* TAB 5: DEDICATED QUESTION BANK MANAGEMENT SYSTEM (/QuestionBank) */}
           {activeTab === 'questions' && (
-            <div className="space-y-8">
-              {/* Header */}
-              <div className="border-b border-slate-100 dark:border-slate-700/60 pb-4">
-                <div className="flex items-center gap-2 text-primary text-xs font-bold uppercase tracking-wider mb-1">
-                  <BookOpen className="h-4 w-4" />
-                  <span>প্রশ্ন ব্যাংক ম্যানেজমেন্ট কন্ট্রোল</span>
-                </div>
-                <h3 className="font-extrabold text-xl text-slate-900 dark:text-white">
-                  মন্ত্রণালয় ও দপ্তরভিত্তিক প্রশ্ন ব্যাংক ইনপুট ড্যাশবোর্ড
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                  এডমিন প্যানেল থেকে মন্ত্রণালয়ের নাম টাইপ বা ড্রপডাউন থেকে সিলেক্ট করে প্রশ্ন, ৪টি অপশন, সঠিক উত্তর ও বিশদ ব্যাখ্যাসহ প্রশ্ন ব্যাংক যুক্ত করুন। এই প্রশ্নগুলো তাৎক্ষণিকভাবে হোম পেজের প্রশ্ন ব্যাংক সেকশনে প্রকাশ পাবে।
-                </p>
-              </div>
-
-              {/* Status Banner */}
-              {mbSuccessMsg && (
-                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-2xl text-xs font-bold flex items-center gap-3 animate-fadeIn">
-                  <Check className="h-5 w-5 text-emerald-600 shrink-0" />
-                  <span>{mbSuccessMsg}</span>
-                </div>
-              )}
-
-              {/* Input Form Section */}
-              <div id="ministry-bank-form-header" className="bg-slate-50/70 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 space-y-6">
-                
-                {/* Editing Indicator Banner */}
-                {editingBankId && (
-                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
-                    <span className="font-bold flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-amber-500" />
-                      <span>আপনি বর্তমানে একটি বিদ্যমান প্রশ্ন ব্যাংকে কাজ করছেন (সম্পাদনা / আরও প্রশ্ন যুক্তকরণ)</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleResetMinistryForm}
-                      className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-[11px] transition-all"
-                    >
-                      বাতিল করে নতুন প্রশ্ন ব্যাংক তৈরি করুন
-                    </button>
-                  </div>
-                )}
-
-                {/* Step 1: Ministry and Title Info */}
-                <div className="space-y-4">
-                  <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2 border-b border-slate-200/60 dark:border-slate-800 pb-2">
-                    <span className="w-5 h-5 rounded-full bg-primary text-white text-[11px] font-extrabold flex items-center justify-center">১</span>
-                    <span>মন্ত্রণালয় / দপ্তর ও প্রশ্ন ব্যাংক শিরোনাম সেট করুন</span>
-                  </h4>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Ministry Dropdown / Selection */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                        <span>🏢 মন্ত্রণালয় / দপ্তর নির্বাচন করুন</span>
-                        {existingMinistries.length > 0 && (
-                          <span className="text-[10px] text-primary font-semibold">ড্রপডাউন থেকে সিলেক্ট করুন</span>
-                        )}
-                      </label>
-                      <select
-                        value={selectedMinistryDropdown}
-                        onChange={(e) => {
-                          setSelectedMinistryDropdown(e.target.value);
-                          if (e.target.value !== '__NEW__') {
-                            setCustomMinistryName('');
-                          }
-                        }}
-                        className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:outline-none"
-                      >
-                        <option value="">-- পূর্বে ব্যবহৃত মন্ত্রণালয় ড্রপডাউন তালিকা --</option>
-                        {existingMinistries.map((minName, idx) => (
-                          <option key={idx} value={minName}>
-                            🏢 {minName}
-                          </option>
-                        ))}
-                        <option value="__NEW__">➕ নতুন মন্ত্রণালয় / দপ্তরের নাম টাইপ করুন</option>
-                      </select>
-                    </div>
-
-                    {/* Custom Ministry Name Input (If new selected or no dropdown choice) */}
-                    {(!selectedMinistryDropdown || selectedMinistryDropdown === '__NEW__') && (
-                      <div className="space-y-1.5 animate-fadeIn">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                          নতুন মন্ত্রণালয় / দপ্তরের পূর্ণ নাম লিখুন <span className="text-rose-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="যেমন: প্রতিরক্ষা মন্ত্রণালয় বা গৃহায়ন ও গণপূর্ত মন্ত্রণালয়"
-                          value={customMinistryName}
-                          onChange={(e) => setCustomMinistryName(e.target.value)}
-                          className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:outline-none font-medium"
-                        />
-                      </div>
-                    )}
-
-                    {/* Question Bank Title */}
-                    <div className="space-y-1.5 md:col-span-2">
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                        প্রশ্ন ব্যাংকের শিরোনাম / পদের নাম <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="যেমন: সহকারী পরিচালক ও হিসাবরক্ষণ কর্মকর্তা নিয়োগ পরীক্ষা ২০২৫"
-                        value={mbTitle}
-                        onChange={(e) => setMbTitle(e.target.value)}
-                        className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:outline-none font-medium"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Step 2: Add Single Questions Form or Batch Import */}
-                <form onSubmit={handleAddQuestionToDraft} className="space-y-4 pt-2 border-t border-slate-200/60 dark:border-slate-800">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-800 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-primary text-white text-[11px] font-extrabold flex items-center justify-center">২</span>
-                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">
-                        প্রশ্ন সংযোজন (ম্যানুয়াল টাইপ অথবা সরাসরি গুগল শিট ইমপোর্ট)
-                      </h4>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {/* Direct Google Sheets Batch Import Button */}
-                      <button
-                        type="button"
-                        onClick={handleOpenMbSheetModal}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm shadow-emerald-600/20 transition-all cursor-pointer"
-                        title="গুগল শিট থেকে একসাথে অনেক প্রশ্ন ইমপোর্ট করুন"
-                      >
-                        <FileSpreadsheet className="h-4 w-4" />
-                        <span>গুগল শিট থেকে প্রশ্ন ইমপোর্ট</span>
-                        <span className="bg-emerald-800/60 text-[10px] px-1.5 py-0.5 rounded font-mono">NEW</span>
-                      </button>
-
-                      <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-lg">
-                        মোট প্রশ্ন: {mbQuestionsList.length} টি
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                    <div className="md:col-span-9 space-y-1">
-                      <label className="text-xs font-bold text-slate-600 dark:text-slate-400">প্রশ্ন বিবৃতি (Question Text)</label>
-                      <input
-                        type="text"
-                        placeholder="যেমন: বাংলাদেশের প্রথম ই-পাসপোর্ট সেবা কত সালে চালু করা হয়?"
-                        value={qText}
-                        onChange={(e) => setQText(e.target.value)}
-                        className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none font-medium"
-                      />
-                    </div>
-
-                    <div className="md:col-span-3 space-y-1">
-                      <label className="text-xs font-bold text-slate-600 dark:text-slate-400">বিষয় / ক্যাটাগরি</label>
-                      <input
-                        type="text"
-                        placeholder="যেমন: সাধারণ জ্ঞান"
-                        value={qSubject}
-                        onChange={(e) => setQSubject(e.target.value)}
-                        className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none font-medium"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 4 Options */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500">বিকল্প (ক)</label>
-                      <input
-                        type="text"
-                        placeholder="অপশন ক"
-                        value={qOpt1}
-                        onChange={(e) => setQOpt1(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500">বিকল্প (খ)</label>
-                      <input
-                        type="text"
-                        placeholder="অপশন খ"
-                        value={qOpt2}
-                        onChange={(e) => setQOpt2(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500">বিকল্প (গ)</label>
-                      <input
-                        type="text"
-                        placeholder="অপশন গ"
-                        value={qOpt3}
-                        onChange={(e) => setQOpt3(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500">বিকল্প (ঘ)</label>
-                      <input
-                        type="text"
-                        placeholder="অপশন ঘ"
-                        value={qOpt4}
-                        onChange={(e) => setQOpt4(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Correct answer and explanation */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
-                    <div className="md:col-span-4 space-y-1">
-                      <label className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                        <Check className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>সঠিক বিকল্প নির্বাচন করুন</span>
-                      </label>
-                      <select
-                        value={qCorrect}
-                        onChange={(e) => setQCorrect(Number(e.target.value))}
-                        className="w-full px-3 py-2 bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold text-emerald-800 dark:text-emerald-300 focus:outline-none"
-                      >
-                        <option value={0}>১ম অপশন (ক) সঠিক</option>
-                        <option value={1}>২য় অপশন (খ) সঠিক</option>
-                        <option value={2}>৩য় অপশন (গ) সঠিক</option>
-                        <option value={3}>৪র্থ অপশন (ঘ) সঠিক</option>
-                      </select>
-                    </div>
-
-                    <div className="md:col-span-8 space-y-1">
-                      <label className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                        বিশদ ব্যাখ্যা ও নোট (Explanation)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="সঠিক উত্তর কেন হলো এবং প্রাসঙ্গিক গুরুত্বপূর্ণ তথ্য সম্বলিত বিশদ ব্যাখ্যা লিখুন..."
-                        value={qExplanation}
-                        onChange={(e) => setQExplanation(e.target.value)}
-                        className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none font-medium"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white dark:bg-slate-700 dark:hover:bg-slate-600 text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5"
-                  >
-                    <PlusCircle className="h-4 w-4 text-primary-light" />
-                    + এই প্রশ্নটি তালিকায় যুক্ত করুন
-                  </button>
-                </form>
-
-                {/* Added Draft Questions List */}
-                {mbQuestionsList.length > 0 && (
-                  <div className="space-y-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
-                    <h5 className="font-bold text-xs text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                      <span>তালিকায় যুক্ত হওয়া প্রশ্নসমূহ ({mbQuestionsList.length} টি)</span>
-                      <span className="text-[10px] text-slate-400">হোম পেজে প্রকাশের আগে যাচাই করুন</span>
-                    </h5>
-
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                      {mbQuestionsList.map((q, idx) => (
-                        <div key={q.id} className="p-3 bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-xl text-xs space-y-1.5 relative">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="font-bold text-slate-800 dark:text-slate-200">
-                              <span className="text-primary font-extrabold mr-1">প্রশ্ন {idx + 1}.</span> {q.text}
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => setMbQuestionsList(prev => prev.filter(item => item.id !== q.id))}
-                              className="text-rose-500 hover:text-rose-700 p-1 shrink-0"
-                              title="প্রশ্ন মুছুন"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-                            {q.options.map((opt, oIdx) => (
-                              <span
-                                key={oIdx}
-                                className={`px-2 py-0.5 rounded border ${
-                                  oIdx === q.correctAnswer
-                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300 font-bold'
-                                    : 'border-slate-100 dark:border-slate-800'
-                                }`}
-                              >
-                                {['ক', 'খ', 'গ', 'ঘ'][oIdx]}. {opt}
-                              </span>
-                            ))}
-                          </div>
-
-                          {q.explanation && (
-                            <p className="text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50/60 dark:bg-blue-950/30 p-2 rounded-lg border border-blue-100/60 dark:border-blue-900/30">
-                              💡 <strong>ব্যাখ্যা:</strong> {q.explanation}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Final Save Button */}
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={handleSaveMinistryQuestionBank}
-                    className="w-full py-3 bg-primary hover:bg-primary-dark text-white font-extrabold text-sm rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Check className="h-5 w-5" />
-                    {editingBankId ? 'প্রশ্ন ব্যাংক আপডেট ও সংরক্ষণ করুন' : 'প্রশ্ন ব্যাংক সংরক্ষণ করুন'} ({mbQuestionsList.length} টি প্রশ্ন)
-                  </button>
-                </div>
-              </div>
-
-              {/* Section 3: List of All Ministry Question Banks currently stored */}
-              <div className="space-y-4 pt-4 border-t border-slate-200/60 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-extrabold text-base text-slate-800 dark:text-white flex items-center gap-2">
-                    <span>🏢 পূর্বের সকল প্রশ্ন ব্যাংকসমূহ (হোম পেজে প্রকাশ ও তথ্য নিয়ন্ত্রণ)</span>
-                    <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-md font-bold">
-                      {ministryBanks.length} টি
-                    </span>
-                  </h4>
-                </div>
-
-                {ministryBanks.length === 0 ? (
-                  <div className="p-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center text-slate-400 text-xs">
-                    এখনো কোনো মন্ত্রণালয়ের প্রশ্ন ব্যাংক যুক্ত করা হয়নি। উপরের ফর্মটি ব্যবহার করে সহজে নতুন প্রশ্ন ব্যাংক তৈরি করুন।
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {ministryBanks.map((bank) => {
-                      const isPublished = bank.isPublished !== false;
-
-                      return (
-                        <div
-                          key={bank.id}
-                          className={`p-5 bg-white dark:bg-slate-900 border rounded-2xl shadow-sm transition-all space-y-4 ${
-                            isPublished
-                              ? 'border-slate-200/80 dark:border-slate-800 hover:border-primary/50'
-                              : 'border-amber-200/80 dark:border-amber-900/40 bg-amber-500/5'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-block px-2.5 py-0.5 bg-primary/10 text-primary dark:text-primary-light text-[11px] font-bold rounded-lg">
-                                  🏢 {bank.ministryName}
-                                </span>
-                                {isPublished ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-bold rounded-md">
-                                    <Check className="h-3 w-3" />
-                                    হোম পেজে প্রকাশিত
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-bold rounded-md">
-                                    👁️ খসড়া (হোম পেজে অদৃশ্য)
-                                  </span>
-                                )}
-                              </div>
-                              <h5 className="font-bold text-sm text-slate-800 dark:text-white leading-snug">
-                                {bank.title}
-                              </h5>
-                            </div>
-
-                            {onDeleteMinistryBank && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (confirm(`আপনি কি "${bank.title}" প্রশ্ন ব্যাংকটি মুছে ফেলতে চান?`)) {
-                                    onDeleteMinistryBank(bank.id);
-                                  }
-                                }}
-                                className="text-slate-400 hover:text-rose-600 p-1 transition-colors shrink-0"
-                                title="প্রশ্ন ব্যাংক মুছুন"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                            <span>❓ {bank.questions?.length || bank.totalQuestions || 0} টি প্রশ্ন</span>
-                            <span>⏱️ {bank.durationMinutes || 10} মিনিট</span>
-                            <span>📅 {bank.dateCreated}</span>
-                          </div>
-
-                          {/* Control Action Buttons */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                            {/* Publish / Unpublish Toggle Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleTogglePublishMinistryBank(bank)}
-                              className={`py-2 px-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                                isPublished
-                                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20'
-                              }`}
-                            >
-                              {isPublished ? (
-                                <>
-                                  <EyeOff className="h-3.5 w-3.5" />
-                                  <span>অপ্রকাশিত করুন</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Check className="h-3.5 w-3.5" />
-                                  <span>হোমে প্রকাশ করুন</span>
-                                </>
-                              )}
-                            </button>
-
-                            {/* View / Edit Questions Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleStartAddMoreQuestions(bank)}
-                              className="py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
-                            >
-                              <Layers className="h-3.5 w-3.5" />
-                              <span>প্রশ্নাবলী ({bank.questions?.length || 0})</span>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* MODAL: Import Questions from Google Sheets for Ministry Question Bank */}
-              {showMbSheetModal && (
-                <div
-                  id="ministry-sheets-import-modal"
-                  className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn overflow-y-auto"
-                >
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col">
-                    {/* Modal Header */}
-                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                          <FileSpreadsheet className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <h3 className="font-extrabold text-base text-slate-800 dark:text-white">
-                            গুগল শীট থেকে সরাসরি প্রশ্ন ইমপোর্ট
-                          </h3>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            নির্দিষ্ট মন্ত্রণালয় ও শিরোনামের প্রশ্ন ব্যাংকে অনেক প্রশ্ন একসাথে যুক্ত করুন
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowMbSheetModal(false)}
-                        className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
-                    </div>
-
-                    {/* Modal Body */}
-                    <div className="p-5 space-y-4 overflow-y-auto flex-1">
-                      {/* Google Auth Banner */}
-                      {!isGoogleConnected() ? (
-                        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl space-y-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-xs font-bold text-amber-800 dark:text-amber-200">
-                                ⚠️ গুগল অ্যাকাউন্ট এখনও কানেক্ট করা হয়নি
-                              </p>
-                              <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                                আপনার স্প্রেডশীট থেকে প্রশ্ন লোড করতে নিচের বাটনে ক্লিক করে গুগল অনুমোদন দিন।
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handleMbConnectGoogle}
-                              disabled={mbImportConnecting}
-                              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition-all shrink-0 flex items-center gap-1.5 disabled:opacity-50"
-                            >
-                              {mbImportConnecting ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  <span>কানেক্টিং...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <FileSpreadsheet className="h-4 w-4" />
-                                  <span>গুগল কানেক্ট করুন</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/40 rounded-xl flex items-center justify-between text-xs">
-                          <span className="text-emerald-800 dark:text-emerald-300 font-medium flex items-center gap-1.5">
-                            <Check className="h-4 w-4 text-emerald-600 shrink-0" />
-                            Google Sheets কানেকশন সক্রিয় আছে
-                          </span>
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                            OAuth Active
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Error Banner if any */}
-                      {mbImportError && (
-                        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-medium flex items-start gap-2">
-                          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-500" />
-                          <div className="space-y-1">
-                            <span>{mbImportError}</span>
-                            <div className="text-[10px] text-rose-600/80 dark:text-rose-400/80">
-                              পরামর্শ: কলাম হেডার যথাক্রমে questionText, optionA, optionB, optionC, optionD, correctAnswer, explanation আছে কিনা নিশ্চিত করুন।
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Sheet ID & Tab Configuration */}
-                      <div className="space-y-3 bg-slate-50/50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                            <span>গুগল স্প্রেডশীট আইডি বা পূর্ণাঙ্গ লিংক (Spreadsheet ID or URL)</span>
-                            <span className="text-[11px] text-primary font-normal">কপি-পেস্ট করুন</span>
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="যেমন: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms অথবা পূর্ণ লিংক"
-                            value={mbSpreadsheetId}
-                            onChange={(e) => setMbSpreadsheetId(e.target.value)}
-                            className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:outline-none"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                              শীটের ট্যাবের নাম (Sheet Tab Name)
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="ডিফল্ট: Question Bank অথবা Sheet1"
-                              value={mbSheetTabName}
-                              onChange={(e) => setMbSheetTabName(e.target.value)}
-                              className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:outline-none"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                              বিদ্যমান প্রশ্নের সাথে সংযোজন পদ্ধতি
-                            </label>
-                            <select
-                              value={mbAppendMode}
-                              onChange={(e) => setMbAppendMode(e.target.value as 'append' | 'replace')}
-                              className="w-full px-3.5 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:outline-none"
-                            >
-                              <option value="append">বিদ্যমান প্রশ্নের সাথে আরও যুক্ত করুন (Append)</option>
-                              <option value="replace">পূর্বের ড্রাফট মুছে নতুনগুলো দিয়ে প্রতিস্থাপন করুন (Replace)</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Read & Validate Button */}
-                        <div className="pt-1">
-                          <button
-                            type="button"
-                            onClick={handleMbFetchQuestionsFromSheet}
-                            disabled={mbImportLoading || !mbSpreadsheetId.trim()}
-                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                          >
-                            {mbImportLoading ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                <span>গুগল শিট থেকে প্রশ্ন যাচাই ও পড়া হচ্ছে...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Search className="h-4 w-4" />
-                                <span>স্প্রেডশীট যাচাই ও প্রশ্নাবলী লোড করুন</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Ministry and Bank Title Assignment */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                            মন্ত্রণালয় / দপ্তর নির্বাচন বা টাইপ
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="যেমন: পররাষ্ট্র মন্ত্রণালয় বা ডাক ও টেলিযোগাযোগ বিভাগ"
-                            value={mbImportTargetMinistry}
-                            onChange={(e) => setMbImportTargetMinistry(e.target.value)}
-                            className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                            প্রশ্ন ব্যাংক শিরোনাম
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="যেমন: সহকারী পরিচালক ও কম্পিউটার অপারেটর পরীক্ষা"
-                            value={mbImportTargetTitle}
-                            onChange={(e) => setMbImportTargetTitle(e.target.value)}
-                            className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium text-slate-800 dark:text-white"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Sheet Format Guide */}
-                      <div className="p-3 bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 rounded-xl text-[11px] text-blue-800 dark:text-blue-300 space-y-1.5">
-                        <div className="font-bold flex items-center gap-1.5">
-                          <span>📋 গুগল শিটের স্ট্যান্ডার্ড কলাম বিন্যাস:</span>
-                        </div>
-                        <p className="font-mono text-[10px] bg-white/60 dark:bg-slate-900/60 p-2 rounded border border-blue-200/50 dark:border-blue-800/40 overflow-x-auto whitespace-nowrap">
-                          questionText | optionA | optionB | optionC | optionD | correctAnswer (1-4 বা ক-ঘ) | explanation
-                        </p>
-                        <p className="text-[10px] text-blue-600 dark:text-blue-400">
-                          টিপ: অপশন ও সঠিক উত্তর যেকোনো ফরম্যাটে (ক, খ, গ, ঘ অথবা A, B, C, D অথবা 1, 2, 3, 4) সাপোর্ট করে।
-                        </p>
-                      </div>
-
-                      {/* Verification & Preview Box */}
-                      {mbParsedSheetData && (
-                        <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-xs text-slate-800 dark:text-white">যাচাইয়ের ফলাফল:</span>
-                              <span className="text-xs font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300 px-2.5 py-0.5 rounded-full">
-                                {mbParsedSheetData.validCount} টি প্রশ্ন প্রস্তুত
-                              </span>
-                              {mbParsedSheetData.errorCount > 0 && (
-                                <span className="text-xs font-bold text-amber-700 bg-amber-100 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 rounded-full">
-                                  {mbParsedSheetData.errorCount} টি ত্রুটিযুক্ত বাদ পড়েছে
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                              মোট সারি: {mbParsedSheetData.totalRows}
-                            </span>
-                          </div>
-
-                          {/* Quick Preview of First 3 Questions */}
-                          {mbParsedSheetData.validQuestions.length > 0 && (
-                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                              <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                                প্রথম কয়েকটি প্রশ্নের প্রিভিউ:
-                              </div>
-                              {mbParsedSheetData.validQuestions.slice(0, 3).map((vq, idx) => (
-                                <div
-                                  key={idx}
-                                  className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 text-xs space-y-1.5"
-                                >
-                                  <div className="font-bold text-slate-800 dark:text-white flex items-start gap-1.5">
-                                    <span className="text-primary">{idx + 1}.</span>
-                                    <span>{vq.question.text}</span>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-600 dark:text-slate-400">
-                                    {vq.question.options.map((opt, oIdx) => (
-                                      <span
-                                        key={oIdx}
-                                        className={`px-1.5 py-0.5 rounded ${
-                                          oIdx === vq.question.correctAnswer
-                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold'
-                                            : ''
-                                        }`}
-                                      >
-                                        {['ক', 'খ', 'গ', 'ঘ'][oIdx]}. {opt}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                              {mbParsedSheetData.validQuestions.length > 3 && (
-                                <p className="text-[10px] text-center text-slate-400">
-                                  ...এবং আরও {mbParsedSheetData.validQuestions.length - 3} টি প্রশ্ন
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Modal Footer */}
-                    <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setShowMbSheetModal(false)}
-                        className="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs transition-all"
-                      >
-                        বন্ধ করুন
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleApplyMbSheetQuestions}
-                        disabled={!mbParsedSheetData || mbParsedSheetData.validQuestions.length === 0}
-                        className="px-6 py-2.5 bg-primary hover:bg-primary-dark text-white font-extrabold rounded-xl text-xs shadow-lg shadow-primary/20 transition-all flex items-center gap-2 disabled:opacity-50"
-                      >
-                        <Check className="h-4 w-4" />
-                        <span>
-                          {mbParsedSheetData?.validQuestions.length || 0} টি প্রশ্ন প্রশ্ন ব্যাংকে যুক্ত করুন
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <AdminQuestionBankView
+              currentUser={currentUser}
+              ministryBanks={ministryBanks}
+              onSaveMinistryBank={onSaveMinistryBank}
+              onDeleteMinistryBank={onDeleteMinistryBank}
+              setView={setView}
+            />
           )}
 
           {/* TAB 6: UPCOMING EXAMS & FEATURED HEADLINE */}
@@ -4050,12 +3345,22 @@ export default function AdminView({
                                     <button
                                       type="button"
                                       id={`delete-upcoming-exam-btn-${examKey}`}
+                                      disabled={deletingUpcomingId === examKey}
                                       onClick={() => handleDeleteUpcomingExamItem(examKey, item.title, item)}
-                                      className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white dark:hover:bg-rose-600 dark:hover:text-white text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-800 hover:border-rose-600 flex items-center justify-center gap-1.5 transition-all duration-200 shadow-sm hover:shadow active:scale-95 cursor-pointer group"
-                                      title="আপকামিং পরীক্ষা মুছে ফেলুন"
+                                      className="px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white dark:hover:bg-rose-600 dark:hover:text-white text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-800 hover:border-rose-600 flex items-center justify-center gap-1.5 transition-all duration-200 shadow-sm hover:shadow active:scale-95 cursor-pointer group disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="আপকামিং পরীক্ষা ফায়ারস্টোর ডেটাবেজ সহ সম্পূর্ণ মুছে ফেলুন"
                                     >
-                                      <Trash2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 group-hover:text-white transition-colors" />
-                                      <span>মুছুন</span>
+                                      {deletingUpcomingId === examKey ? (
+                                        <>
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-600 dark:text-rose-400 group-hover:text-white" />
+                                          <span>মুছছে...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Trash2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 group-hover:text-white transition-colors" />
+                                          <span>মুছুন</span>
+                                        </>
+                                      )}
                                     </button>
                                   </div>
                                 </div>
@@ -4442,6 +3747,15 @@ export default function AdminView({
           {/* TAB 13: CSV QUESTION & SUBJECT DIAGNOSTICS */}
           {activeTab === 'csv_diagnostics' && (
             <AdminCsvDiagnosticsTab exams={exams} onRefreshExams={() => {}} />
+          )}
+
+          {/* TAB 14: QUESTION & SUBJECT CATEGORY MANAGEMENT */}
+          {activeTab === 'question_management' && (
+            <QuestionManagementView
+              exams={exams}
+              onUpdateExam={onUpdateExam}
+              currentUser={currentUser}
+            />
           )}
 
         </div>

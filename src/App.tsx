@@ -54,9 +54,10 @@ import {
   startFirestoreRealtimeSheetsSync
 } from './services/googleSheetsService';
 import { isGoogleConnected } from './lib/googleAuth';
+import { saveMinistryQuestionBankToFirestore } from './services/questionBankService';
 
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, getDocFromServer, onSnapshot, collection } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, getDocFromServer, onSnapshot, collection } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 
 // Verify Connection to Firestore gracefully
@@ -511,8 +512,15 @@ export default function App() {
     };
 
     const unsubscribeExams = subscribeToExams((firestoreExams) => {
-      if (firestoreExams.length > 0) {
-        setExams(firestoreExams.map(normalizeExamSubject));
+      let deletedIds: string[] = [];
+      try {
+        deletedIds = JSON.parse(localStorage.getItem('deleted_exam_ids') || '[]');
+      } catch (e) {}
+      const activeFirestoreExams = firestoreExams.filter(e =>
+        !deletedIds.includes(e.id) && (!e.title || !deletedIds.includes(e.title.trim().toLowerCase()))
+      );
+      if (activeFirestoreExams.length > 0) {
+        setExams(activeFirestoreExams.map(normalizeExamSubject));
       } else {
         console.log("Seeding initial exams into Firestore database...");
         INITIAL_EXAMS.forEach((exam) => {
@@ -604,7 +612,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Load or initialize Ministry Question Banks
+    // Load or initialize Ministry Question Banks from localStorage initially
     const savedBanks = localStorage.getItem('ministry_question_banks');
     if (savedBanks) {
       try {
@@ -617,6 +625,41 @@ export default function App() {
       localStorage.setItem('ministry_question_banks', JSON.stringify(INITIAL_MINISTRY_BANKS));
     }
 
+    // Subscribe to Firestore /ministryQuestionBanks in real-time
+    const unsubMinistry = onSnapshot(collection(db, 'ministryQuestionBanks'), (snapshot) => {
+      const firestoreBanks: MinistryQuestionBank[] = [];
+      snapshot.forEach((docSnap) => {
+        firestoreBanks.push({ id: docSnap.id, ...docSnap.data() } as MinistryQuestionBank);
+      });
+
+      if (!snapshot.empty) {
+        setMinistryBanks(firestoreBanks);
+        localStorage.setItem('ministry_question_banks', JSON.stringify(firestoreBanks));
+        localStorage.setItem('ministry_banks_seeded', 'true');
+      } else {
+        const isSeeded = localStorage.getItem('ministry_banks_seeded');
+        if (isSeeded) {
+          // If Firestore is empty and already seeded, it means admin deleted all banks
+          setMinistryBanks([]);
+          localStorage.setItem('ministry_question_banks', JSON.stringify([]));
+        } else {
+          // First run initial seed
+          INITIAL_MINISTRY_BANKS.forEach((bank) => {
+            saveMinistryQuestionBankToFirestore(bank).catch(console.warn);
+          });
+          localStorage.setItem('ministry_banks_seeded', 'true');
+          setMinistryBanks(INITIAL_MINISTRY_BANKS);
+          localStorage.setItem('ministry_question_banks', JSON.stringify(INITIAL_MINISTRY_BANKS));
+        }
+      }
+    }, (err) => {
+      console.warn("Could not listen to /ministryQuestionBanks in Firestore:", err);
+    });
+
+    return () => unsubMinistry();
+  }, []);
+
+  useEffect(() => {
     // Load or initialize user profile session
     const savedUser = localStorage.getItem('active_user_session');
     if (savedUser) {
@@ -826,18 +869,24 @@ export default function App() {
       }
       return null;
     });
+
     try {
+      const deletedIds: string[] = JSON.parse(localStorage.getItem('deleted_exam_ids') || '[]');
+      if (examId && !deletedIds.includes(examId)) deletedIds.push(examId);
+      if (cleanTitle && !deletedIds.includes(cleanTitle)) deletedIds.push(cleanTitle);
+      localStorage.setItem('deleted_exam_ids', JSON.stringify(deletedIds));
+    } catch (e) {}
+
+    try {
+      await deleteUpcomingExamFromFirestore(examId, cleanTitle);
+      await deleteUpcomingExamFromSiteSettings(examId, cleanTitle);
       await deleteExamFromFirestore(examId);
-      if (cleanTitle) {
-        await deleteUpcomingExamFromFirestore(examId, cleanTitle);
-        await deleteUpcomingExamFromSiteSettings(examId, cleanTitle);
-      }
     } catch (err) {
       console.warn("Failed to delete exam from Firestore:", err);
     }
   };
 
-  const handleSaveMinistryBank = (newBank: MinistryQuestionBank) => {
+  const handleSaveMinistryBank = async (newBank: MinistryQuestionBank) => {
     setMinistryBanks(prev => {
       const existingIdx = prev.findIndex(b => b.id === newBank.id);
       let updated: MinistryQuestionBank[];
@@ -849,14 +898,26 @@ export default function App() {
       localStorage.setItem('ministry_question_banks', JSON.stringify(updated));
       return updated;
     });
+
+    try {
+      await setDoc(doc(db, 'ministryQuestionBanks', newBank.id), newBank, { merge: true });
+    } catch (err) {
+      console.warn("Failed to persist ministry bank to Firestore:", err);
+    }
   };
 
-  const handleDeleteMinistryBank = (bankId: string) => {
+  const handleDeleteMinistryBank = async (bankId: string) => {
     setMinistryBanks(prev => {
       const updated = prev.filter(b => b.id !== bankId);
       localStorage.setItem('ministry_question_banks', JSON.stringify(updated));
       return updated;
     });
+
+    try {
+      await deleteDoc(doc(db, 'ministryQuestionBanks', bankId));
+    } catch (err) {
+      console.warn("Failed to delete ministry bank from Firestore:", err);
+    }
   };
 
   const handleExamSubmit = async (newResult: ExamResult) => {

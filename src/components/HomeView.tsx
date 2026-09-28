@@ -62,6 +62,7 @@ import UpcomingExamCountdown from './UpcomingExamCountdown';
 import ModernNoticeTicker from './ModernNoticeTicker';
 import FaqSection from './FaqSection';
 import { detectQuestionSubject } from '../lib/subjectClassifier';
+import QuestionBankPdfModal from './QuestionBankPdfModal';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -212,10 +213,12 @@ export default function HomeView({
   const [mbUserAnswers, setMbUserAnswers] = useState<Record<string, number>>({});
   const [selectedMinistryFilter, setSelectedMinistryFilter] = useState<string>('ALL');
 
+  // Question Bank PDF Download Modal State
+  const [pdfBankToDownload, setPdfBankToDownload] = useState<MinistryQuestionBank | null>(null);
+
   const publishedMinistryBanks = useMemo(() => {
-    const raw = ministryBanks && ministryBanks.length > 0 ? ministryBanks : INITIAL_MINISTRY_BANKS;
-    const published = raw.filter(b => b.isPublished !== false);
-    return published.length > 0 ? published : INITIAL_MINISTRY_BANKS;
+    const raw = Array.isArray(ministryBanks) ? ministryBanks : INITIAL_MINISTRY_BANKS;
+    return raw.filter(b => b.isPublished !== false);
   }, [ministryBanks]);
 
   const existingMinistryFilters = useMemo(() => {
@@ -1703,10 +1706,19 @@ export default function HomeView({
                   {bank.title}
                 </h4>
 
-                <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400 font-medium">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  {bank.examHeldDate && (
+                    <>
+                      <span className="flex items-center gap-1 text-primary dark:text-primary-light font-bold">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>অনুষ্ঠিত: {bank.examHeldDate}</span>
+                      </span>
+                      <span>•</span>
+                    </>
+                  )}
                   <span className="flex items-center gap-1">
                     <Clock className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
-                    <span>{bank.durationMinutes || 10} মিনিট</span>
+                    <span>{toBengaliDigits(bank.durationMinutes || 10)} মিনিট</span>
                   </span>
                   <span>•</span>
                   <span className="flex items-center gap-1">
@@ -1716,25 +1728,37 @@ export default function HomeView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+              <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800">
                 <button
                   onClick={() => {
                     setActiveMinistryBank(bank);
                     setMbPracticeTab('qa');
                     setMbUserAnswers({});
                   }}
-                  className="w-full py-2.5 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  title="প্রশ্ন ও বিশদ সমাধান অনুশীলন করুন"
                 >
-                  <BookOpen className="h-3.5 w-3.5 text-primary" />
-                  <span>অনুশীলন করুন</span>
+                  <BookOpen className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span>অনুশীলন</span>
                 </button>
 
                 <button
                   onClick={() => handleStartMinistryExam(bank)}
-                  className="w-full py-2.5 px-3 bg-primary hover:bg-primary-dark text-white font-extrabold text-xs rounded-xl shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 px-2 bg-primary hover:bg-primary-dark text-white font-extrabold text-xs rounded-xl shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  title="টাইমারসহ পরীক্ষা দিন"
                 >
-                  <Play className="h-3.5 w-3.5 fill-current" />
+                  <Play className="h-3.5 w-3.5 fill-current shrink-0" />
                   <span>পরীক্ষা দিন</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPdfBankToDownload(bank)}
+                  className="w-full py-2.5 px-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-black text-xs rounded-xl border border-emerald-300 dark:border-emerald-800 transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer group"
+                  title="প্রশ্ন ব্যাংক PDF ডাউনলোড করুন"
+                >
+                  <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
+                  <span>PDF</span>
                 </button>
               </div>
             </div>
@@ -2444,17 +2468,29 @@ export default function HomeView({
                 </button>
               </div>
 
-              <button
-                onClick={() => {
-                  const bankToStart = activeMinistryBank;
-                  setActiveMinistryBank(null);
-                  handleStartMinistryExam(bankToStart);
-                }}
-                className="hidden sm:inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all"
-              >
-                <Play className="h-3.5 w-3.5 fill-current" />
-                <span>⏱️ পরীক্ষা মোডে সুইচ করুন</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPdfBankToDownload(activeMinistryBank)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs font-black shadow-2xs transition-all cursor-pointer"
+                  title="এই প্রশ্ন ব্যাংকটি PDF আকারে ডাউনলোড করুন"
+                >
+                  <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>PDF ডাউনলোড</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    const bankToStart = activeMinistryBank;
+                    setActiveMinistryBank(null);
+                    handleStartMinistryExam(bankToStart);
+                  }}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all"
+                >
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                  <span>⏱️ পরীক্ষা মোডে সুইচ করুন</span>
+                </button>
+              </div>
             </div>
 
             {/* Questions Body */}
@@ -2728,6 +2764,13 @@ export default function HomeView({
           </div>
         </div>
       )}
+
+      {/* 9. Question Bank PDF Download Modal */}
+      <QuestionBankPdfModal
+        bank={pdfBankToDownload}
+        isOpen={!!pdfBankToDownload}
+        onClose={() => setPdfBankToDownload(null)}
+      />
     </div>
   );
 }

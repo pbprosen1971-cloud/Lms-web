@@ -53,7 +53,7 @@ export default function SubmissionSuccessAnimation({
               <motion.div
                 initial={{ scale: 0.6, opacity: 0.9 }}
                 animate={{ scale: [0.6, 1.4, 1.8], opacity: [0.8, 0.4, 0] }}
-                transition={{ duration: 1.2, ease: 'easeOut' }}
+                transition={{ type: 'tween', duration: 1.2, ease: 'easeOut' }}
                 className="absolute inset-0 rounded-full bg-gradient-to-tr from-emerald-400/40 to-teal-300/20 blur-sm pointer-events-none"
               />
 
@@ -74,6 +74,7 @@ export default function SubmissionSuccessAnimation({
                       opacity: [1, 0.9, 0],
                     }}
                     transition={{
+                      type: 'tween',
                       duration: 0.9,
                       delay: p.delay,
                       ease: 'easeOut',
@@ -91,7 +92,7 @@ export default function SubmissionSuccessAnimation({
               {/* Main Checkmark Pop Badge */}
               <motion.div
                 initial={{ scale: 0, rotate: -25 }}
-                animate={{ scale: [0, 1.25, 1], rotate: [-25, 8, 0] }}
+                animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.08 }}
                 className="relative z-10 w-11 h-11 rounded-xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30"
               >

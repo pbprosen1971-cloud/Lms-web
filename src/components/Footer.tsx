@@ -30,7 +30,7 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
   };
 
   return (
-    <footer className="relative overflow-hidden bg-slate-900 text-slate-300 dark:bg-slate-950/95 transition-colors duration-300 border-t border-slate-800">
+    <footer className="relative overflow-hidden bg-slate-900 text-slate-300 dark:bg-slate-950/95 transition-colors duration-300 border-t border-slate-800 print:hidden">
       {/* Educational Line Art Background Illustrations with Variant Colors & 40% Opacity */}
       <div 
         className="absolute inset-0 pointer-events-none select-none opacity-40 overflow-hidden" 

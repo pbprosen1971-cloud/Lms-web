@@ -18,7 +18,7 @@ interface ExamViewProps {
 export default function ExamView({ exam, user, onExamSubmit, setView }: ExamViewProps) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<{ [questionId: string]: number }>({});
-  const [timeLeft, setTimeLeft] = useState(exam.durationMinutes * 60);
+  const [timeLeft, setTimeLeft] = useState((exam.durationMinutes || 10) * 60);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [firestoreQuestions, setFirestoreQuestions] = useState<Question[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);

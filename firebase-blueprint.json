@@ -268,9 +268,62 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["token", "createdAt"]
+    },
+    "QuestionBank": {
+      "title": "QuestionBank",
+      "description": "Dedicated standalone question bank collection for ministries, departments, and government job exams",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ministry": { "type": "string" },
+        "subject": { "type": "string" },
+        "question": { "type": "string" },
+        "optionA": { "type": "string" },
+        "optionB": { "type": "string" },
+        "optionC": { "type": "string" },
+        "optionD": { "type": "string" },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctAnswer": { "type": "string" },
+        "correctAnswerLetter": { "type": "string", "enum": ["A", "B", "C", "D"] },
+        "explanation": { "type": "string" },
+        "source": { "type": "string" },
+        "year": { "type": "string" },
+        "questionType": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "draft"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["ministry", "subject", "question", "optionA", "optionB", "optionC", "optionD", "correctAnswer"]
+    },
+    "ministryQuestionBanks": {
+      "title": "ministryQuestionBanks",
+      "description": "Question banks curated by ministry or department for homepage practice and exams",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ministryName": { "type": "string" },
+        "title": { "type": "string" },
+        "examHeldDate": { "type": "string" },
+        "durationMinutes": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "questions": { "type": "array" },
+        "isPublished": { "type": "boolean" },
+        "isPremium": { "type": "boolean" },
+        "dateCreated": { "type": "string" }
+      },
+      "required": ["ministryName", "title", "questions"]
     }
   },
   "firestore": {
+    "/ministryQuestionBanks/{bankId}": {
+      "schema": "ministryQuestionBanks",
+      "description": "Question banks curated by ministry or department for homepage practice and exams"
+    },
+    "/QuestionBank/{questionId}": {
+      "schema": "QuestionBank",
+      "description": "Standalone dedicated QuestionBank collection for government and ministry job exams"
+    },
     "/notifications/{notificationId}": {
       "schema": "notifications",
       "description": "Broadcast notifications sent from admin to all users"
