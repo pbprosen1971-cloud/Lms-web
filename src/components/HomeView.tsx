@@ -63,6 +63,7 @@ import ModernNoticeTicker from './ModernNoticeTicker';
 import FaqSection from './FaqSection';
 import { detectQuestionSubject } from '../lib/subjectClassifier';
 import QuestionBankPdfModal from './QuestionBankPdfModal';
+import { normalizeMinistryName, getMinistryComparisonKey } from '../services/questionBankService';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -212,6 +213,7 @@ export default function HomeView({
   const [mbPracticeTab, setMbPracticeTab] = useState<'qa' | 'interactive'>('qa');
   const [mbUserAnswers, setMbUserAnswers] = useState<Record<string, number>>({});
   const [selectedMinistryFilter, setSelectedMinistryFilter] = useState<string>('ALL');
+  const [ministrySearchQuery, setMinistrySearchQuery] = useState<string>('');
 
   // Question Bank PDF Download Modal State
   const [pdfBankToDownload, setPdfBankToDownload] = useState<MinistryQuestionBank | null>(null);
@@ -222,19 +224,33 @@ export default function HomeView({
   }, [ministryBanks]);
 
   const existingMinistryFilters = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     publishedMinistryBanks.forEach(b => {
-      if (b.ministryName && b.ministryName.trim()) {
-        set.add(b.ministryName.trim());
+      const clean = normalizeMinistryName(b.ministryName);
+      const key = getMinistryComparisonKey(clean);
+      if (clean && key && !map.has(key)) {
+        map.set(key, clean);
       }
     });
-    return Array.from(set);
+    return Array.from(map.values());
   }, [publishedMinistryBanks]);
 
   const filteredMinistryBanks = useMemo(() => {
-    if (selectedMinistryFilter === 'ALL') return publishedMinistryBanks;
-    return publishedMinistryBanks.filter(b => b.ministryName === selectedMinistryFilter);
-  }, [publishedMinistryBanks, selectedMinistryFilter]);
+    let list = publishedMinistryBanks;
+    if (selectedMinistryFilter !== 'ALL') {
+      const filterKey = getMinistryComparisonKey(selectedMinistryFilter);
+      list = list.filter(b => getMinistryComparisonKey(b.ministryName) === filterKey);
+    }
+    if (ministrySearchQuery.trim()) {
+      const q = ministrySearchQuery.trim().toLowerCase();
+      list = list.filter(b =>
+        (b.title && b.title.toLowerCase().includes(q)) ||
+        (b.ministryName && b.ministryName.toLowerCase().includes(q)) ||
+        (b.examHeldDate && b.examHeldDate.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [publishedMinistryBanks, selectedMinistryFilter, ministrySearchQuery]);
 
   const handleStartMinistryExam = (bank: MinistryQuestionBank) => {
     const convertedExam: Exam = {
@@ -1635,135 +1651,217 @@ export default function HomeView({
 
       {/* 3.5. Ministry & Department Question Bank Section (Below Archive Exam) */}
       <section id="ministry-banks-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pt-6 scroll-mt-20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-4">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 text-primary dark:text-emerald-300 text-xs font-bold rounded-lg mb-2 border border-primary/20">
-              <BookOpen className="h-4 w-4 text-primary" />
-              <span>মন্ত্রণালয় ও অধিদপ্তর বিশেষ প্রস্তুতি</span>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-4">
+          <div className="space-y-2 flex-1">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 text-primary dark:text-emerald-300 text-xs font-bold rounded-lg mb-2 border border-primary/20">
+                <BookOpen className="h-4 w-4 text-primary" />
+                <span>মন্ত্রণালয় ও অধিদপ্তর বিশেষ প্রস্তুতি</span>
+              </div>
+              <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
+                <span>মন্ত্রণালয় ও দপ্তরভিত্তিক প্রশ্ন ব্যাংকসমূহ</span>
+                <span className="px-2.5 py-0.5 bg-primary/10 text-primary dark:text-emerald-300 border border-primary/20 text-xs font-bold rounded-full">
+                  {publishedMinistryBanks.length} টি প্রশ্ন ব্যাংক
+                </span>
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
+                এডমিন প্যানেলে প্রকাশিত বিভিন্ন মন্ত্রণালয়ের বিষয়ভিত্তিক নিয়োগ পরীক্ষার প্রশ্ন, বিকল্প উত্তর, সঠিক উত্তর ও বিশদ সমাধান থেকে পছন্দ অনুযায়ী অনুশীলন বা পরীক্ষা দিন।
+              </p>
             </div>
-            <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-              <span>মন্ত্রণালয় ও দপ্তরভিত্তিক প্রশ্ন ব্যাংকসমূহ</span>
-              <span className="px-2.5 py-0.5 bg-primary/10 text-primary dark:text-emerald-300 border border-primary/20 text-xs font-bold rounded-full">
-                {publishedMinistryBanks.length} টি প্রশ্ন ব্যাংক
-              </span>
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
-              এডমিন প্যানেলে প্রকাশিত বিভিন্ন মন্ত্রণালয়ের বিষয়ভিত্তিক নিয়োগ পরীক্ষার প্রশ্ন, বিকল্প উত্তর, সঠিক উত্তর ও বিশদ সমাধান থেকে পছন্দ অনুযায়ী অনুশীলন বা পরীক্ষা দিন।
-            </p>
+          </div>
+
+          {/* Search Bar for Ministry Question Banks */}
+          <div className="w-full md:w-80 lg:w-96 shrink-0">
+            <div className="relative">
+              <Search className="h-4 w-4 text-slate-400 dark:text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={ministrySearchQuery}
+                onChange={(e) => setMinistrySearchQuery(e.target.value)}
+                placeholder="মন্ত্রণালয়, দপ্তর বা পরীক্ষার নাম দিয়ে খুঁজুন..."
+                aria-label="মন্ত্রণালয় বা পরীক্ষার নাম দিয়ে প্রশ্ন ব্যাংক খুঁজুন"
+                className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-primary dark:focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-2xs transition-all outline-none"
+              />
+              {ministrySearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setMinistrySearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition-colors cursor-pointer"
+                  title="মুছে ফেলুন"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Ministry Filter Tabs */}
-        {existingMinistryFilters.length > 1 && (
+        {existingMinistryFilters.length > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
             <button
               onClick={() => setSelectedMinistryFilter('ALL')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
                 selectedMinistryFilter === 'ALL'
                   ? 'bg-primary text-white shadow-md shadow-primary/20'
                   : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
               }`}
             >
-              সকল মন্ত্রণালয় ({publishedMinistryBanks.length})
+              সকল মন্ত্রণালয় ({toBengaliDigits(publishedMinistryBanks.length)})
             </button>
             {existingMinistryFilters.map((minName, idx) => {
-              const count = publishedMinistryBanks.filter(b => b.ministryName === minName).length;
+              const count = publishedMinistryBanks.filter(
+                b => getMinistryComparisonKey(b.ministryName) === getMinistryComparisonKey(minName)
+              ).length;
+              const isSelected =
+                selectedMinistryFilter !== 'ALL' &&
+                getMinistryComparisonKey(selectedMinistryFilter) === getMinistryComparisonKey(minName);
               return (
                 <button
                   key={idx}
                   onClick={() => setSelectedMinistryFilter(minName)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all ${
-                    selectedMinistryFilter === minName
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                    isSelected
                       ? 'bg-primary text-white shadow-md shadow-primary/20'
                       : 'bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
                   }`}
                 >
-                  🏢 {minName} ({count})
+                  🏢 {minName} ({toBengaliDigits(count)})
                 </button>
               );
             })}
           </div>
         )}
 
-        {/* Grid of Published Question Banks */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredMinistryBanks.map((bank) => (
-            <div
-              key={bank.id}
-              className="group bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 hover:border-primary/50 dark:hover:border-primary/50 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-4 relative overflow-hidden"
-            >
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs rounded-xl">
-                    🏢 {bank.ministryName}
-                  </span>
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                    {bank.questions?.length || bank.totalQuestions || 0} টি প্রশ্ন
-                  </span>
-                </div>
-
-                <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white leading-snug group-hover:text-primary transition-colors">
-                  {bank.title}
-                </h4>
-
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium">
-                  {bank.examHeldDate && (
-                    <>
-                      <span className="flex items-center gap-1 text-primary dark:text-primary-light font-bold">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>অনুষ্ঠিত: {bank.examHeldDate}</span>
-                      </span>
-                      <span>•</span>
-                    </>
-                  )}
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
-                    <span>{toBengaliDigits(bank.durationMinutes || 10)} মিনিট</span>
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-slate-700 dark:text-slate-300">ব্যাখ্যাসহ সমাধান</span>
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800">
-                <button
-                  onClick={() => {
-                    setActiveMinistryBank(bank);
-                    setMbPracticeTab('qa');
-                    setMbUserAnswers({});
-                  }}
-                  className="w-full py-2.5 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center gap-1 cursor-pointer"
-                  title="প্রশ্ন ও বিশদ সমাধান অনুশীলন করুন"
-                >
-                  <BookOpen className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span>অনুশীলন</span>
-                </button>
-
-                <button
-                  onClick={() => handleStartMinistryExam(bank)}
-                  className="w-full py-2.5 px-2 bg-primary hover:bg-primary-dark text-white font-extrabold text-xs rounded-xl shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-1 cursor-pointer"
-                  title="টাইমারসহ পরীক্ষা দিন"
-                >
-                  <Play className="h-3.5 w-3.5 fill-current shrink-0" />
-                  <span>পরীক্ষা দিন</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPdfBankToDownload(bank)}
-                  className="w-full py-2.5 px-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-black text-xs rounded-xl border border-emerald-300 dark:border-emerald-800 transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer group"
-                  title="প্রশ্ন ব্যাংক PDF ডাউনলোড করুন"
-                >
-                  <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
-                  <span>PDF</span>
-                </button>
-              </div>
+        {/* Active Ministry Banner when a specific ministry is selected */}
+        {selectedMinistryFilter !== 'ALL' && filteredMinistryBanks.length > 0 && (
+          <div className="p-4 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="px-3 py-1 bg-emerald-600 text-white text-xs font-extrabold rounded-xl shadow-xs">
+                🏢 {selectedMinistryFilter}
+              </span>
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                এই মন্ত্রণালয়ের অধীনে মোট {toBengaliDigits(filteredMinistryBanks.length)} টি প্রশ্ন ব্যাংক পাওয়া গেছে
+              </span>
             </div>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={() => setSelectedMinistryFilter('ALL')}
+              className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              ← সকল মন্ত্রণালয় একসাথে দেখুন
+            </button>
+          </div>
+        )}
+
+        {/* Grid of Published Question Banks (Each question bank is its own separate card) */}
+        {filteredMinistryBanks.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-800 rounded-2xl p-10 text-center space-y-3">
+            <Search className="h-8 w-8 text-slate-400 mx-auto" />
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              কোনো প্রশ্ন ব্যাংক পাওয়া যায়নি
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              "{ministrySearchQuery}" বা নির্বাচিত ফিল্টারের সাথে মিলে এমন কোনো মন্ত্রণালয় বা দপ্তরের প্রশ্ন ব্যাংক খুঁজে পাওয়া যায়নি।
+            </p>
+            {(ministrySearchQuery || selectedMinistryFilter !== 'ALL') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMinistrySearchQuery('');
+                  setSelectedMinistryFilter('ALL');
+                }}
+                className="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary dark:text-emerald-300 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                সকল প্রশ্ন ব্যাংক দেখুন
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredMinistryBanks.map((bank) => (
+              <div
+                key={bank.id}
+                className="group bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 hover:border-primary/50 dark:hover:border-primary/50 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-4 relative overflow-hidden"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMinistryFilter(normalizeMinistryName(bank.ministryName))}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs rounded-xl transition-colors cursor-pointer text-left"
+                      title="এই মন্ত্রণালয়ের সকল প্রশ্ন ব্যাংক দেখুন"
+                    >
+                      <span>🏢 {bank.ministryName}</span>
+                    </button>
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                      {toBengaliDigits(bank.questions?.length || bank.totalQuestions || 0)} টি প্রশ্ন
+                    </span>
+                  </div>
+
+                  <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white leading-snug group-hover:text-primary transition-colors">
+                    {bank.title}
+                  </h4>
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium">
+                    {bank.examHeldDate && (
+                      <>
+                        <span className="flex items-center gap-1 text-primary dark:text-primary-light font-bold">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>অনুষ্ঠিত: {bank.examHeldDate}</span>
+                        </span>
+                        <span>•</span>
+                      </>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                      <span>{toBengaliDigits(bank.durationMinutes || 10)} মিনিট</span>
+                    </span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-slate-700 dark:text-slate-300">ব্যাখ্যাসহ সমাধান</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                  <button
+                    onClick={() => {
+                      setActiveMinistryBank(bank);
+                      setMbPracticeTab('qa');
+                      setMbUserAnswers({});
+                    }}
+                    className="w-full py-2.5 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    title="প্রশ্ন ও বিশদ সমাধান অনুশীলন করুন"
+                  >
+                    <BookOpen className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span>অনুশীলন</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleStartMinistryExam(bank)}
+                    className="w-full py-2.5 px-2 bg-primary hover:bg-primary-dark text-white font-extrabold text-xs rounded-xl shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    title="টাইমারসহ পরীক্ষা দিন"
+                  >
+                    <Play className="h-3.5 w-3.5 fill-current shrink-0" />
+                    <span>পরীক্ষা দিন</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPdfBankToDownload(bank)}
+                    className="w-full py-2.5 px-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-black text-xs rounded-xl border border-emerald-300 dark:border-emerald-800 transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer group"
+                    title="প্রশ্ন ব্যাংক PDF ডাউনলোড করুন"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
+                    <span>PDF</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* 4. Statistics Panel (Students, Exams, Questions) */}

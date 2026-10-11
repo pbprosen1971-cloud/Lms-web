@@ -50,6 +50,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
   const [name, setName] = useState('');
   const [institution, setInstitution] = useState('');
   const [error, setError] = useState('');
+  const [unauthorizedDomainHost, setUnauthorizedDomainHost] = useState<string | null>(null);
+  const [domainCopied, setDomainCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
@@ -351,9 +353,13 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
     try {
       const lowerEmail = email.toLowerCase().trim();
-      const isAdminEmail = lowerEmail === 'medha@admin.com' || lowerEmail === 'admin@medha.com';
-      const isSpecialAdmin = isAdminEmail;
-      const isSpecialStudent = lowerEmail === 'prosenjit@medha.com' || lowerEmail === 'student@medha.com';
+      const isAdminEmail =
+        lowerEmail === 'medha@admin.com' ||
+        lowerEmail === 'admin@medha.com' ||
+        lowerEmail === 'pbprosen1971@gmail.com' ||
+        lowerEmail === 'prosenjit@medha.com';
+      const isSpecialAdmin = lowerEmail === 'medha@admin.com' || lowerEmail === 'admin@medha.com';
+      const isSpecialStudent = lowerEmail === 'student@medha.com';
 
       if (isRegistering) {
         const trimmedName = name.trim();
@@ -653,7 +659,11 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
       console.error('Firebase Auth Error:', err);
       if (err?.code === 'auth/operation-not-allowed' || err?.message?.includes('operation-not-allowed')) {
         const lowerEmail = email.toLowerCase().trim();
-        const isAdmin = lowerEmail === 'medha@admin.com' || lowerEmail === 'admin@medha.com';
+        const isAdmin =
+          lowerEmail === 'medha@admin.com' ||
+          lowerEmail === 'admin@medha.com' ||
+          lowerEmail === 'pbprosen1971@gmail.com' ||
+          lowerEmail === 'prosenjit@medha.com';
         const nowIso = new Date().toISOString();
         const fallbackUid = isAdmin ? '2JDRuYTnWuXwQFVAefh1GP1gWcy1' : 'user_' + btoa(lowerEmail).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
         const fallbackProfile: UserProfile = {
@@ -704,6 +714,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
   // Google Sign-In with Google Auth Provider (Account Selector: select_account)
   const handleGoogleLogin = async () => {
     setError('');
+    setUnauthorizedDomainHost(null);
     setLoading(true);
 
     const provider = new GoogleAuthProvider();
@@ -792,6 +803,11 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         profile.lastLogin = nowIso;
         const updates: any = { lastLogin: nowIso };
 
+        if (isUserAdmin) {
+          profile.role = 'admin';
+          updates.role = 'admin';
+        }
+
         // Ensure user has a referral code
         if (!profile.referralCode) {
           const generatedCode = generateReferralCode(profile.name || googleDisplayName);
@@ -834,6 +850,9 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
       if (errorCode === 'auth/popup-closed-by-user' || errorCode === 'auth/cancelled-popup-request') {
         // User voluntarily closed the window, do not show harsh error
         return;
+      }
+      if (errorCode === 'auth/unauthorized-domain' || (err?.message || '').includes('unauthorized-domain')) {
+        setUnauthorizedDomainHost(typeof window !== 'undefined' ? window.location.hostname : '');
       }
       setError(getBengaliErrorMessage(err?.code || err?.message || ''));
     } finally {
@@ -1030,9 +1049,34 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
             {/* Error Message Alert */}
             {error && (
-              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 text-rose-600 dark:text-rose-400 text-xs font-semibold rounded-xl flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 shrink-0" />
-                <span>{error}</span>
+              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 text-rose-600 dark:text-rose-400 text-xs font-semibold rounded-xl space-y-2.5">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+                {unauthorizedDomainHost && (
+                  <div className="p-2.5 bg-white/90 dark:bg-slate-900/90 border border-rose-200 dark:border-rose-800/60 rounded-lg text-[11px] text-slate-700 dark:text-slate-300 space-y-2 font-normal">
+                    <p className="font-bold text-slate-800 dark:text-slate-200">
+                      🔧 সমাধান (অ্যাডমিনের জন্য): Firebase Console ➔ Authentication ➔ Settings ➔ Authorized domains-এ নিচের ডোমেইনটি Add করুন:
+                    </p>
+                    <div className="flex items-center justify-between gap-2 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700">
+                      <code className="font-mono text-[11px] text-rose-600 dark:text-rose-400 break-all select-all">
+                        {unauthorizedDomainHost}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(unauthorizedDomainHost);
+                          setDomainCopied(true);
+                          setTimeout(() => setDomainCopied(false), 2500);
+                        }}
+                        className="shrink-0 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] transition-colors cursor-pointer"
+                      >
+                        {domainCopied ? '✓ কপি হয়েছে' : 'কপি করুন'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -60,6 +60,11 @@ import {
   updateMinistryBankDuration,
   toggleMinistryBankPublishStatus,
   normalizeCorrectAnswer,
+  normalizeMinistryName,
+  getMinistryComparisonKey,
+  findMatchingMinistryName,
+  saveCustomMinistryToRegistry,
+  subscribeToCustomMinistries,
   COMMON_MINISTRIES,
   COMMON_SUBJECTS,
 } from '../services/questionBankService';
@@ -190,6 +195,16 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
     return () => unsubscribe();
   }, []);
 
+  // Persisted custom ministries registry (from Firestore siteSettings/customMinistries & localStorage)
+  const [customSavedMinistries, setCustomSavedMinistries] = useState<string[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeToCustomMinistries((list) => {
+      setCustomSavedMinistries(list);
+    });
+    return () => unsub();
+  }, []);
+
   // Auto-dismiss alerts
   useEffect(() => {
     if (successMsg) {
@@ -216,19 +231,55 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
 
   // Derived unique ministries for Home Banks filter
   const existingHomeBankMinistries = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     (ministryBanks || []).forEach((b) => {
-      if (b.ministryName && b.ministryName.trim()) {
-        set.add(b.ministryName.trim());
+      const clean = normalizeMinistryName(b.ministryName);
+      const key = getMinistryComparisonKey(clean);
+      if (clean && key && !map.has(key)) {
+        map.set(key, clean);
       }
     });
-    return Array.from(set).sort();
+    return Array.from(map.values()).sort();
   }, [ministryBanks]);
+
+  // All active & previously saved ministries so once a ministry has questions added under it,
+  // it permanently stays in the dropdown for adding subsequent question banks under the same ministry.
+  const activeSavedMinistries = useMemo(() => {
+    const map = new Map<string, string>();
+    const addName = (raw?: string) => {
+      const clean = normalizeMinistryName(raw || '');
+      const key = getMinistryComparisonKey(clean);
+      if (clean && key && !map.has(key)) {
+        map.set(key, clean);
+      }
+    };
+    (ministryBanks || []).forEach((b) => addName(b.ministryName));
+    questions.forEach((q) => addName(q.ministry));
+    customSavedMinistries.forEach((m) => addName(m));
+    addName('ভূমি রেকর্ড ও জরিপ অদিদপ্তর');
+    return Array.from(map.values());
+  }, [ministryBanks, questions, customSavedMinistries]);
+
+  const allMinistryDropdownOptions = useMemo(() => {
+    const activeKeys = new Set(activeSavedMinistries.map((m) => getMinistryComparisonKey(m)));
+    const remainingCommon = COMMON_MINISTRIES.filter(
+      (m) => !activeKeys.has(getMinistryComparisonKey(m))
+    );
+    return {
+      activeSaved: activeSavedMinistries,
+      popularCommon: remainingCommon.slice(0, 10),
+      otherCommon: remainingCommon.slice(10),
+      allCombined: [...activeSavedMinistries, ...remainingCommon],
+    };
+  }, [activeSavedMinistries]);
 
   // Filtered Home Question Banks
   const filteredHomeBanks = useMemo(() => {
     return (ministryBanks || []).filter((bank) => {
-      if (homeBanksMinistryFilter !== 'all' && bank.ministryName !== homeBanksMinistryFilter) {
+      if (
+        homeBanksMinistryFilter !== 'all' &&
+        getMinistryComparisonKey(bank.ministryName) !== getMinistryComparisonKey(homeBanksMinistryFilter)
+      ) {
         return false;
       }
       if (homeBanksSearch.trim()) {
@@ -392,9 +443,15 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
     setIsSavingBankEdit(true);
     try {
       const dur = Math.max(1, Number(editBankForm.durationMinutes) || 10);
+      const cleanMin = findMatchingMinistryName(
+        editBankForm.ministryName,
+        allMinistryDropdownOptions.allCombined
+      );
+      await saveCustomMinistryToRegistry(cleanMin);
+
       const updated: MinistryQuestionBank = {
         ...editingBankModal,
-        ministryName: editBankForm.ministryName.trim(),
+        ministryName: cleanMin,
         title: editBankForm.title.trim(),
         examHeldDate: editBankForm.examHeldDate.trim() || undefined,
         durationMinutes: dur,
@@ -450,10 +507,15 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
     }
   };
 
-  // Reset manual add form
-  const handleResetManualForm = () => {
-    setFormMinistryChoice('');
-    setCustomMinistry('');
+  // Reset manual add form (keep selected ministry so admin can easily add more under the same ministry)
+  const handleResetManualForm = (keepMinistry?: string) => {
+    if (keepMinistry) {
+      setFormMinistryChoice(keepMinistry);
+      setCustomMinistry('');
+    } else {
+      setFormMinistryChoice('');
+      setCustomMinistry('');
+    }
     setFormSubjectChoice('');
     setCustomSubject('');
     setQuestionText('');
@@ -475,8 +537,17 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const ministry = formMinistryChoice === '__CUSTOM__' || !formMinistryChoice ? customMinistry.trim() : formMinistryChoice.trim();
-    const subject = (formSubjectChoice === '__CUSTOM__' || !formSubjectChoice ? customSubject.trim() : formSubjectChoice.trim()) || ministry || 'সাধারণ বিষয়';
+    const rawMinistry =
+      formMinistryChoice === '__CUSTOM__' || !formMinistryChoice
+        ? customMinistry
+        : formMinistryChoice;
+    const ministry = findMatchingMinistryName(rawMinistry, allMinistryDropdownOptions.allCombined);
+    const subject =
+      (formSubjectChoice === '__CUSTOM__' || !formSubjectChoice
+        ? customSubject.trim()
+        : formSubjectChoice.trim()) ||
+      ministry ||
+      'সাধারণ বিষয়';
 
     if (!ministry) {
       setErrorMsg('দয়া করে মন্ত্রণালয় বা অধিদপ্তরের নাম লিখুন বা সিলেক্ট করুন।');
@@ -493,6 +564,8 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
 
     try {
       setSavingManual(true);
+      await saveCustomMinistryToRegistry(ministry);
+
       const newQuestion: NewQuestionBankItem = {
         ministry,
         subject,
@@ -530,7 +603,9 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
       };
 
       const existingBank = (ministryBanks || []).find(
-        (b) => b.ministryName === ministry && b.title === targetTitle
+        (b) =>
+          getMinistryComparisonKey(b.ministryName) === getMinistryComparisonKey(ministry) &&
+          normalizeMinistryName(b.title) === normalizeMinistryName(targetTitle)
       );
 
       let updatedBank: MinistryQuestionBank;
@@ -538,6 +613,7 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
         const updatedQs = [...existingBank.questions, qItem];
         updatedBank = {
           ...existingBank,
+          ministryName: existingBank.ministryName,
           totalQuestions: updatedQs.length,
           questions: updatedQs,
           durationMinutes: durationMinutes || existingBank.durationMinutes || 10,
@@ -563,9 +639,9 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
       await saveMinistryQuestionBankToFirestore(updatedBank);
 
       setSuccessMsg(
-        'প্রশ্নটি সফলভাবে /QuestionBank কালেকশনে সংরক্ষিত হয়েছে এবং হোম পেজে “মন্ত্রণালয় ও দপ্তরভিত্তিক প্রশ্ন ব্যাংকসমূহ”-এ সাথে সাথে দৃশ্যমান হয়েছে!'
+        `✅ "${ministry}" এর অধীনে প্রশ্নটি সফলভাবে সংরক্ষিত হয়েছে এবং এই মন্ত্রণালয়ের নাম ড্রপডাউনে স্থায়ীভাবে যুক্ত করা হয়েছে!`
       );
-      handleResetManualForm();
+      handleResetManualForm(ministry);
       setActiveSubTab('list');
     } catch (err: any) {
       console.error('Failed to add question:', err);
@@ -765,9 +841,13 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
       return;
     }
 
-    const ministry = (
-      formMinistryChoice === '__CUSTOM__' || !formMinistryChoice ? customMinistry.trim() : formMinistryChoice.trim()
-    ) || csvParseResult.rows[0]?.ministry || 'সাধারণ মন্ত্রণালয়';
+    const rawMinistry =
+      (formMinistryChoice === '__CUSTOM__' || !formMinistryChoice
+        ? customMinistry.trim()
+        : formMinistryChoice.trim()) ||
+      csvParseResult.rows[0]?.ministry ||
+      'সাধারণ মন্ত্রণালয়';
+    const ministry = findMatchingMinistryName(rawMinistry, allMinistryDropdownOptions.allCombined);
 
     const targetTitle = sourceExam.trim() || csvParseResult.rows[0]?.source || `${ministry} প্রশ্ন ব্যাংক`;
     const targetSubject = (formSubjectChoice === '__CUSTOM__' || !formSubjectChoice ? customSubject.trim() : formSubjectChoice.trim()) || ministry;
@@ -777,6 +857,9 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
     try {
       setIsImportingCsv(true);
       setCsvImportProgress({ current: 0, total: csvParseResult.rows.length });
+      await saveCustomMinistryToRegistry(ministry);
+      setFormMinistryChoice(ministry);
+      setCustomMinistry('');
 
       const { bankId, count } = await saveMinistryQuestionBankBundle(
         {
@@ -847,83 +930,86 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Standalone QuestionBank Banner & Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-indigo-800/40 relative overflow-hidden">
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-5 sm:p-7 shadow-xl border border-indigo-800/40 relative overflow-hidden">
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-radial from-indigo-500/10 to-transparent pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div>
-            <div className="flex flex-wrap items-center gap-2 mb-2.5">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                <BookOpen className="h-3.5 w-3.5" />
-                <span>ডেডিকেটেড প্রশ্ন ব্যাংক</span>
-              </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                <ShieldCheck className="h-3 w-3" />
-                <span>Firestore: /QuestionBank</span>
-              </span>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/20">
-                <span>সম্পূর্ণ স্বতন্ত্র (No Exam Interference)</span>
-              </span>
+        <div className="relative z-10 flex flex-col gap-5">
+          {/* Top Row: Title, Badges & Quick Home Link */}
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  <BookOpen className="h-3.5 w-3.5" />
+                  <span>ডেডিকেটেড প্রশ্ন ব্যাংক</span>
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <ShieldCheck className="h-3 w-3" />
+                  <span>Firestore: /QuestionBank</span>
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                  <span>সম্পূর্ণ স্বতন্ত্র (No Exam Interference)</span>
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">
+                কোশ্চেন ব্যাংক ম্যানেজমেন্ট সিস্টেম
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
+                মন্ত্রণালয়, অধিদপ্তর ও সরকারি নিয়োগ পরীক্ষার প্রশ্নাবলী আলাদাভাবে সংগ্রহ, ম্যানুয়াল এন্ট্রি ও CSV ইম্পোর্ট করুন। এখানে সংরক্ষিত প্রশ্ন অন্যান্য পরীক্ষার ডেটাকে পরিবর্তন করবে না।
+              </p>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              কোশ্চেন ব্যাংক ম্যানেজমেন্ট সিস্টেম
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300 mt-2 max-w-2xl leading-relaxed">
-              মন্ত্রণালয়, অধিদপ্তর ও সরকারি নিয়োগ পরীক্ষার প্রশ্নাবলী আলাদাভাবে সংগ্রহ, ম্যানুয়াল এন্ট্রি ও CSV ইম্পোর্ট করুন। এখানে সংরক্ষিত প্রশ্ন অন্যান্য পরীক্ষার ডেটাকে পরিবর্তন করবে না।
-            </p>
-          </div>
-
-          {/* Quick Action Navigation */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('home_banks')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeSubTab === 'home_banks'
-                  ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/25 font-black ring-2 ring-amber-300 scale-102'
-                  : 'bg-white/10 hover:bg-white/15 text-amber-200 border border-amber-400/30 font-extrabold'
-              }`}
-            >
-              <Building2 className="h-4 w-4" />
-              <span>হোম পেজ প্রশ্ন ব্যাংক ({toBengaliDigits(ministryBanks.length)})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('manual_add')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeSubTab === 'manual_add'
-                  ? 'bg-primary text-white shadow-md shadow-primary/30 font-extrabold ring-2 ring-primary/40'
-                  : 'bg-white/10 hover:bg-white/15 text-white border border-white/10'
-              }`}
-            >
-              <Plus className="h-4 w-4" />
-              <span>প্রশ্ন ব্যাংক তৈরি ও ইনপুট</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('list')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                activeSubTab === 'list'
-                  ? 'bg-white text-slate-900 shadow-md font-extrabold'
-                  : 'bg-white/10 hover:bg-white/15 text-white border border-white/10'
-              }`}
-            >
-              <Layers className="h-4 w-4" />
-              <span>প্রশ্ন তালিকা ({toBengaliDigits(questions.length)})</span>
-            </button>
 
             {setView && (
               <button
                 type="button"
                 onClick={() => setView('home')}
-                className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-emerald-300 border border-emerald-400/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                className="self-start shrink-0 px-4 py-2.5 rounded-xl text-xs font-extrabold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-400/30 transition-all flex items-center gap-2 cursor-pointer shadow-sm"
                 title="হোম পেজে প্রকাশিত প্রশ্ন ব্যাংকসমূহ দেখুন"
               >
                 <span>🏠 হোম পেজ দেখুন</span>
               </button>
             )}
+          </div>
+
+          {/* Bottom Row: Uniform Responsive Navigation Bar */}
+          <div className="pt-4 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('home_banks')}
+              className={`w-full px-4 py-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                activeSubTab === 'home_banks'
+                  ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/25 ring-2 ring-amber-300'
+                  : 'bg-white/10 hover:bg-white/15 text-amber-200 border border-amber-400/30'
+              }`}
+            >
+              <Building2 className="h-4 w-4 shrink-0" />
+              <span className="truncate">হোম পেজ প্রশ্ন ব্যাংক ({toBengaliDigits(ministryBanks.length)})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('manual_add')}
+              className={`w-full px-4 py-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                activeSubTab === 'manual_add'
+                  ? 'bg-primary text-white shadow-lg shadow-primary/30 ring-2 ring-primary/40'
+                  : 'bg-white/10 hover:bg-white/15 text-white border border-white/15'
+              }`}
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              <span className="truncate">প্রশ্ন ব্যাংক তৈরি ও ইনপুট</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('list')}
+              className={`w-full px-4 py-3 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                activeSubTab === 'list'
+                  ? 'bg-white text-slate-900 shadow-lg ring-2 ring-white/50'
+                  : 'bg-white/10 hover:bg-white/15 text-white border border-white/15'
+              }`}
+            >
+              <Layers className="h-4 w-4 shrink-0" />
+              <span className="truncate">প্রশ্ন তালিকা ({toBengaliDigits(questions.length)})</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1346,6 +1432,28 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
 
                         <button
                           type="button"
+                          onClick={() => {
+                            const canonicalMin = findMatchingMinistryName(
+                              bank.ministryName,
+                              allMinistryDropdownOptions.allCombined
+                            );
+                            setFormMinistryChoice(canonicalMin);
+                            setCustomMinistry('');
+                            setSourceExam('');
+                            setActiveSubTab('manual_add');
+                            setTimeout(() => {
+                              document.getElementById('ministry-bank-form-header')?.scrollIntoView({ behavior: 'smooth' });
+                            }, 100);
+                          }}
+                          className="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary dark:text-teal-300 font-extrabold text-xs rounded-xl border border-primary/30 transition-all flex items-center gap-1 cursor-pointer"
+                          title={`"${bank.ministryName}" এর অধীনে নতুন আরেকটি প্রশ্ন ব্যাংক যুক্ত করুন`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>এই মন্ত্রণালয়ে নতুন প্রশ্ন ব্যাংক</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => setInspectingBank(bank)}
                           className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1 cursor-pointer"
                           title="এই ব্যাংকের সকল প্রশ্ন দেখুন"
@@ -1459,13 +1567,22 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:outline-none"
               >
                 <option value="">-- মন্ত্রণালয় / অধিদপ্তর তালিকা থেকে বাছুন --</option>
-                <optgroup label="জনপ্রিয় মন্ত্রণালয়">
-                  {COMMON_MINISTRIES.slice(0, 10).map((m, idx) => (
+                {allMinistryDropdownOptions.activeSaved.length > 0 && (
+                  <optgroup label="📌 পূর্বে যুক্ত ও সক্রিয় মন্ত্রণালয় / অধিদপ্তরসমূহ">
+                    {allMinistryDropdownOptions.activeSaved.map((m, idx) => (
+                      <option key={`saved_min_${idx}`} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="জনপ্রিয় মন্ত্রণালয় ও অধিদপ্তর">
+                  {allMinistryDropdownOptions.popularCommon.map((m, idx) => (
                     <option key={`m_${idx}`} value={m}>{m}</option>
                   ))}
                 </optgroup>
                 <optgroup label="অন্যান্য মন্ত্রণালয় ও অধিদপ্তর">
-                  {COMMON_MINISTRIES.slice(10).map((m, idx) => (
+                  {allMinistryDropdownOptions.otherCommon.map((m, idx) => (
                     <option key={`m2_${idx}`} value={m}>{m}</option>
                   ))}
                 </optgroup>
@@ -1473,15 +1590,18 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
               </select>
 
               {(!formMinistryChoice || formMinistryChoice === '__CUSTOM__') && (
-                <div className="pt-1.5 animate-fadeIn">
+                <div className="pt-1.5 animate-fadeIn space-y-1">
                   <input
                     type="text"
                     required
-                    placeholder="মন্ত্রণালয় বা অধিদপ্তরের পূর্ণ নাম টাইপ করুন (যেমন: তথ্য ও সম্প্রচার মন্ত্রণালয়)"
+                    placeholder="মন্ত্রণালয় বা অধিদপ্তরের পূর্ণ নাম টাইপ করুন (যেমন: ভূমি রেকর্ড ও জরিপ অদিদপ্তর)"
                     value={customMinistry}
                     onChange={(e) => setCustomMinistry(e.target.value)}
                     className="w-full px-3.5 py-2 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-xl text-xs text-slate-800 dark:text-white focus:ring-2 focus:ring-primary focus:outline-none"
                   />
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                    💡 একবার নতুন মন্ত্রণালয়ের নাম লিখে প্রশ্ন যুক্ত করলে সেটি স্বয়ংক্রিয়ভাবে উপরের ড্রপডাউন তালিকায় সংরক্ষিত থাকবে, যাতে পরবর্তীতে একই মন্ত্রণালয়ের অধীনে নতুন প্রশ্ন ব্যাংক যুক্ত করা যায়।
+                  </p>
                 </div>
               )}
             </div>
@@ -2851,11 +2971,17 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
                 <input
                   type="text"
                   required
+                  list="edit-ministry-datalist"
                   value={editBankForm.ministryName}
                   onChange={(e) => setEditBankForm({ ...editBankForm, ministryName: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  placeholder="যেমন: জনপ্রশাসন মন্ত্রণালয়"
+                  placeholder="যেমন: ভূমি রেকর্ড ও জরিপ অদিদপ্তর"
                 />
+                <datalist id="edit-ministry-datalist">
+                  {allMinistryDropdownOptions.allCombined.map((m, i) => (
+                    <option key={`dl_min_${i}`} value={m} />
+                  ))}
+                </datalist>
               </div>
 
               <div className="space-y-1.5">

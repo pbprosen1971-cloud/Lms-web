@@ -83,6 +83,7 @@ export interface QuestionBankCsvParseResult {
 }
 
 export const COMMON_MINISTRIES = [
+  'ভূমি রেকর্ড ও জরিপ অদিদপ্তর',
   'জনপ্রশাসন মন্ত্রণালয়',
   'শিক্ষা মন্ত্রণালয়',
   'অর্থ মন্ত্রণালয়',
@@ -246,6 +247,9 @@ export async function addQuestionBankItem(item: NewQuestionBankItem): Promise<st
     };
 
     await setDoc(newDocRef, docData);
+    if (item.ministry) {
+      saveCustomMinistryToRegistry(item.ministry).catch(() => {});
+    }
     return newDocRef.id;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, COLLECTION_NAME);
@@ -297,6 +301,13 @@ export async function batchAddQuestionBankItems(
     if (onProgress) {
       onProgress(Math.min(i + chunk.length, items.length), items.length);
     }
+  }
+
+  if (items.length > 0) {
+    const uniqueMins = Array.from(new Set(items.map((it) => it.ministry).filter(Boolean)));
+    uniqueMins.forEach((m) => {
+      saveCustomMinistryToRegistry(m).catch(() => {});
+    });
   }
 
   return { success: successCount, failed: failedCount };
@@ -909,6 +920,9 @@ export function downloadQuestionBankCsvTemplate(): void {
 export async function saveMinistryQuestionBankToFirestore(
   bank: MinistryQuestionBank
 ): Promise<void> {
+  if (bank.ministryName) {
+    saveCustomMinistryToRegistry(bank.ministryName).catch(() => {});
+  }
   try {
     await setDoc(doc(db, 'ministryQuestionBanks', bank.id), bank, { merge: true });
   } catch (err) {
@@ -1091,4 +1105,156 @@ export async function toggleMinistryBankPublishStatus(
   isPublished: boolean
 ): Promise<void> {
   return updateMinistryQuestionBankInFirestore(bankId, { isPublished });
+}
+
+const CUSTOM_MINISTRIES_STORAGE_KEY = 'medha_custom_ministries_v1';
+
+/**
+ * Normalizes a ministry/department name so slight whitespace differences
+ * do not create duplicate entries.
+ */
+export function normalizeMinistryName(name: string): string {
+  return (name || '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Normalizes a ministry name into a comparison key so that minor spelling variations
+ * (e.g. 'ভূমি রেকর্ড ও জরিপ অদিদপ্তর' vs 'ভূমি রেকর্ড ও জরিপ অধিদপ্তর' or 'য়' vs 'য়')
+ * resolve to the exact same ministry group instead of splitting on the Homepage or Dropdown.
+ */
+export function getMinistryComparisonKey(name: string): string {
+  return normalizeMinistryName(name)
+    .toLowerCase()
+    .replace(/অদিদপ্তর/g, 'অধিদপ্তর')
+    .replace(/মন্ত্রনালয়/g, 'মন্ত্রণালয়')
+    .replace(/মন্ত্রনালয়/g, 'মন্ত্রণালয়')
+    .replace(/য়/g, 'য়')
+    .replace(/ড়/g, 'ড়')
+    .replace(/ঢ়/g, 'ঢ়');
+}
+
+/**
+ * Finds an existing canonical ministry name from a list of known ministries if it matches by comparison key;
+ * otherwise returns the normalized input name.
+ */
+export function findMatchingMinistryName(inputName: string, existingMinistries: string[]): string {
+  const clean = normalizeMinistryName(inputName);
+  if (!clean) return '';
+  const targetKey = getMinistryComparisonKey(clean);
+  for (const existing of existingMinistries) {
+    const cleanExisting = normalizeMinistryName(existing);
+    if (cleanExisting && getMinistryComparisonKey(cleanExisting) === targetKey) {
+      return cleanExisting;
+    }
+  }
+  return clean;
+}
+
+/**
+ * Reads saved custom ministries from localStorage.
+ */
+export function getSavedCustomMinistriesFromLocal(): string[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_MINISTRIES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return Array.from(new Set(parsed.map((m) => normalizeMinistryName(String(m))).filter(Boolean)));
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to read custom ministries from localStorage:', e);
+  }
+  return [];
+}
+
+/**
+ * Persists a newly added or used ministry name into both localStorage and
+ * Firestore (siteSettings/customMinistries) so it permanently stays in all dropdowns
+ * for future question banks under the same ministry.
+ */
+export async function saveCustomMinistryToRegistry(ministryName: string): Promise<string> {
+  const clean = normalizeMinistryName(ministryName);
+  if (!clean) return '';
+
+  // 1. Update localStorage immediately
+  let updatedList: string[] = [];
+  try {
+    const existing = getSavedCustomMinistriesFromLocal();
+    const matched = findMatchingMinistryName(clean, existing);
+    const mergedMap = new Map<string, string>();
+    [matched, ...existing].forEach((m) => {
+      const c = normalizeMinistryName(m);
+      const k = getMinistryComparisonKey(c);
+      if (c && k && !mergedMap.has(k)) {
+        mergedMap.set(k, c);
+      }
+    });
+    updatedList = Array.from(mergedMap.values());
+    localStorage.setItem(CUSTOM_MINISTRIES_STORAGE_KEY, JSON.stringify(updatedList));
+  } catch (e) {
+    console.warn('Failed to save custom ministry to localStorage:', e);
+  }
+
+  // 2. Persist to Firestore siteSettings/customMinistries
+  try {
+    const docRef = doc(db, 'siteSettings', 'customMinistries');
+    await setDoc(
+      docRef,
+      {
+        ministries: updatedList.length > 0 ? updatedList : [clean],
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn('Could not sync custom ministry to Firestore siteSettings/customMinistries:', err);
+  }
+
+  return clean;
+}
+
+/**
+ * Subscribes to Firestore siteSettings/customMinistries and merges with localStorage
+ * so all custom ministries are always available in the dropdown across sessions.
+ */
+export function subscribeToCustomMinistries(onUpdate: (ministries: string[]) => void): () => void {
+  const initialLocal = getSavedCustomMinistriesFromLocal();
+  onUpdate(initialLocal);
+
+  try {
+    const docRef = doc(db, 'siteSettings', 'customMinistries');
+    return onSnapshot(
+      docRef,
+      (snap) => {
+        const local = getSavedCustomMinistriesFromLocal();
+        let remote: string[] = [];
+        if (snap.exists()) {
+          const data = snap.data();
+          if (Array.isArray(data?.ministries)) {
+            remote = data.ministries.map((m: any) => normalizeMinistryName(String(m))).filter(Boolean);
+          }
+        }
+        const mergedMap = new Map<string, string>();
+        [...remote, ...local].forEach((m) => {
+          const c = normalizeMinistryName(m);
+          const k = getMinistryComparisonKey(c);
+          if (c && k && !mergedMap.has(k)) {
+            mergedMap.set(k, c);
+          }
+        });
+        const merged = Array.from(mergedMap.values());
+        try {
+          localStorage.setItem(CUSTOM_MINISTRIES_STORAGE_KEY, JSON.stringify(merged));
+        } catch (e) {}
+        onUpdate(merged);
+      },
+      (err) => {
+        console.warn('Error subscribing to customMinistries:', err);
+        onUpdate(getSavedCustomMinistriesFromLocal());
+      }
+    );
+  } catch (e) {
+    return () => {};
+  }
 }

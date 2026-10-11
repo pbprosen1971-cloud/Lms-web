@@ -3,6 +3,76 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        // Prevent third-party browser extensions (e.g., VPN/adblock scripts) from crashing
+        // when attempting to overwrite window.fetch in environments where fetch has only a getter.
+        function ensureWritableFetch(target) {
+          if (!target) return;
+          try {
+            var desc = Object.getOwnPropertyDescriptor(target, 'fetch');
+            if (desc && desc.get && !desc.set && desc.configurable !== false) {
+              var origGet = desc.get;
+              var customFetch = null;
+              Object.defineProperty(target, 'fetch', {
+                configurable: true,
+                enumerable: desc.enumerable !== false,
+                get: function () {
+                  return customFetch || origGet.call(this);
+                },
+                set: function (fn) {
+                  if (typeof fn === 'function') {
+                    customFetch = fn;
+                  }
+                }
+              });
+            }
+          } catch (_) {}
+        }
+
+        ensureWritableFetch(window);
+        if (typeof Window !== 'undefined' && Window.prototype) {
+          ensureWritableFetch(Window.prototype);
+        }
+
+        window.addEventListener(
+          'error',
+          function (event) {
+            var msg = (event && event.message) ? String(event.message) : '';
+            var file = (event && event.filename) ? String(event.filename) : '';
+            if (
+              msg.indexOf('Cannot set property fetch') !== -1 ||
+              file.indexOf('chrome-extension://') === 0 ||
+              file.indexOf('moz-extension://') === 0
+            ) {
+              event.stopImmediatePropagation();
+              event.preventDefault();
+              return false;
+            }
+          },
+          true
+        );
+
+        window.addEventListener(
+          'unhandledrejection',
+          function (event) {
+            var reason = event && event.reason;
+            var msg = reason && (reason.message || String(reason)) ? String(reason.message || reason) : '';
+            var stack = reason && reason.stack ? String(reason.stack) : '';
+            if (
+              msg.indexOf('Cannot set property fetch') !== -1 ||
+              stack.indexOf('chrome-extension://') !== -1 ||
+              stack.indexOf('moz-extension://') !== -1
+            ) {
+              event.stopImmediatePropagation();
+              event.preventDefault();
+              return false;
+            }
+          },
+          true
+        );
+      })();
+    </script>
     <title>Medha Exam - Job Exam Portal | বিসিএস ও সরকারি চাকরি প্রস্তুতি</title>
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <link rel="manifest" href="/manifest.json" />

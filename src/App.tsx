@@ -16,6 +16,7 @@ import ProfileView from './components/ProfileView';
 import ReferralDashboard from './components/ReferralDashboard';
 import AdminView from './components/AdminView';
 import StudyMaterialsView from './components/StudyMaterialsView';
+import AgeCalculatorView from './components/AgeCalculatorView';
 import DailyPracticeView from './components/DailyPracticeView';
 import WrongQuestionView from './components/WrongQuestionView';
 import SubmissionSuccessAnimation from './components/SubmissionSuccessAnimation';
@@ -70,6 +71,23 @@ async function testConnection() {
 }
 testConnection();
 
+const ADMIN_EMAILS = [
+  'medha@admin.com',
+  'admin@medha.com',
+  'pbprosen1971@gmail.com',
+  'prosenjit@medha.com',
+];
+
+const isAdminEmailAddress = (email?: string | null): boolean => {
+  if (!email) return false;
+  return ADMIN_EMAILS.includes(email.toLowerCase().trim());
+};
+
+const isUserAdminAccount = (u?: UserProfile | null): boolean => {
+  if (!u) return false;
+  return u.role === 'admin' || isAdminEmailAddress(u.email);
+};
+
 const pathToView = (pathname: string): string => {
   const p = pathname.toLowerCase().replace(/\/$/, '') || '/';
   if (p === '/registration' || p === '/register') return 'register';
@@ -82,6 +100,8 @@ const pathToView = (pathname: string): string => {
   if (p === '/daily-practice' || p === '/dailypractice' || p === '/daily') return 'daily-practice';
   if (p === '/wrong-questions' || p === '/wrong-question' || p === '/wrongquestions') return 'wrong-questions';
   if (p === '/study-materials' || p === '/study-material' || p === '/materials' || p === '/studymaterials') return 'study-materials';
+  if (p === '/age-calculator' || p === '/agecalculator') return 'age-calculator';
+  if (p === '/referral') return 'referral';
   if (p === '/privacy-policy' || p === '/privacy') return 'privacy-policy';
   if (p === '/terms-and-conditions' || p === '/terms') return 'terms-and-conditions';
   if (p === '/delete-account' || p === '/deleteaccount') return 'delete-account';
@@ -111,6 +131,10 @@ const viewToPath = (view: string): string => {
       return '/wrong-questions';
     case 'study-materials':
       return '/study-materials';
+    case 'age-calculator':
+      return '/age-calculator';
+    case 'referral':
+      return '/referral';
     case 'privacy-policy':
       return '/privacy-policy';
     case 'terms-and-conditions':
@@ -170,7 +194,11 @@ export default function App() {
     try {
       const saved = localStorage.getItem('active_user_session');
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && isAdminEmailAddress(parsed.email)) {
+          parsed.role = 'admin';
+        }
+        return parsed;
       }
     } catch (e) {}
     return null;
@@ -199,9 +227,9 @@ export default function App() {
       }
 
       if (firebaseUser) {
-        const isAdminEmail = firebaseUser.email?.toLowerCase() === 'medha@admin.com';
+        const isAdminEmail = isAdminEmailAddress(firebaseUser.email);
 
-        // Enforce Firebase Auth Email Verification (except for admin medha@admin.com)
+        // Enforce Firebase Auth Email Verification (except for admin accounts)
         const isPasswordProvider = firebaseUser.providerData.some(p => p.providerId === 'password');
         if (isPasswordProvider && !firebaseUser.emailVerified && !isAdminEmail) {
           await signOut(auth);
@@ -311,6 +339,10 @@ export default function App() {
                 referredAt: safeTimestampToString(data.referredAt, ''),
               };
 
+              // Ensure admin emails always have role: 'admin' persisted in Firestore
+              if (isAdminEmail && data.role !== 'admin') {
+                setDoc(doc(db, 'users', firebaseUser.uid), { role: 'admin' }, { merge: true }).catch(() => {});
+              }
               // Auto-generate referral code if not present yet
               if (!profileData.referralCode) {
                 const generatedCode = generateReferralCode(resolvedName);
@@ -380,7 +412,8 @@ export default function App() {
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            if (parsed && (parsed.email?.toLowerCase() === 'medha@admin.com' || parsed.role === 'admin')) {
+            if (parsed && (isAdminEmailAddress(parsed.email) || parsed.role === 'admin')) {
+              parsed.role = 'admin';
               setUser(parsed);
               return;
             }
@@ -994,7 +1027,7 @@ export default function App() {
 
     // Protected Route: /admin requires admin privileges
     if (matchedView === 'admin') {
-      const isAdmin = user?.role === 'admin' && user?.email?.toLowerCase() === 'medha@admin.com';
+      const isAdmin = isUserAdminAccount(user);
       if (!isAdmin) {
         setCurrentView('home');
         navigate('/', { replace: true });
@@ -1120,6 +1153,10 @@ export default function App() {
         return (
           <StudyMaterialsView user={user} setView={setView} />
         );
+      case 'age-calculator':
+        return (
+          <AgeCalculatorView setView={setView} />
+        );
       case 'exam':
         return selectedExam ? (
           <ExamView
@@ -1212,7 +1249,7 @@ export default function App() {
           </div>
         );
       case 'admin':
-        return user?.role === 'admin' && user?.email?.toLowerCase() === 'medha@admin.com' ? (
+        return isUserAdminAccount(user) ? (
           <AdminView
             exams={exams}
             results={results}
