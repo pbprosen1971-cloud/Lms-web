@@ -1,0 +1,20 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+[[headers]]
+  for = "/sitemap.xml"
+  [headers.values]
+    Content-Type = "application/xml; charset=UTF-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/robots.txt"
+  [headers.values]
+    Content-Type = "text/plain; charset=UTF-8"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

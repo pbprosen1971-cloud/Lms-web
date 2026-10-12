@@ -1,10 +1,17 @@
 # robots.txt for Medha Exam (Job Exam Portal)
-# Optimized for Google Search, Bing, and AI Search Engines (ChatGPT, OpenAI, Perplexity, Claude, Gemini)
+# Optimized for Google Search, Bing, and AI Search Engines (ChatGPT, Perplexity, Claude, Gemini)
 
 User-agent: Googlebot
 Allow: /
 Disallow: /admin
 Disallow: /api/
+Disallow: /profile
+Disallow: /dashboard
+Disallow: /referral
+Disallow: /wrong-questions
+Disallow: /delete-account
+Disallow: /exam
+Disallow: /result
 
 User-agent: Googlebot-Image
 Allow: /logo.svg
@@ -13,12 +20,18 @@ Allow: /fonts/
 
 User-agent: Google-InspectionTool
 Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /profile
+Disallow: /dashboard
 
 # OpenAI / ChatGPT Crawlers & Search Bots
 User-agent: GPTBot
 Allow: /
 Disallow: /admin
 Disallow: /api/
+Disallow: /profile
+Disallow: /dashboard
 
 User-agent: ChatGPT-User
 Allow: /
@@ -27,18 +40,24 @@ User-agent: OAI-SearchBot
 Allow: /
 Disallow: /admin
 Disallow: /api/
+Disallow: /profile
+Disallow: /dashboard
 
 # Perplexity AI Crawler
 User-agent: PerplexityBot
 Allow: /
 Disallow: /admin
 Disallow: /api/
+Disallow: /profile
+Disallow: /dashboard
 
 # Anthropic Claude Crawler
 User-agent: ClaudeBot
 Allow: /
 Disallow: /admin
 Disallow: /api/
+Disallow: /profile
+Disallow: /dashboard
 
 # Google AI & Gemini Crawler
 User-agent: Google-Extended
@@ -49,6 +68,13 @@ User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /api/
+Disallow: /profile
+Disallow: /dashboard
+Disallow: /referral
+Disallow: /wrong-questions
+Disallow: /delete-account
+Disallow: /exam
+Disallow: /result
 
 # Sitemap location
-Sitemap: https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/sitemap.xml
+Sitemap: https://medhaexam.site/sitemap.xml

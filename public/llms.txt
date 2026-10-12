@@ -23,7 +23,7 @@ Medha Exam (মেধা এক্সাম - Job Exam Portal) is a modern, real
 Job aspirants, university graduates, and students across Bangladesh seeking a reliable, high-speed, and structured online test platform to measure their preparation against competitors nationwide.
 
 ## Contact & Web Access
-- Web Application: https://ais-pre-jmt54l45o2iexxkyr3pndj-660930741620.asia-east1.run.app/
+- Web Application: https://medhaexam.site/
 - Live Exam Portal: /exam
 - Merit List & Results: /result
 - Daily Question Practice: /daily-practice
