@@ -630,7 +630,7 @@ export default function FaqSection({ isStandAlone = false, setView }: FaqSection
 
         <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full sm:w-auto">
           <a
-            href="https://www.facebook.com/digitalnews00"
+            href="https://www.facebook.com/medhaexam"
             target="_blank"
             rel="noopener noreferrer"
             className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs shadow-md shadow-primary/25 transition-all text-center flex items-center justify-center gap-2"

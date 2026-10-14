@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Mail, Phone, MapPin, Facebook, Youtube, ShieldCheck, CreditCard } from 'lucide-react';
+import { Mail, Phone, MapPin, Facebook, Youtube, ShieldCheck, CreditCard, ExternalLink } from 'lucide-react';
 import { Exam } from '../types';
 import { INITIAL_EXAMS } from '../data';
 import PaymentPartnersBar from './PaymentLogos';
@@ -225,11 +225,21 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
             </div>
             <div className="flex space-x-3 pt-2">
               <a
-                href="https://www.facebook.com/digitalnews00"
+                href="https://www.facebook.com/medhaexam"
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Facebook পেজ"
-                aria-label="Facebook Page"
+                title="মেধা এক্সাম ফেসবুক পেজ"
+                aria-label="Medha Exam Facebook Page"
+                className="p-2.5 bg-slate-800/80 text-slate-300 hover:bg-[#1877F2] hover:text-white hover:scale-110 hover:shadow-lg hover:shadow-[#1877F2]/30 active:scale-95 rounded-xl transition-all duration-300 transform border border-slate-700/50 hover:border-transparent flex items-center justify-center group"
+              >
+                <Facebook className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
+              </a>
+              <a
+                href="https://www.facebook.com/prosenjitbiswas47"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Facebook পেজ / প্রোফাইল"
+                aria-label="Facebook Page 2"
                 className="p-2.5 bg-slate-800/80 text-slate-300 hover:bg-[#1877F2] hover:text-white hover:scale-110 hover:shadow-lg hover:shadow-[#1877F2]/30 active:scale-95 rounded-xl transition-all duration-300 transform border border-slate-700/50 hover:border-transparent flex items-center justify-center group"
               >
                 <Facebook className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
@@ -253,6 +263,18 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
             <ul className="space-y-2.5 text-sm">
               <li>
                 <button onClick={() => setView('home')} className="hover:text-primary transition-colors duration-200">হোম পেজ</button>
+              </li>
+              <li>
+                <a
+                  href="https://www.facebook.com/medhaexam"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-emerald-400 text-emerald-400/90 font-medium transition-colors duration-200 inline-flex items-center gap-1.5 group"
+                  title="Exam Routine - মেধা এক্সাম অফিসিয়াল ফেসবুক পেজ"
+                >
+                  <span>📅 Exam Routine</span>
+                  <ExternalLink className="h-3 w-3 opacity-70 group-hover:opacity-100 transition-opacity" />
+                </a>
               </li>
               <li>
                 <button onClick={() => setView('study-materials')} className="hover:text-primary transition-colors duration-200">📚 স্টাডি ম্যাটেরিয়াল</button>

@@ -14,9 +14,7 @@ Disallow: /exam
 Disallow: /result
 
 User-agent: Googlebot-Image
-Allow: /logo.svg
-Allow: /images/
-Allow: /fonts/
+Allow: /
 
 User-agent: Google-InspectionTool
 Allow: /

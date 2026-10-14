@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Moon, Sun, Menu, X, LogOut, User, LayoutDashboard, Settings, Bell } from 'lucide-react';
+import { Moon, Sun, Menu, X, LogOut, User, LayoutDashboard, Settings, Bell, ExternalLink } from 'lucide-react';
 import { UserProfile } from '../types';
 import MedhaLogo from './MedhaLogo';
 import Tooltip from './Tooltip';
@@ -47,6 +47,7 @@ export default function Navbar({
 
   const navItems = [
     { label: 'হোম', view: 'home', path: '/', href: '/' },
+    { label: 'Exam Routine', view: 'exam-routine', path: 'https://www.facebook.com/medhaexam', href: 'https://www.facebook.com/medhaexam', isExternal: true },
     { label: 'স্টাডি ম্যাটেরিয়াল', view: 'study-materials', path: '/study-materials', href: '/study-materials' },
     { label: 'বয়স ক্যালকুলেটর', view: 'age-calculator', path: '/age-calculator', href: '/age-calculator' },
     { label: 'রেফারেল', view: 'referral', path: '/referral', href: '/referral' },
@@ -93,6 +94,27 @@ export default function Navbar({
           <div className="hidden md:flex items-center space-x-1 lg:space-x-2">
             {navItems.map((item) => {
               const isActive = currentView === item.view;
+              if (item.isExternal) {
+                return (
+                  <a
+                    key={item.view}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group flex items-center justify-center text-slate-700 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30"
+                    title="Exam Routine - মেধা এক্সাম অফিশিয়াল ফেসবুক পেজ"
+                  >
+                    <span className="relative z-10 flex items-center gap-1.5 transition-colors duration-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                      <span>{item.label}</span>
+                      <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+                    </span>
+                    <span
+                      className="absolute bottom-0.5 left-2.5 right-2.5 h-[2px] rounded-full transition-all duration-300 ease-out bg-emerald-500 scale-x-0 group-hover:scale-x-100 opacity-0 group-hover:opacity-100 origin-center"
+                      aria-hidden="true"
+                    />
+                  </a>
+                );
+              }
               return (
                 <a
                   key={item.view}
@@ -357,6 +379,24 @@ export default function Navbar({
 
             {navItems.map((item) => {
               const isActive = currentView === item.view;
+              if (item.isExternal) {
+                return (
+                  <a
+                    key={item.view}
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center justify-between w-full text-left px-3.5 py-2.5 rounded-xl text-base font-semibold cursor-pointer transition-all duration-200 text-slate-700 hover:text-emerald-600 hover:bg-emerald-50 dark:text-slate-200 dark:hover:text-emerald-400 dark:hover:bg-emerald-950/30"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>📅 {item.label}</span>
+                      <ExternalLink className="h-4 w-4 opacity-60" />
+                    </span>
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-normal">Facebook</span>
+                  </a>
+                );
+              }
               return (
                 <a
                   key={item.view}

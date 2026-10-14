@@ -25,6 +25,7 @@ import TermsAndConditionsView from './components/TermsAndConditionsView';
 import DeleteAccountView from './components/DeleteAccountView';
 import NotificationPromptBanner from './components/NotificationPromptBanner';
 import FaqSection from './components/FaqSection';
+import { applySEO } from './utils/seo';
 import { 
   syncCurrentDeviceToken, 
   setupGlobalRealtimeNotificationWatcher 
@@ -1072,6 +1073,11 @@ export default function App() {
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   }, [currentView, location.pathname]);
+
+  // Dynamic SEO metadata synchronization on view/route change
+  useEffect(() => {
+    applySEO(currentView);
+  }, [currentView]);
 
   const setView = (nextView: string) => {
     setCurrentView(nextView);
