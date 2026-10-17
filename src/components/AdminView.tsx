@@ -71,6 +71,11 @@ import { AdminLiveArchivedExamTab } from './AdminLiveArchivedExamTab';
 import AdminReferralLeaderboard from './AdminReferralLeaderboard';
 import { generateStudentResultsPdfReport } from '../services/pdfReportService';
 import {
+  downloadExamQuestionPdf,
+  fetchExamQuestions,
+  ExamPdfVersion,
+} from '../services/examQuestionPdfService';
+import {
   saveQuestionToFirestore,
   deleteQuestionFromFirestore,
   saveExamToFirestore,
@@ -203,6 +208,44 @@ export default function AdminView({
   const [mbImportError, setMbImportError] = useState<string>('');
   const [mbParsedSheetData, setMbParsedSheetData] = useState<SheetQuestionsParseResult | null>(null);
   const [mbAppendMode, setMbAppendMode] = useState<'append' | 'replace'>('append');
+
+  // Dedicated Exam Question PDF export state (Admin only)
+  const [pdfModalExam, setPdfModalExam] = useState<Exam | null>(null);
+  const [isGeneratingQuestionPdf, setIsGeneratingQuestionPdf] = useState<boolean>(false);
+  const [questionPdfProgressText, setQuestionPdfProgressText] = useState<string>('');
+
+  const handleOpenPdfModal = (exam: Exam) => {
+    setPdfModalExam(exam);
+    setQuestionPdfProgressText('');
+  };
+
+  const handleDownloadPdf = async (version: ExamPdfVersion) => {
+    if (!pdfModalExam) return;
+    try {
+      setIsGeneratingQuestionPdf(true);
+      setQuestionPdfProgressText('পরীক্ষার প্রশ্নাবলী লোড করা হচ্ছে...');
+      const questions = await fetchExamQuestions(pdfModalExam);
+      if (!questions || questions.length === 0) {
+        alert('এই পরীক্ষায় এখনও কোনো প্রশ্ন যোগ করা হয়নি। প্রশ্ন যোগ করার পর PDF ডাউনলোড করতে পারবেন।');
+        setIsGeneratingQuestionPdf(false);
+        setQuestionPdfProgressText('');
+        return;
+      }
+      await downloadExamQuestionPdf(pdfModalExam, questions, {
+        version,
+        onProgress: (status) => setQuestionPdfProgressText(status),
+      });
+      setCreateSuccessMsg(`✅ "${pdfModalExam.title}" এর PDF সফলভাবে ডাউনলোড হয়েছে!`);
+      setTimeout(() => setCreateSuccessMsg(''), 5000);
+      setPdfModalExam(null);
+    } catch (err) {
+      console.error('PDF download error:', err);
+      alert('PDF তৈরিতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+    } finally {
+      setIsGeneratingQuestionPdf(false);
+      setQuestionPdfProgressText('');
+    }
+  };
 
   // Extract existing ministry names for the dropdown
   const existingMinistries = useMemo(() => {
@@ -3299,6 +3342,31 @@ export default function AdminView({
                                     <span>প্রশ্ন পরিচালনা ({item.totalQuestions}টি)</span>
                                   </button>
 
+                                  {/* PDF Download Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const targetExam: Exam = {
+                                        id: examKey,
+                                        title: item.title,
+                                        subject: item.subject || 'BCS',
+                                        durationMinutes: item.durationMinutes || 30,
+                                        totalQuestions: item.totalQuestions || 0,
+                                        totalMarks: item.totalMarks || 0,
+                                        status: 'upcoming',
+                                        isPublished: item.isPublished !== false,
+                                        dateCreated: (item as any).dateCreated || new Date().toISOString().split('T')[0],
+                                        questions: item.questions || [],
+                                      };
+                                      handleOpenPdfModal(targetExam);
+                                    }}
+                                    className="w-full px-3 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-800 flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer mb-2"
+                                    title="পরীক্ষার প্রশ্নপত্র PDF ডাউনলোড করুন"
+                                  >
+                                    <FileDown className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                                    <span>Pdf ডাউনলোড</span>
+                                  </button>
+
                                   <div className="grid grid-cols-2 gap-2">
                                     {/* Edit Button */}
                                     <button
@@ -3397,12 +3465,24 @@ export default function AdminView({
                       </p>
                     </div>
 
-                    <button
-                      onClick={() => setSelectedUpcomingExamForQuestions(null)}
-                      className="px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 shadow-sm self-start md:self-center transition-all"
-                    >
-                      ← তালিকায় ফিরে যান
-                    </button>
+                    <div className="flex items-center gap-2 self-start md:self-center">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenPdfModal(selectedUpcomingExamForQuestions)}
+                        className="px-3.5 py-2.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-800 shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                        title="প্রশ্নপত্র PDF ডাউনলোড"
+                      >
+                        <FileDown className="h-4 w-4 text-rose-600" />
+                        <span>Pdf ডাউনলোড</span>
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedUpcomingExamForQuestions(null)}
+                        className="px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 shadow-sm transition-all"
+                      >
+                        ← তালিকায় ফিরে যান
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -3677,7 +3757,7 @@ export default function AdminView({
                                         }`}>
                                           {oIdx === 0 ? 'ক' : oIdx === 1 ? 'খ' : oIdx === 2 ? 'গ' : 'ঘ'}
                                         </span>
-                                        <span className="truncate">{opt}</span>
+                                        <span className="break-words flex-1">{opt}</span>
                                         {isCorrect && (
                                           <Check className="h-3.5 w-3.5 text-emerald-600 ml-auto shrink-0" />
                                         )}
@@ -3787,6 +3867,123 @@ export default function AdminView({
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: EXAM QUESTION PDF DOWNLOAD (Admin Only) */}
+      {/* ========================================================= */}
+      {pdfModalExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-rose-500/10 rounded-2xl text-rose-600 dark:text-rose-400">
+                  <FileDown className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 dark:text-white">
+                    প্রশ্নপত্র PDF ডাউনলোড
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs sm:max-w-sm">
+                    {pdfModalExam.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                disabled={isGeneratingQuestionPdf}
+                onClick={() => setPdfModalExam(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer disabled:opacity-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Quick Info Box */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <span>⏱️ সময়: <strong>{toBengaliDigits(pdfModalExam.durationMinutes || 30)} মিনিট</strong></span>
+              <span>📝 প্রশ্ন: <strong>{toBengaliDigits(pdfModalExam.questions?.length || pdfModalExam.totalQuestions || 0)} টি</strong></span>
+              <span>🎯 বিষয়: <strong>{pdfModalExam.subject || 'সাধারণ'}</strong></span>
+            </div>
+
+            {/* Progress status if generating */}
+            {isGeneratingQuestionPdf && (
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center justify-center gap-3 text-xs font-bold text-emerald-800 dark:text-emerald-300 animate-pulse">
+                <RefreshCw className="h-4 w-4 animate-spin text-emerald-600" />
+                <span>{questionPdfProgressText || 'PDF তৈরি হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন...'}</span>
+              </div>
+            )}
+
+            {/* 2 Version Options */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                কোন সংস্করণে ডাউনলোড করতে চান নির্বাচন করুন:
+              </div>
+
+              {/* Version 1: Questions & Options Only */}
+              <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-primary/50 bg-white dark:bg-slate-800/60 hover:bg-slate-50/70 dark:hover:bg-slate-800 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-[10px] font-black rounded-md">
+                      ভার্সন ১
+                    </span>
+                    <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                      শুধুমাত্র প্রশ্ন ও অপশন (উত্তর ছাড়া)
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    শিক্ষার্থীদের অফলাইন পরীক্ষা নেওয়া বা প্রিন্ট করার জন্য আদর্শ। এতে কোনো উত্তর বা ব্যাখ্যা থাকবে না।
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isGeneratingQuestionPdf}
+                  onClick={() => handleDownloadPdf('questions_only')}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-extrabold rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <FileDown className="h-3.5 w-3.5" />
+                  <span>PDF ডাউনলোড</span>
+                </button>
+              </div>
+
+              {/* Version 2: Questions, Options with Highlighted Answers & Explanations */}
+              <div className="p-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 hover:border-emerald-500/50 bg-emerald-50/30 dark:bg-emerald-950/20 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 text-[10px] font-black rounded-md">
+                      ভার্সন ২
+                    </span>
+                    <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                      প্রশ্ন, সঠিক উত্তর ও ব্যাখ্যাসহ
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    সঠিক উত্তর অপশন স্পষ্টভাবে হাইলাইট করা থাকবে এবং প্রশ্নের বিস্তারিত ব্যাখ্যা (যদি থাকে) যুক্ত থাকবে।
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isGeneratingQuestionPdf}
+                  onClick={() => handleDownloadPdf('with_answers')}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-extrabold rounded-xl shadow-sm shadow-emerald-600/25 flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <FileDown className="h-3.5 w-3.5" />
+                  <span>PDF ডাউনলোড</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={isGeneratingQuestionPdf}
+                onClick={() => setPdfModalExam(null)}
+                className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer disabled:opacity-50"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

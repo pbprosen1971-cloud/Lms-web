@@ -1,6 +1,6 @@
 {
   "name": "Medha Exam",
-  "description": "মেধা এক্সাম (Medha Exam) - Job Exam Portal: বিসিএস, ব্যাংক ও সরকারি চাকরি পরীক্ষার পূর্ণাঙ্গ লাইভ প্রস্তুতি, মডেল টেস্ট ও ফলাফল পোর্টাল",
+  "description": "Medha Exam-এ BCS, সরকারি চাকরি ও নিয়োগ পরীক্ষার প্রস্তুতি নিন অনলাইন MCQ, বিষয়ভিত্তিক কুইজ, মডেল টেস্ট, ফলাফল বিশ্লেষণ এবং ব্যাখ্যাসহ প্রশ্নের মাধ্যমে।",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -2435,7 +2435,7 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
                               }`}>
                                 {opt.label}
                               </span>
-                              <span className="truncate">{opt.text}</span>
+                              <span className="break-words flex-1">{opt.text}</span>
                               {isCorrect && <Check className="h-3.5 w-3.5 text-emerald-600 ml-auto shrink-0" />}
                             </div>
                           );

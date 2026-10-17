@@ -15,17 +15,17 @@ export const BASE_SITE_URL = 'https://medhaexam.site';
 
 export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
   home: {
-    title: 'Medha Exam - Job Exam Portal | বিসিএস ও সরকারি চাকরি প্রস্তুতি',
-    description: 'মেধা এক্সাম (Medha Exam) - Job Exam Portal: বিসিএস, ব্যাংক ও সরকারি চাকরি পরীক্ষার পূর্ণাঙ্গ লাইভ প্রস্তুতি, মডেল টেস্ট, বিষয়ভিত্তিক কুইজ ও তাৎক্ষণিক ফলাফল পোর্টাল।',
+    title: 'Medha Exam – সরকারি চাকরির MCQ ও অনলাইন মডেল টেস্ট',
+    description: 'Medha Exam-এ BCS, সরকারি চাকরি ও নিয়োগ পরীক্ষার প্রস্তুতি নিন অনলাইন MCQ, বিষয়ভিত্তিক কুইজ, মডেল টেস্ট, ফলাফল বিশ্লেষণ এবং ব্যাখ্যাসহ প্রশ্নের মাধ্যমে।',
     keywords: 'মেধা এক্সাম, Medha Exam, Job Exam Portal, বিসিএস প্রস্তুতি, BCS Model Test, সরকারি চাকরি পরীক্ষা, ব্যাংক জব মডেল টেস্ট, প্রাইমারি শিক্ষক নিয়োগ পরীক্ষা, BCS Preliminary Exam, লাইভ পরীক্ষা, রেজাল্ট ও মেধাতালিকা',
     canonicalPath: '/',
     structuredData: {
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       'url': 'https://medhaexam.site/',
-      'name': 'Medha Exam - Job Exam Portal',
+      'name': 'Medha Exam – সরকারি চাকরির MCQ ও অনলাইন মডেল টেস্ট',
       'alternateName': ['মেধা এক্সাম', 'Medha Exam', 'Job Exam Portal'],
-      'description': 'বিসিএস, ব্যাংক ও সরকারি চাকরি পরীক্ষার পূর্ণাঙ্গ লাইভ প্রস্তুতি, মডেল টেস্ট ও ফলাফল পোর্টাল',
+      'description': 'Medha Exam-এ BCS, সরকারি চাকরি ও নিয়োগ পরীক্ষার প্রস্তুতি নিন অনলাইন MCQ, বিষয়ভিত্তিক কুইজ, মডেল টেস্ট, ফলাফল বিশ্লেষণ এবং ব্যাখ্যাসহ প্রশ্নের মাধ্যমে।',
       'inLanguage': 'bn'
     }
   },

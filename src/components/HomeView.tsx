@@ -890,6 +890,95 @@ export default function HomeView({
     });
   }, [exams]);
 
+  // Unified list of upcoming exams combining admin upcoming settings and exams
+  const unifiedUpcomingExams = useMemo(() => {
+    const upcomingList: Array<{
+      id: string;
+      title: string;
+      subject?: string;
+      description?: string;
+      startTime?: string;
+      examDate?: string;
+      startDate?: string;
+      dateCreated?: string;
+      durationMinutes?: number;
+      totalQuestions?: number;
+      totalMarks?: number;
+      isPremium?: boolean;
+    }> = [];
+
+    const seenIds = new Set<string>();
+    const seenTitles = new Set<string>();
+
+    const itemsToProcess = (validUpcomingSetting?.items && Array.isArray(validUpcomingSetting.items) && validUpcomingSetting.items.length > 0)
+      ? validUpcomingSetting.items
+      : (validUpcomingSetting && validUpcomingSetting.title ? [validUpcomingSetting] : []);
+
+    itemsToProcess.forEach(item => {
+      if (item && item.title && item.isPublished !== false) {
+        if (isScheduledLiveTimeReached(
+          item.startTime, 
+          (item as any).examDateTime
+        )) {
+          return;
+        }
+
+        const titleKey = item.title.trim().toLowerCase();
+        const itemId = item.examId || item.id || `featured-${titleKey}`;
+        if (!seenIds.has(itemId) && !seenTitles.has(titleKey)) {
+          upcomingList.push({
+            id: itemId,
+            title: item.title,
+            subject: item.subject || 'BCS',
+            description: item.description || '',
+            startTime: item.startTime || '',
+            examDate: item.examDate || '',
+            startDate: (item as any).startDate || '',
+            dateCreated: (item as any).dateCreated || '',
+            durationMinutes: item.durationMinutes || (item as any).duration || 30,
+            totalQuestions: item.totalQuestions || 0,
+            totalMarks: item.totalMarks || 0,
+            isPremium: !!item.isPremium,
+          });
+          seenIds.add(itemId);
+          seenTitles.add(titleKey);
+        }
+      }
+    });
+
+    upcomingExams.forEach(exam => {
+      const normTitle = (exam.title || '').trim().toLowerCase();
+      if (!seenIds.has(exam.id) && !seenTitles.has(normTitle)) {
+        const qCount = (exam.questions && exam.questions.length > 0) 
+          ? exam.questions.length 
+          : (exam.totalQuestions || 0);
+        upcomingList.push({
+          id: exam.id,
+          title: exam.title,
+          subject: exam.subject || 'BCS',
+          description: exam.description || '',
+          startTime: exam.startTime || '',
+          examDate: (exam as any).examDate || '',
+          startDate: (exam as any).startDate || '',
+          dateCreated: exam.dateCreated || '',
+          durationMinutes: exam.durationMinutes || 30,
+          totalQuestions: qCount,
+          totalMarks: exam.totalMarks || qCount,
+          isPremium: !!exam.isPremium,
+        });
+        seenIds.add(exam.id);
+        seenTitles.add(normTitle);
+      }
+    });
+
+    return upcomingList;
+  }, [validUpcomingSetting, upcomingExams]);
+
+  // Strictly count only current Live and Upcoming exams (excluding all archive exams)
+  const activeLiveAndUpcomingCount = useMemo(() => {
+    return liveExams.length + unifiedUpcomingExams.length;
+  }, [liveExams.length, unifiedUpcomingExams.length]);
+
   const handleStartExam = (exam: Exam) => {
     if (exam.isPremium && (!user || !user.isPremium)) {
       if (!user) {
@@ -935,21 +1024,32 @@ export default function HomeView({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
             <div className="lg:col-span-7 space-y-6 text-left">
               
-              <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-emerald-950/80 text-emerald-300 backdrop-blur-md text-xs sm:text-sm font-bold border border-emerald-400/40 shadow-lg shadow-emerald-950/50 animate-pulse-heartbeat animate-pulse-glow-primary">
-                <Trophy className="h-4 w-4 text-emerald-400 shrink-0" />
-                <span className="flex items-center gap-1.5 font-bold tracking-normal">
-                  <span className="font-extrabold text-white bg-emerald-600/80 px-2 py-0.5 rounded-md text-xs tracking-wider shadow-sm">১০০%</span>
-                  <span className="text-emerald-200 font-semibold">প্রফেশনাল এক্সাম প্ল্যাটফর্ম</span>
+              <div className="inline-flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-emerald-950/90 via-slate-950/90 to-teal-950/90 text-emerald-300 backdrop-blur-xl text-xs sm:text-sm font-bold border border-emerald-400/50 shadow-[0_0_24px_rgba(16,185,129,0.35)] hover:shadow-[0_0_36px_rgba(16,185,129,0.65)] hover:border-emerald-300/80 transition-all duration-300 cursor-default animate-pulse-glow-primary group">
+                <div className="p-1 sm:p-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.4)] group-hover:scale-110 transition-transform duration-300">
+                  <Trophy className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-300 shrink-0 drop-shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
+                </div>
+                <span className="flex items-center gap-1.5 sm:gap-2 font-bold tracking-normal flex-wrap">
+                  <span className="inline-flex items-center gap-1 font-extrabold text-white bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs tracking-wide shadow-md shadow-emerald-950/50 border border-emerald-300/40 drop-shadow-sm">
+                    <Sparkles className="h-3 w-3 text-emerald-100 animate-pulse" />
+                    <span>{getGreetingText()}!</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 text-emerald-100 font-semibold text-xs sm:text-sm">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_6px_#34d399]"></span>
+                    </span>
+                    <span>১০০% অনলাইন এক্সাম প্ল্যাটফর্ম</span>
+                  </span>
                 </span>
               </div>
               
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
-                {getGreetingText()}! <br />
-                ঘরে বসেই নিন <span className="animated-gradient-text font-black drop-shadow-sm">চাকরির পরীক্ষার</span> প্রস্তুতি!
+                বিসিএস ও সরকারি চাকরির <br className="hidden sm:inline" />
+                <span className="animated-gradient-text font-black drop-shadow-sm">MCQ ও অনলাইন</span> মডেল টেস্ট
               </h1>
               
               <p className="text-base sm:text-lg text-slate-200/90 max-w-2xl font-normal leading-relaxed drop-shadow-sm">
-                মেধা এক্সাম পোর্টালের মাধ্যমে BCS, ব্যাংক, প্রাইমারি, বাংলা ও ইংরেজী বিষয়ে রিয়েল-টাইম পরীক্ষা দিন। নিজেকে যাচাই করুন এবং লিডারবোর্ডে এগিয়ে থাকুন।
+                মেধা এক্সাম-এ বিসিএস, ব্যাংক, প্রাথমিক শিক্ষক ও সরকারি নিয়োগ পরীক্ষার সেরা প্রস্তুতি নিন লাইভ মডেল টেস্ট, বিষয়ভিত্তিক কুইজ এবং ব্যাখ্যাসহ নির্ভুল প্রশ্নের মাধ্যমে।
               </p>
 
               {/* Subtle decorative gradient divider separating top hero content */}
@@ -1007,7 +1107,7 @@ export default function HomeView({
         
         {/* Search Box */}
         <div className="max-w-2xl mx-auto text-center space-y-4">
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">আপনার কাঙ্খিত পরীক্ষাটি খুঁজুন</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">বিসিএস ও চাকরির মডেল টেস্ট অনুসন্ধান</h2>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-slate-400" />
@@ -1161,10 +1261,10 @@ export default function HomeView({
                   <TrendingUp className="h-5 w-5" />
                 </div>
                 <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-                  চলতি ও আসন্ন পরীক্ষা সমূহ
+                  চলতি ও আসন্ন লাইভ মডেল টেস্ট
                 </h2>
                 <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold rounded-full">
-                  {toBengaliDigits(filteredExams.length)} টি পরীক্ষা
+                  {toBengaliDigits(activeLiveAndUpcomingCount)} টি পরীক্ষা
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
@@ -1342,7 +1442,7 @@ export default function HomeView({
                           <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
                             {exam.questions && exam.questions.length > 0 ? exam.questions.length : (exam.totalQuestions ?? 0)}
                           </span>
-                          <span className="text-slate-600 dark:text-slate-400 font-medium">প্রশ্ন সংখ্যা</span>
+                          <span className="text-slate-600 dark:text-slate-400 font-medium">MCQ প্রশ্ন</span>
                         </div>
                         <div className="flex flex-col border-l border-slate-200/80 dark:border-slate-800 pl-2">
                           <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
@@ -1405,85 +1505,7 @@ export default function HomeView({
 
               {/* Unified Upcoming Exams List */}
               {(() => {
-                const upcomingList: Array<{
-                  id: string;
-                  title: string;
-                  subject?: string;
-                  description?: string;
-                  startTime?: string;
-                  examDate?: string;
-                  startDate?: string;
-                  dateCreated?: string;
-                  durationMinutes?: number;
-                  totalQuestions?: number;
-                  totalMarks?: number;
-                  isPremium?: boolean;
-                }> = [];
-
-                const seenIds = new Set<string>();
-                const seenTitles = new Set<string>();
-
-                const itemsToProcess = (validUpcomingSetting?.items && Array.isArray(validUpcomingSetting.items) && validUpcomingSetting.items.length > 0)
-                  ? validUpcomingSetting.items
-                  : (validUpcomingSetting && validUpcomingSetting.title ? [validUpcomingSetting] : []);
-
-                itemsToProcess.forEach(item => {
-                  if (item && item.title && item.isPublished !== false) {
-                    // If scheduled time has already arrived, this exam is live, not upcoming
-                    if (isScheduledLiveTimeReached(
-                      item.startTime, 
-                      (item as any).examDateTime
-                    )) {
-                      return;
-                    }
-
-                    const titleKey = item.title.trim().toLowerCase();
-                    const itemId = item.examId || item.id || `featured-${titleKey}`;
-                    if (!seenIds.has(itemId) && !seenTitles.has(titleKey)) {
-                      upcomingList.push({
-                        id: itemId,
-                        title: item.title,
-                        subject: item.subject || 'BCS',
-                        description: item.description || '',
-                        startTime: item.startTime || '',
-                        examDate: item.examDate || '',
-                        startDate: (item as any).startDate || '',
-                        dateCreated: (item as any).dateCreated || '',
-                        durationMinutes: item.durationMinutes || (item as any).duration || 30,
-                        totalQuestions: item.totalQuestions || 0,
-                        totalMarks: item.totalMarks || 0,
-                        isPremium: !!item.isPremium,
-                      });
-                      seenIds.add(itemId);
-                      seenTitles.add(titleKey);
-                    }
-                  }
-                });
-
-                upcomingExams.forEach(exam => {
-                  const normTitle = (exam.title || '').trim().toLowerCase();
-                  if (!seenIds.has(exam.id) && !seenTitles.has(normTitle)) {
-                    const qCount = (exam.questions && exam.questions.length > 0) 
-                      ? exam.questions.length 
-                      : (exam.totalQuestions || 0);
-                    upcomingList.push({
-                      id: exam.id,
-                      title: exam.title,
-                      subject: exam.subject || 'BCS',
-                      description: exam.description || '',
-                      startTime: exam.startTime || '',
-                      examDate: (exam as any).examDate || '',
-                      startDate: (exam as any).startDate || '',
-                      dateCreated: exam.dateCreated || '',
-                      durationMinutes: exam.durationMinutes || 30,
-                      totalQuestions: qCount,
-                      totalMarks: exam.totalMarks || qCount,
-                      isPremium: !!exam.isPremium,
-                    });
-                    seenIds.add(exam.id);
-                    seenTitles.add(normTitle);
-                  }
-                });
+                const upcomingList = unifiedUpcomingExams;
 
                 if (upcomingList.length === 0) {
                   return (
@@ -1572,10 +1594,15 @@ export default function HomeView({
       <section id="archived-exams" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 scroll-mt-20">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Award className="h-6 w-6 text-primary" />
-              আর্কাইভকৃত পরীক্ষা সমূহ (Archive Exams)
-            </h2>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Award className="h-6 w-6 text-primary" />
+                আর্কাইভকৃত পরীক্ষা সমূহ (Archive Exams)
+              </h2>
+              <span className="px-2.5 py-0.5 bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20 text-xs font-bold rounded-full">
+                {toBengaliDigits(archiveExams.length)} টি পরীক্ষা
+              </span>
+            </div>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">পূর্বে হয়ে যাওয়া পরীক্ষাগুলোর প্রশ্ন ও সমাধান দেখে নিজেকে ঝালিয়ে নিন।</p>
           </div>
         </div>
@@ -1613,7 +1640,7 @@ export default function HomeView({
                       <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
                         {exam.questions && exam.questions.length > 0 ? exam.questions.length : (exam.totalQuestions ?? 0)}
                       </span>
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">প্রশ্ন</span>
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">MCQ প্রশ্ন</span>
                     </div>
                     <div className="flex flex-col border-l border-slate-200/80 dark:border-slate-800 pl-2">
                       <span className="font-extrabold text-sm text-slate-900 dark:text-slate-100">

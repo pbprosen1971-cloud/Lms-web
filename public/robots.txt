@@ -61,7 +61,20 @@ Disallow: /dashboard
 User-agent: Google-Extended
 Allow: /
 
-# General Search Engines (Bing, DuckDuckGo, Yahoo, etc.)
+# Microsoft Bing Crawler
+User-agent: bingbot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /profile
+Disallow: /dashboard
+Disallow: /referral
+Disallow: /wrong-questions
+Disallow: /delete-account
+Disallow: /exam
+Disallow: /result
+
+# General Search Engines (DuckDuckGo, Yahoo, etc.)
 User-agent: *
 Allow: /
 Disallow: /admin

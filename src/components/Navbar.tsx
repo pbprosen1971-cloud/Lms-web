@@ -45,9 +45,16 @@ export default function Navbar({
       (user?.email || '').toLowerCase().trim()
     );
 
-  const navItems = [
+  interface NavItem {
+    label: string;
+    view: string;
+    path: string;
+    href: string;
+    isExternal?: boolean;
+  }
+
+  const navItems: NavItem[] = [
     { label: 'হোম', view: 'home', path: '/', href: '/' },
-    { label: 'Exam Routine', view: 'exam-routine', path: 'https://www.facebook.com/medhaexam', href: 'https://www.facebook.com/medhaexam', isExternal: true },
     { label: 'স্টাডি ম্যাটেরিয়াল', view: 'study-materials', path: '/study-materials', href: '/study-materials' },
     { label: 'বয়স ক্যালকুলেটর', view: 'age-calculator', path: '/age-calculator', href: '/age-calculator' },
     { label: 'রেফারেল', view: 'referral', path: '/referral', href: '/referral' },

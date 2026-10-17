@@ -842,21 +842,22 @@ export const QuestionManagementView: React.FC<QuestionManagementViewProps> = ({
 
                         {/* 4 Options Preview */}
                         {Array.isArray(q.options) && q.options.length > 0 && (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 pt-1 text-[11px]">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-[11px]">
                             {q.options.map((opt, oIdx) => {
                               const isCorrect = oIdx === q.correctAnswer;
                               const label = ['ক', 'খ', 'গ', 'ঘ'][oIdx] || String(oIdx + 1);
                               return (
                                 <span
                                   key={oIdx}
-                                  className={`px-2 py-0.5 rounded border truncate ${
+                                  className={`px-2 py-1 rounded border break-words whitespace-normal leading-snug flex items-start gap-1 ${
                                     isCorrect
                                       ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-bold'
                                       : 'bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border-slate-200/60 dark:border-slate-800'
                                   }`}
                                   title={`${label}. ${opt}`}
                                 >
-                                  <strong>{label}.</strong> {opt}
+                                  <strong className="shrink-0">{label}.</strong>
+                                  <span className="break-words flex-1">{opt}</span>
                                 </span>
                               );
                             })}
