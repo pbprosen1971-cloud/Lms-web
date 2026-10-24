@@ -300,12 +300,25 @@ export const AdminCsvDiagnosticsTab: React.FC<AdminCsvDiagnosticsTabProps> = ({
           { merge: true }
         );
 
+        let resolvedAns = 0;
+        if (typeof raw.correctAnswerIndex === 'number' && !isNaN(raw.correctAnswerIndex)) {
+          resolvedAns = raw.correctAnswerIndex;
+        } else if (typeof raw.correctAnswer === 'number' && !isNaN(raw.correctAnswer)) {
+          resolvedAns = raw.correctAnswer;
+        } else if (typeof raw.correctAnswer === 'string') {
+          const u = raw.correctAnswer.trim().toUpperCase();
+          if (u === 'B' || u === '2' || u === 'খ') resolvedAns = 1;
+          else if (u === 'C' || u === '3' || u === 'গ') resolvedAns = 2;
+          else if (u === 'D' || u === '4' || u === 'ঘ') resolvedAns = 3;
+          else resolvedAns = 0;
+        }
+
         // Build normalized Question object
         repairedQuestions.push({
           id: d.id,
           text: d.text,
           options: d.options,
-          correctAnswer: typeof raw.correctAnswer === 'number' ? raw.correctAnswer : 0,
+          correctAnswer: resolvedAns,
           explanation: raw.explanation || '',
           questionNumber: d.serial,
           subject: targetSubject,

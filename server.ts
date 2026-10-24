@@ -1,10 +1,11 @@
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -50,6 +51,92 @@ async function startServer() {
       console.warn("reCAPTCHA backend verification error:", err?.message || err);
       // Graceful fallback to avoid blocking users if external network request times out
       return res.json({ success: true, fallback: true });
+    }
+  });
+
+  // ==========================================
+  // CLOUDINARY SECURE SIGNED UPLOAD ENDPOINT
+  // ==========================================
+  app.post("/api/cloudinary-sign", async (req, res) => {
+    try {
+      // 1. Authenticate Request
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({
+          success: false,
+          message: "অননুমোদিত অনুরোধ। অনুগ্রহ করে প্রথমে লগইন করুন।"
+        });
+      }
+
+      const idToken = authHeader.split(" ")[1];
+      if (!idToken || idToken.length < 10) {
+        return res.status(401).json({
+          success: false,
+          message: "অবৈধ অথেনটিকেশন টোকেন।"
+        });
+      }
+
+      // Decode JWT payload to safely extract user UID
+      let tokenUid = "";
+      try {
+        const parts = idToken.split(".");
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
+          tokenUid = payload.user_id || payload.sub || "";
+        }
+      } catch (e) {
+        console.warn("JWT parse warning in cloudinary-sign:", e);
+      }
+
+      const effectiveUid = tokenUid || req.body?.uid || "user";
+      const sanitizedUid = String(effectiveUid).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+
+      // 2. Read Cloudinary Credentials from Environment
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+      const apiKey = process.env.CLOUDINARY_API_KEY;
+      const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+      if (!cloudName || !apiKey || !apiSecret) {
+        return res.status(503).json({
+          success: false,
+          message: "Cloudinary পরিবেশ ভেরিয়েবল (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) কনফিগার করা হয়নি। অনুগ্রহ করে Netlify / সার্ভার সেটিংস চেক করুন।"
+        });
+      }
+
+      // 3. Generate Signed Parameters
+      const timestamp = Math.floor(Date.now() / 1000);
+      const folder = "medha_profiles";
+      const publicId = `profile_${sanitizedUid}_${timestamp}`;
+
+      const paramsToSign: Record<string, string | number> = {
+        folder,
+        public_id: publicId,
+        timestamp
+      };
+
+      const sortedKeys = Object.keys(paramsToSign).sort();
+      const stringToSign = sortedKeys.map((k) => `${k}=${paramsToSign[k]}`).join("&");
+
+      const signature = crypto
+        .createHash("sha1")
+        .update(stringToSign + apiSecret)
+        .digest("hex");
+
+      return res.json({
+        success: true,
+        timestamp,
+        signature,
+        apiKey,
+        cloudName,
+        folder,
+        publicId
+      });
+    } catch (err: any) {
+      console.error("Cloudinary sign error:", err);
+      return res.status(500).json({
+        success: false,
+        message: err?.message || "সিগনেচার তৈরির সময় অভ্যন্তরীণ সার্ভার সমস্যা হয়েছে।"
+      });
     }
   });
 
@@ -1179,4 +1266,15 @@ async function startServer() {
   });
 }
 
-startServer();
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+});
+
+startServer().catch((err) => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
+});

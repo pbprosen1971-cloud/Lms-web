@@ -3,14 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
-import { User, Phone, GraduationCap, Mail, Award, Calendar, ChevronRight, CheckCircle2, ShieldAlert, Check, Edit2, Trash2, Image, Crown, Sparkles, ShieldCheck, Loader2, Lock, Shield, FileText, AlertTriangle } from 'lucide-react';
+import React, { useState, useMemo, useRef } from 'react';
+import { User, Phone, GraduationCap, Mail, Award, Calendar, ChevronRight, CheckCircle2, ShieldAlert, Check, Edit2, Trash2, Image, Crown, Sparkles, ShieldCheck, Loader2, Lock, Shield, FileText, AlertTriangle, Upload, X } from 'lucide-react';
 import { UserProfile, ExamResult } from '../types';
 import { doc, setDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { formatSafeDisplay, safeTimestampToString } from '../lib/dateUtils';
 import { deleteAuthenticatedUserAccount } from '../services/accountDeletionService';
+import { optimizeProfileImage, OptimizedImageResult } from '../utils/imageOptimizer';
+import { uploadImageToCloudinary } from '../services/cloudinaryUploadService';
 import ReferralDashboard from './ReferralDashboard';
 import UserStudyMaterials from './UserStudyMaterials';
 import UserPaymentHistory from './UserPaymentHistory';
@@ -37,6 +39,79 @@ export default function ProfileView({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Local Device Image Upload states
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [optimizedImage, setOptimizedImage] = useState<OptimizedImageResult | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadError(null);
+    setUploadSuccess(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setSelectedFile(file);
+      const optimized = await optimizeProfileImage(file);
+      setOptimizedImage(optimized);
+    } catch (err: any) {
+      setSelectedFile(null);
+      setOptimizedImage(null);
+      setUploadError(err?.message || 'ছবি প্রসেস করতে সমস্যা হয়েছে।');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleUploadImage = async () => {
+    if (!optimizedImage) {
+      setUploadError('প্রথমে একটি ছবি নির্বাচন করুন।');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setUploadProgress(0);
+    setUploadError(null);
+    setUploadSuccess(null);
+
+    try {
+      const result = await uploadImageToCloudinary(
+        optimizedImage.blob,
+        optimizedImage.originalName,
+        {
+          onProgress: (percent) => setUploadProgress(percent),
+        }
+      );
+
+      // Successfully uploaded! Update avatar
+      const newPhotoUrl = result.secureUrl;
+      setAvatar(newPhotoUrl);
+      setSelectedFile(null);
+      setOptimizedImage(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setUploadSuccess('ছবি সফলভাবে ক্লাউডিনারিতে আপলোড হয়েছে! পরিবর্তন সম্পন্ন করতে নিচে "পরিবর্তন সংরক্ষণ করুন" বাটনে চাপুন।');
+      setTimeout(() => setUploadSuccess(null), 6000);
+    } catch (err: any) {
+      console.error('Cloudinary upload failure:', err);
+      // Upload ব্যর্থ হলে পুরোনো profile photo URL অক্ষত থাকবে
+      setUploadError(err?.message || 'ছবি আপলোড করতে ব্যর্থ হয়েছে। পূর্বের প্রোফাইল ছবি অক্ষত রয়েছে।');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleClearSelectedImage = () => {
+    setSelectedFile(null);
+    setOptimizedImage(null);
+    setUploadError(null);
+    setUploadSuccess(null);
+    setUploadProgress(0);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   // In-App Account Deletion states
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
@@ -282,42 +357,168 @@ export default function ProfileView({
                 />
               </div>
 
-              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                <label className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
-                  <Image className="h-4 w-4 text-primary" />
-                  প্রোফাইল ছবি (Profile Picture)
-                </label>
+              <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <Image className="h-4 w-4 text-primary" />
+                    প্রোফাইল ছবি (Profile Picture)
+                  </label>
+                  <span className="text-[11px] text-slate-400">সর্বোচ্চ ২ MB • 512×512 অটো-রিসাইজ</span>
+                </div>
                 
-                <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-150 dark:border-slate-800">
+                {/* Active Avatar Status Card */}
+                <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800">
                   {avatar ? (
                     <img
                       src={avatar}
-                      alt="Preview"
-                      className="w-12 h-12 rounded-full object-cover border border-slate-200 shadow-sm"
+                      alt="Active Avatar"
+                      className="w-14 h-14 rounded-full object-cover border-2 border-emerald-500/20 shadow-sm shrink-0"
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center border border-slate-300 dark:border-slate-750 text-slate-500 dark:text-slate-400">
-                      <User className="h-6 w-6" />
+                    <div className="w-14 h-14 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 shrink-0">
+                      <User className="h-7 w-7" />
                     </div>
                   )}
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-semibold mb-1">প্রোফাইল ছবির স্থিতি</span>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-400 block font-semibold">সক্রিয় প্রোফাইল ছবি</span>
                     {avatar ? (
                       <button
                         type="button"
-                        onClick={() => setAvatar('')}
-                        className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-lg flex items-center gap-1 transition-colors"
+                        onClick={() => {
+                          setAvatar('');
+                          handleClearSelectedImage();
+                        }}
+                        className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
                       >
                         <Trash2 className="h-3 w-3" /> ছবি মুছে ফেলুন
                       </button>
                     ) : (
-                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">কোন ছবি নেই (ডিফল্ট)</span>
+                      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">ডিফল্ট অবতার সক্রিয় রয়েছে</span>
                     )}
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block">ছবির সরাসরি ইউআরএল (Image URL):</span>
+                {/* Local Device Upload Container */}
+                <div className="p-3.5 bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-200/80 dark:border-emerald-800/40 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Upload className="h-3.5 w-3.5 text-primary" />
+                      ডিভাইস থেকে আপলোড করুন (Cloudinary)
+                    </span>
+                    <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full">
+                      সুরক্ষিত আপলোড
+                    </span>
+                  </div>
+
+                  {/* Hidden file input & styled picker */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="profile-device-file-picker"
+                  />
+
+                  {!optimizedImage ? (
+                    <label
+                      htmlFor="profile-device-file-picker"
+                      className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-emerald-300 dark:border-emerald-700/60 hover:border-primary bg-white/80 dark:bg-slate-800/80 rounded-xl cursor-pointer transition-all hover:bg-emerald-50/40 group text-center"
+                    >
+                      <Upload className="h-6 w-6 text-emerald-600 dark:text-emerald-400 mb-1.5 group-hover:scale-110 transition-transform" />
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        মোবাইল বা কম্পিউটার থেকে ছবি নির্বাচন করুন
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        JPG, JPEG, PNG বা WebP • সর্বোচ্চ ২ MB
+                      </span>
+                    </label>
+                  ) : (
+                    <div className="space-y-3 bg-white dark:bg-slate-800 p-3 rounded-xl border border-emerald-200 dark:border-emerald-700/50 shadow-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            src={optimizedImage.previewUrl}
+                            alt="Optimized Preview"
+                            className="w-12 h-12 rounded-lg object-cover border border-emerald-400 shadow-sm shrink-0"
+                          />
+                          <div className="text-left min-w-0">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate block">
+                              {optimizedImage.originalName}
+                            </span>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                              <span>ডাইমেনশন: {optimizedImage.width}×{optimizedImage.height}px</span>
+                              <span>•</span>
+                              <span>আকার: {(optimizedImage.optimizedSize / 1024).toFixed(0)} KB</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleClearSelectedImage}
+                          disabled={isUploadingImage}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors shrink-0 cursor-pointer"
+                          title="বাতিল করুন"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {/* Upload Progress Bar */}
+                      {isUploadingImage && (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            <span className="flex items-center gap-1.5">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> ক্লাউডে আপলোড হচ্ছে...
+                            </span>
+                            <span>{uploadProgress}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                            <div
+                              className="bg-emerald-500 h-full rounded-full transition-all duration-200"
+                              style={{ width: `${uploadProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Upload Action Button */}
+                      {!isUploadingImage && (
+                        <button
+                          type="button"
+                          onClick={handleUploadImage}
+                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          <span>ক্লাউডিনারিতে আপলোড নিশ্চিত করুন</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Upload Error Alert */}
+                  {uploadError && (
+                    <div className="p-2.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 text-xs font-semibold rounded-lg flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>{uploadError}</span>
+                    </div>
+                  )}
+
+                  {/* Upload Success Alert */}
+                  {uploadSuccess && (
+                    <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 text-emerald-600 dark:text-emerald-400 text-xs font-semibold rounded-lg flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      <span>{uploadSuccess}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Direct Image URL fallback input */}
+                <div className="space-y-1 pt-1">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block">
+                    অথবা ছবির সরাসরি ইউআরএল (Image URL) লিখুন:
+                  </span>
                   <input
                     type="url"
                     value={avatar}
@@ -327,8 +528,11 @@ export default function ProfileView({
                   />
                 </div>
 
+                {/* Predefined demo avatars */}
                 <div className="space-y-1.5">
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block">অথবা নিচের যেকোনো একটি ডেমো এভাটার বেছে নিন:</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold block">
+                    অথবা নিচের যেকোনো একটি ডেমো এভাটার বেছে নিন:
+                  </span>
                   <div className="grid grid-cols-6 gap-1.5">
                     {[
                       { name: 'Boy 1', url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120' },
@@ -342,7 +546,7 @@ export default function ProfileView({
                         key={index}
                         type="button"
                         onClick={() => setAvatar(av.url)}
-                        className={`aspect-square rounded-full overflow-hidden border-2 transition-all ${
+                        className={`aspect-square rounded-full overflow-hidden border-2 transition-all cursor-pointer ${
                           avatar === av.url ? 'border-primary ring-2 ring-primary/20 scale-105 shadow-sm' : 'border-slate-200 dark:border-slate-700 hover:scale-105'
                         }`}
                         title={av.name}

@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Loader2,
   Share2,
+  Check,
   GraduationCap
 } from 'lucide-react';
 import { StudyMaterial, UserProfile } from '../types';
@@ -113,6 +114,10 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
 
   // Preview Modal State
   const [previewMaterial, setPreviewMaterial] = useState<StudyMaterial | null>(null);
+
+  // Share state for free materials
+  const [copiedMaterialId, setCopiedMaterialId] = useState<string | null>(null);
+  const [shareToast, setShareToast] = useState<string | null>(null);
 
   // Check if current user has active premium membership
   const isUserPremium = useMemo(() => {
@@ -233,6 +238,44 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
     };
     setTimeout(scrollToPricing, 80);
     setTimeout(scrollToPricing, 300);
+  };
+
+  // Share Free Study Material (Strictly only allowed for Free materials)
+  const handleShareMaterial = async (m: StudyMaterial) => {
+    // If premium, strictly never share
+    if (m.accessType === 'premium') return;
+
+    const shareUrl = `${window.location.origin}/?view=study-materials`;
+    const shareTitle = `মেধা স্টাডি ম্যাটেরিয়াল: ${m.title}`;
+    const shareText = `📚 "${m.title}"\nক্যাটাগরি: ${m.category || 'স্টাডি রিসোর্স'}\n\nমেধা পরীক্ষা পোর্টালে এই ফ্রি স্টাডি ম্যাটেরিয়ালটি বিনামূল্যে পড়ুন ও ডাউনলোড করুন:\n${shareUrl}`;
+
+    if (typeof navigator !== 'undefined' && 'share' in navigator) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        setShareToast('ম্যাটেরিয়ালটি সফলভাবে শেয়ার করা হয়েছে!');
+        setTimeout(() => setShareToast(null), 3000);
+        return;
+      } catch (err) {
+        // Share modal dismissed or unsupported on platform, fallback to clipboard copy
+      }
+    }
+
+    // Fallback: Copy to clipboard
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setCopiedMaterialId(m.id);
+      setShareToast('শেয়ারিং লিংক ও বিবরণ ক্লিপবোর্ডে কপি হয়েছে!');
+      setTimeout(() => {
+        setCopiedMaterialId(null);
+        setShareToast(null);
+      }, 3000);
+    } catch (e) {
+      console.error('Failed to copy share link', e);
+    }
   };
 
   return (
@@ -423,20 +466,49 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
                 {/* Card Content */}
                 <div className="p-5 sm:p-6 space-y-3.5 flex-1">
                   
-                  {/* Badge Row */}
+                  {/* Badge & Top-Right Actions Row */}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                       {m.category || 'সাধারণ'}
                     </span>
 
+                    {/* Top-Right Corner: Premium Badge (No Share) vs Free Badge + Share Button */}
                     {isPremium ? (
+                      /* Strictly NO share option for Premium Materials */
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                         <Crown className="h-3 w-3" /> প্রিমিয়াম
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                        <span>🆓</span> ফ্রি
-                      </span>
+                      /* Top-Right Corner for Free Materials: Includes Free Badge and Share Button */
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                          <span>🆓</span> ফ্রি
+                        </span>
+
+                        {/* Share Option (Exclusively for Free materials) */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleShareMaterial(m);
+                          }}
+                          title="ফ্রি ম্যাটেরিয়ালটি বন্ধুদের সাথে শেয়ার করুন"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 dark:bg-slate-800 dark:hover:bg-emerald-950/40 dark:text-slate-300 dark:hover:text-emerald-400 text-[11px] font-semibold border border-slate-200/70 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer active:scale-95 shadow-2xs"
+                        >
+                          {copiedMaterialId === m.id ? (
+                            <>
+                              <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">কপি হয়েছে</span>
+                            </>
+                          ) : (
+                            <>
+                              <Share2 className="h-3 w-3" />
+                              <span>শেয়ার</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -527,6 +599,27 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 shrink-0">
+                {/* Share Option strictly for Free materials only */}
+                {previewMaterial.accessType !== 'premium' && (
+                  <button
+                    onClick={() => handleShareMaterial(previewMaterial)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer active:scale-95"
+                    title="ফ্রি ম্যাটেরিয়ালটি বন্ধুদের সাথে শেয়ার করুন"
+                  >
+                    {copiedMaterialId === previewMaterial.id ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-emerald-600 dark:text-emerald-400">কপি হয়েছে</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="h-3.5 w-3.5 text-primary" />
+                        <span className="hidden sm:inline">শেয়ার</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
                 <button
                   onClick={() => handleDownload(previewMaterial)}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-all shadow-xs cursor-pointer"
@@ -572,6 +665,14 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
             </div>
 
           </div>
+        </div>
+      )}
+
+      {/* Floating Share Toast Notification */}
+      {shareToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-emerald-600 shadow-xl border border-slate-700 text-xs font-bold animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400 dark:text-white shrink-0" />
+          <span>{shareToast}</span>
         </div>
       )}
 

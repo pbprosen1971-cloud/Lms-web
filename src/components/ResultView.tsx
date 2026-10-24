@@ -4,12 +4,13 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Award, CheckCircle, CheckCircle2, XCircle, HelpCircle, Download, FileText, ChevronRight, RefreshCw, Trophy, Calendar, Sparkles, Share2, Copy, Check, Filter } from 'lucide-react';
+import { Award, CheckCircle, CheckCircle2, XCircle, HelpCircle, Download, FileText, ChevronRight, RefreshCw, Trophy, Calendar, Sparkles, Share2, Copy, Check, Filter, Image as ImageIcon } from 'lucide-react';
 import { ExamResult, Question, Exam } from '../types';
 import { formatSafeDisplay } from '../lib/dateUtils';
 import { subscribeToQuestionsByExamId } from '../services/firestoreService';
 import ResultPdfSheet from './ResultPdfSheet';
 import { downloadExamResultPdf } from '../services/examResultPdfService';
+import { downloadExamResultImage } from '../services/scorecardImageService';
 
 interface ResultViewProps {
   result: ExamResult;
@@ -24,6 +25,9 @@ export default function ResultView({ result, setView, user, exams }: ResultViewP
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [imageSuccess, setImageSuccess] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const percentage = Math.round((result.score / result.totalQuestions) * 100);
 
   const optionLabels = ['ক', 'খ', 'গ', 'ঘ'];
@@ -159,6 +163,30 @@ export default function ResultView({ result, setView, user, exams }: ResultViewP
       setDownloadError('সরাসরি ডাউনলোড হতে কিছুটা সময় নিচ্ছে, বিকল্প হিসেবে প্রিন্ট উইন্ডো চালু হয়েছে।');
     } finally {
       setIsGeneratingPdf(false);
+    }
+  };
+
+  // High-Resolution Social Scorecard Image Export Engine
+  const handleExportImage = async () => {
+    setIsGeneratingImage(true);
+    setImageError(null);
+    setImageSuccess(false);
+
+    try {
+      await downloadExamResultImage({
+        result,
+        percentage,
+        computedRank,
+        feedback,
+      });
+
+      setImageSuccess(true);
+      setTimeout(() => setImageSuccess(false), 6000);
+    } catch (err: any) {
+      console.error('Image scorecard generation error:', err);
+      setImageError('ছবি প্রস্তুত হতে কিছুটা সময় নিচ্ছে, অনুগ্রহ করে পুনরায় চেষ্টা করুন।');
+    } finally {
+      setIsGeneratingImage(false);
     }
   };
 
@@ -332,17 +360,32 @@ export default function ResultView({ result, setView, user, exams }: ResultViewP
             {/* Copy Result Text Button */}
             <button
               onClick={handleCopyShare}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/25 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 active:scale-95"
+              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/25 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 active:scale-95 cursor-pointer"
             >
               {copied ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
               <span>{copied ? 'কপি হয়েছে!' : 'ফলাফল কপি করুন'}</span>
+            </button>
+
+            {/* Quick Scorecard Image Export for Social Sharing */}
+            <button
+              onClick={handleExportImage}
+              disabled={isGeneratingImage}
+              className="px-4 py-2.5 bg-white/15 hover:bg-white/25 border border-white/30 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-2 transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-75 cursor-pointer"
+              title="এইচডি রেজাল্ট কার্ড ছবি ডাউনলোড করুন"
+            >
+              {isGeneratingImage ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <ImageIcon className="h-4 w-4" />
+              )}
+              <span>{isGeneratingImage ? 'ছবি তৈরি হচ্ছে...' : 'কার্ড ছবি'}</span>
             </button>
 
             {/* Web Share API (Mobile / Native browser fallback) */}
             {typeof navigator !== 'undefined' && 'share' in navigator && (
               <button
                 onClick={handleNativeShare}
-                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 transform hover:-translate-y-0.5 active:scale-95"
+                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 transform hover:-translate-y-0.5 active:scale-95 cursor-pointer"
               >
                 <Share2 className="h-4 w-4" />
                 <span>অন্যান্য অ্যাপস</span>
@@ -611,12 +654,32 @@ export default function ResultView({ result, setView, user, exams }: ResultViewP
               ড্যাশবোর্ডে ফিরে যান
             </button>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Trigger Scorecard Image Generation / Download */}
+              <button
+                onClick={handleExportImage}
+                disabled={isGeneratingImage}
+                className="px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95 disabled:opacity-75 disabled:cursor-wait text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 transform hover:-translate-y-0.5 transition-all flex items-center gap-2 cursor-pointer"
+                title="ফেসবুক, হোয়াটসঅ্যাপ বা সোশ্যাল মিডিয়ায় শেয়ারের জন্য এইচডি রেজাল্ট কার্ড ছবি ডাউনলোড করুন"
+              >
+                {isGeneratingImage ? (
+                  <>
+                    <RefreshCw className="h-4.5 w-4.5 animate-spin" />
+                    <span>ছবি তৈরি হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="h-4.5 w-4.5" />
+                    <span>ছবি হিসেবে এক্সপোর্ট</span>
+                  </>
+                )}
+              </button>
+
               {/* Trigger browser PDF generation / direct download */}
               <button
                 onClick={handleDownloadPdf}
                 disabled={isGeneratingPdf}
-                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-75 disabled:cursor-wait text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transform hover:-translate-y-0.5 transition-all flex items-center gap-2 cursor-pointer"
+                className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-75 disabled:cursor-wait text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transform hover:-translate-y-0.5 transition-all flex items-center gap-2 cursor-pointer"
                 title="ওয়েবসাইট থিম অনুযায়ী ওয়াটারমার্ক সহ অফিসিয়াল রেজাল্ট শিট পিডিএফ ডাউনলোড করুন"
               >
                 {isGeneratingPdf ? (
@@ -633,6 +696,27 @@ export default function ResultView({ result, setView, user, exams }: ResultViewP
               </button>
             </div>
           </div>
+
+          {/* Image Download Success Notice */}
+          {imageSuccess && (
+            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-300 dark:border-indigo-800 rounded-xl text-indigo-900 dark:text-indigo-200 text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200">
+              <Check className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span>রেজাল্ট কার্ড ছবি (HD PNG) সফলভাবে প্রস্তুত ও ডাউনলোড হয়েছে! আপনার ডিভাইসের ডাউনলোড ফোল্ডার চেক করুন এবং সোশ্যাল মিডিয়ায় শেয়ার করুন।</span>
+            </div>
+          )}
+
+          {/* Image Download Error Notice */}
+          {imageError && (
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 rounded-xl text-rose-900 dark:text-rose-200 text-xs font-medium flex items-center justify-between gap-2 animate-in fade-in duration-200">
+              <span>{imageError}</span>
+              <button
+                onClick={handleExportImage}
+                className="px-3 py-1 bg-rose-600 text-white rounded-lg font-bold text-xs hover:bg-rose-700 transition-colors cursor-pointer"
+              >
+                পুনরায় চেষ্টা করুন
+              </button>
+            </div>
+          )}
 
           {/* Download Success Notice */}
           {downloadSuccess && (

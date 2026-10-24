@@ -32,15 +32,169 @@ function escapeHtml(str: any): string {
 }
 
 /**
+ * High-definition math & text formatter for exam question papers and answer sheets.
+ * - Restores safe formatting tags
+ * - Converts Unicode superscripts (⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹ ⁺ ⁻ ⁿ ˣ ʸ) into elevated bold math superscripts
+ * - Converts caret power notation (e.g. x^2, 2^3, (a+b)^2, ২^২) into crisp <sup> elements
+ * - Standardizes multiplication (×) and division (÷) operators with balanced math spacing
+ * - Guarantees numbers, formulas, and symbols are sharp, clear, and never clipped or blurred
+ */
+function formatMathAndContent(raw: any): string {
+  if (raw === null || raw === undefined) return '';
+  let str = String(raw).trim();
+  if (!str) return '';
+
+  // 1. Escape HTML entities
+  str = str.replace(/&/g, '&amp;')
+           .replace(/</g, '&lt;')
+           .replace(/>/g, '&gt;')
+           .replace(/"/g, '&quot;')
+           .replace(/'/g, '&#039;');
+
+  // Restore safe inline tags
+  str = str.replace(/&lt;(\/?(sup|sub|b|strong|i|em|br))&gt;/gi, '<$1>');
+
+  // High-clarity superscript and subscript inline styles
+  const supStyle = `font-size: 0.72em; font-weight: 800; vertical-align: baseline; position: relative; top: -0.42em; line-height: 0; font-family: 'Poppins', 'Segoe UI', Roboto, 'Noto Sans Bengali', sans-serif; margin-left: 1.5px; margin-right: 1.5px; display: inline-block;`;
+  const subStyle = `font-size: 0.72em; font-weight: 800; vertical-align: baseline; position: relative; top: 0.28em; line-height: 0; font-family: 'Poppins', 'Segoe UI', Roboto, 'Noto Sans Bengali', sans-serif; margin-left: 1.5px; margin-right: 1.5px; display: inline-block;`;
+
+  // 2. Normalize existing <sup> and <sub> tags
+  str = str.replace(/<sup(?:\s+[^>]*)?>(.*?)<\/sup>/gi, `<sup style="${supStyle}">$1</sup>`);
+  str = str.replace(/<sub(?:\s+[^>]*)?>(.*?)<\/sub>/gi, `<sub style="${subStyle}">$1</sub>`);
+
+  // 3. Map Unicode superscript characters to styled superscripts
+  const unicodeSupMap: Record<string, string> = {
+    '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+    '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+    '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')',
+    'ⁿ': 'n', 'ˣ': 'x', 'ʸ': 'y'
+  };
+
+  str = str.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿˣʸ]+/g, (match) => {
+    const converted = match.split('').map(ch => unicodeSupMap[ch] || ch).join('');
+    return `<sup style="${supStyle}">${converted}</sup>`;
+  });
+
+  // 4. Convert caret power notation (e.g. 2^3, x^2, (a+b)^2, ২^২)
+  str = str.replace(/\^([0-9a-zA-Z\u0980-\u09FF\+\-]+)/g, `<sup style="${supStyle}">$1</sup>`);
+
+  // 5. Enhance math multiplication '×' and division '÷' operators
+  str = str.replace(/\s*×\s*/g, ` <span style="font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; margin: 0 1px;">×</span> `);
+  str = str.replace(/\s*÷\s*/g, ` <span style="font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; margin: 0 1px;">÷</span> `);
+
+  return str;
+}
+
+
+/**
+ * Safely parses and resolves the correct answer index (0, 1, 2, or 3) from any database representation:
+ * - Direct number index: 0, 1, 2, 3
+ * - English letter: 'A', 'B', 'C', 'D' (or lowercase)
+ * - Bengali letter: 'ক', 'খ', 'গ', 'ঘ'
+ * - String numbers: '0', '1', '2', '3' or 1-based '1', '2', '3', '4'
+ * - Matching option text: if the answer field holds the text of one of the options
+ * - Intelligent explanation verification: if an answer is 0/'A', but the question explanation specifically names another option (খ, গ, ঘ)
+ */
+export function resolveCorrectAnswerIndex(qOrData: any, options: string[]): number {
+  if (!qOrData) return 0;
+  const raw = qOrData.correctAnswerIndex ?? qOrData.correctAnswer ?? qOrData.correctOption ?? qOrData.answer ?? qOrData.correct ?? qOrData.ans;
+
+  let directIdx = -1;
+
+  if (typeof raw === 'number' && !isNaN(raw) && raw >= 0 && raw < options.length) {
+    directIdx = raw;
+  } else if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    const upper = trimmed.toUpperCase();
+
+    // English letter match
+    if (upper === 'A' || upper === '(A)' || upper === 'A.') directIdx = 0;
+    else if (upper === 'B' || upper === '(B)' || upper === 'B.') directIdx = 1;
+    else if (upper === 'C' || upper === '(C)' || upper === 'C.') directIdx = 2;
+    else if (upper === 'D' || upper === '(D)' || upper === 'D.') directIdx = 3;
+    // Bengali letter match
+    else if (trimmed === 'ক' || trimmed === '(ক)' || trimmed === 'ক.') directIdx = 0;
+    else if (trimmed === 'খ' || trimmed === '(খ)' || trimmed === 'খ.') directIdx = 1;
+    else if (trimmed === 'গ' || trimmed === '(গ)' || trimmed === 'গ.') directIdx = 2;
+    else if (trimmed === 'ঘ' || trimmed === '(ঘ)' || trimmed === 'ঘ.') directIdx = 3;
+    // Bengali digits
+    else if (trimmed === '১') directIdx = 0;
+    else if (trimmed === '২') directIdx = 1;
+    else if (trimmed === '৩') directIdx = 2;
+    else if (trimmed === '৪') directIdx = 3;
+    else {
+      // Check if raw string is identical to one of the options
+      for (let i = 0; i < options.length; i++) {
+        if (options[i] && options[i].trim() && (options[i].trim().toLowerCase() === trimmed.toLowerCase() || options[i].trim() === trimmed)) {
+          directIdx = i;
+          break;
+        }
+      }
+
+      if (directIdx === -1) {
+        const parsed = parseInt(trimmed, 10);
+        if (!isNaN(parsed)) {
+          if (parsed >= 0 && parsed < options.length) directIdx = parsed;
+          else if (parsed >= 1 && parsed <= options.length) directIdx = parsed - 1;
+        }
+      }
+    }
+  }
+
+  // Explanation verification:
+  // If directIdx was 0 (or unassigned -1), but explanation specifically mentions a different option (e.g. option 1, 2, or 3)
+  const exp = typeof qOrData.explanation === 'string' ? qOrData.explanation.trim() : '';
+  if (exp && options.length >= 2) {
+    let expMatchedIdx = -1;
+    let expMatchCount = 0;
+
+    options.forEach((opt, idx) => {
+      const cleanOpt = (opt || '').trim();
+      if (cleanOpt.length >= 2) {
+        // Look for exact word or phrase boundary in explanation
+        if (exp.includes(cleanOpt)) {
+          expMatchedIdx = idx;
+          expMatchCount++;
+        }
+      }
+    });
+
+    // If explanation unequivocally identifies an option
+    if (expMatchCount === 1 && expMatchedIdx !== -1) {
+      if (directIdx <= 0 || directIdx === expMatchedIdx) {
+        return expMatchedIdx;
+      }
+    }
+  }
+
+  return directIdx >= 0 && directIdx < options.length ? directIdx : 0;
+}
+
+/**
  * Maps a Firestore doc to Question type safely
  */
 function mapDocToQuestion(docSnap: any): Question {
-  const data = docSnap.data();
+  const data = docSnap.data ? docSnap.data() : docSnap;
+  const id = docSnap.id || data.id || `q-${Date.now()}`;
+
+  const optA = data.optionA ?? data.options?.[0] ?? '';
+  const optB = data.optionB ?? data.options?.[1] ?? '';
+  const optC = data.optionC ?? data.options?.[2] ?? '';
+  const optD = data.optionD ?? data.options?.[3] ?? '';
+
+  const options = Array.isArray(data.options) && data.options.length >= 2
+    ? data.options
+    : [optA, optB, optC, optD].filter(Boolean).length >= 2
+      ? [optA, optB, optC, optD]
+      : Array.isArray(data.options) ? data.options : ['', '', '', ''];
+
+  const correctAnswer = resolveCorrectAnswerIndex(data, options);
+
   return {
-    id: docSnap.id,
+    id,
     text: data.text || data.questionText || data.question || '',
-    options: Array.isArray(data.options) ? data.options : ['', '', '', ''],
-    correctAnswer: typeof data.correctAnswer === 'number' ? data.correctAnswer : parseInt(data.correctAnswer || '0', 10),
+    options,
+    correctAnswer,
     explanation: data.explanation || '',
     subject: data.subject || '',
     questionNumber: typeof data.questionNumber === 'number' ? data.questionNumber : undefined,
@@ -52,8 +206,19 @@ function mapDocToQuestion(docSnap: any): Question {
  * Checks /Exam/{examId}/questions, then /exam/{examId}/questions, then /questions.
  */
 export async function fetchExamQuestions(exam: Exam): Promise<Question[]> {
+  const normalizeList = (list: Question[]): Question[] => {
+    return list.map(q => {
+      const opts = Array.isArray(q.options) ? q.options : [];
+      const resolved = resolveCorrectAnswerIndex(q, opts);
+      return {
+        ...q,
+        correctAnswer: resolved,
+      };
+    }).sort((a, b) => (a.questionNumber || 0) - (b.questionNumber || 0));
+  };
+
   if (exam.questions && exam.questions.length > 0) {
-    return [...exam.questions].sort((a, b) => (a.questionNumber || 0) - (b.questionNumber || 0));
+    return normalizeList(exam.questions);
   }
 
   const examId = exam.id;
@@ -101,12 +266,7 @@ function buildQuestionHtml(q: Question, idx: number, version: ExamPdfVersion): s
   const qNum = toBengaliDigits(idx + 1);
   const validOptions = Array.isArray(q.options) ? q.options.filter(o => o !== null && o !== undefined) : [];
   
-  let correctIdx = -1;
-  if (typeof q.correctAnswer === 'number') {
-    correctIdx = q.correctAnswer;
-  } else if (typeof q.correctAnswer === 'string') {
-    correctIdx = parseInt(q.correctAnswer, 10);
-  }
+  const correctIdx = resolveCorrectAnswerIndex(q, validOptions);
 
   // Check if all options can comfortably fit in a 2-column grid (<= 45 characters each)
   const allOptionsCompact = validOptions.every(opt => (opt ? String(opt).trim().length <= 45 : true));
@@ -114,17 +274,19 @@ function buildQuestionHtml(q: Question, idx: number, version: ExamPdfVersion): s
   // Helper to render a single option box
   const renderSingleOption = (opt: string, optIdx: number, isCorrect: boolean): string => {
     const prefix = BENGALI_OPTION_PREFIXES[optIdx] || `(${optIdx + 1})`;
-    const escapedOpt = escapeHtml(opt);
+    const formattedOpt = formatMathAndContent(opt);
 
     if (isCorrect) {
       return `
         <table style="width: 100%; border-collapse: separate; border-spacing: 0; background-color: #ecfdf5; border: 1.5px solid #10b981; border-radius: 6px; margin: 0; table-layout: auto;">
           <tr>
-            <td style="padding: 4px 8px; vertical-align: middle; color: #065f46; font-size: 11.5px; font-weight: 700; line-height: 1.3;">
-              <span style="color: #047857; font-weight: 800; margin-right: 6px; display: inline-block; vertical-align: middle;">${prefix}</span><span style="display: inline-block; vertical-align: middle;">${escapedOpt}</span>
+            <td style="padding: 5px 8px; vertical-align: middle; color: #065f46; font-size: 11.5px; font-weight: 700; line-height: 1.35; text-align: left;">
+              <span style="color: #047857; font-weight: 800; margin-right: 5px;">${prefix}</span><span>${formattedOpt}</span>
             </td>
-            <td style="padding: 4px 8px; vertical-align: middle; text-align: right; width: 72px; white-space: nowrap;">
-              <span style="font-size: 9px; background-color: #10b981; color: #ffffff; padding: 2px 6px; border-radius: 3px; font-weight: 800; display: inline-block; vertical-align: middle; line-height: 1.1;">✓ সঠিক উত্তর</span>
+            <td style="padding: 3px 6px; vertical-align: middle; text-align: right; width: 85px; white-space: nowrap;">
+              <span style="display: inline-block; vertical-align: middle; background-color: #059669; color: #ffffff; font-size: 9.5px; font-weight: 800; padding: 2.5px 7px; border-radius: 4px; line-height: 13px; text-align: center; white-space: nowrap; font-family: 'Noto Sans Bengali', -apple-system, sans-serif;">
+                ✓ সঠিক উত্তর
+              </span>
             </td>
           </tr>
         </table>
@@ -134,8 +296,8 @@ function buildQuestionHtml(q: Question, idx: number, version: ExamPdfVersion): s
     return `
       <table style="width: 100%; border-collapse: separate; border-spacing: 0; border: 1.5px solid transparent; margin: 0; table-layout: auto;">
         <tr>
-          <td style="padding: 4px 8px; vertical-align: middle; color: #1e293b; font-size: 11.5px; font-weight: 500; line-height: 1.3;">
-            <span style="font-weight: 700; color: #475569; margin-right: 6px; display: inline-block; vertical-align: middle;">${prefix}</span><span style="display: inline-block; vertical-align: middle;">${escapedOpt}</span>
+          <td style="padding: 5px 8px; vertical-align: middle; color: #1e293b; font-size: 11.5px; font-weight: 600; line-height: 1.35; text-align: left;">
+            <span style="font-weight: 700; color: #475569; margin-right: 5px;">${prefix}</span><span>${formattedOpt}</span>
           </td>
         </tr>
       </table>
@@ -186,14 +348,14 @@ function buildQuestionHtml(q: Question, idx: number, version: ExamPdfVersion): s
   }
 
   const explanationHtml = (version === 'with_answers' && q.explanation && q.explanation.trim()) ? `
-    <div style="margin-top: 4px; padding: 4px 8px; background-color: #f8fafc; border-left: 3px solid #0284c7; border-radius: 4px; font-size: 10.5px; color: #334155; line-height: 1.4;">
-      <span style="font-weight: 800; color: #0369a1;">ব্যাখ্যা:</span> ${escapeHtml(q.explanation)}
+    <div style="margin-top: 4px; padding: 5px 9px; background-color: #f8fafc; border-left: 3.5px solid #0284c7; border-radius: 4px; font-size: 11px; color: #334155; line-height: 1.45;">
+      <span style="font-weight: 800; color: #0369a1; margin-right: 4px;">ব্যাখ্যা:</span>${formatMathAndContent(q.explanation)}
     </div>
   ` : '';
 
   return `
-    <div style="font-size: 12.5px; font-weight: 700; color: #0f172a; margin-bottom: 4px; line-height: 1.35;">
-      <span>${qNum}.</span> ${escapeHtml(q.text)}
+    <div style="font-size: 12.5px; font-weight: 700; color: #0f172a; margin-bottom: 4px; line-height: 1.4;">
+      <span style="font-weight: 800; color: #059669; margin-right: 4px;">${qNum}.</span> ${formatMathAndContent(q.text)}
     </div>
     ${optionsContainerHtml}
     ${explanationHtml}
@@ -272,13 +434,14 @@ export async function downloadExamQuestionPdf(
   const totalQCount = questions.length;
   const totalMarks = exam.totalMarks || totalQCount;
 
-  // Master container (off-screen)
+  // Master container (render in-viewport beneath current view for perfect subpixel font metrics)
   const masterContainer = document.createElement('div');
   masterContainer.style.position = 'fixed';
-  masterContainer.style.left = '-9999px';
+  masterContainer.style.left = '0';
   masterContainer.style.top = '0';
   masterContainer.style.width = '820px';
-  masterContainer.style.zIndex = '-9999';
+  masterContainer.style.zIndex = '-99999';
+  masterContainer.style.pointerEvents = 'none';
   masterContainer.style.backgroundColor = '#ffffff';
 
   document.body.appendChild(masterContainer);
@@ -299,7 +462,7 @@ export async function downloadExamQuestionPdf(
     pageEl.style.backgroundColor = '#ffffff';
     pageEl.style.color = '#0f172a';
     pageEl.style.position = 'relative';
-    pageEl.style.fontFamily = "'Hind Siliguri', 'Noto Sans Bengali', Kalpurush, SolaimanLipi, sans-serif";
+    pageEl.style.fontFamily = "'Noto Sans Bengali', 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hind Siliguri', Kalpurush, sans-serif";
     // Left margin 52px (ample margin as requested), right 36px, top 24px, bottom 18px
     pageEl.style.padding = '24px 36px 18px 52px';
     pageEl.style.display = 'flex';
@@ -347,7 +510,7 @@ export async function downloadExamQuestionPdf(
 
     // Dedicated Footer on EVERY page with medhaexam.site & page number
     const footerHtml = `
-      <div style="border-top: 1.5px solid #e2e8f0; padding-top: 6px; margin-top: auto; display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; color: #64748b; flex-shrink: 0; font-family: 'Hind Siliguri', 'Noto Sans Bengali', sans-serif;">
+      <div style="border-top: 1.5px solid #e2e8f0; padding-top: 6px; margin-top: auto; display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; color: #64748b; flex-shrink: 0; font-family: 'Noto Sans Bengali', 'Poppins', sans-serif;">
         <span style="font-weight: 600;">মেধা এক্সাম (Medha Exam)</span>
         <span style="color: #059669; font-weight: 800; font-family: monospace, sans-serif; font-size: 11.5px; letter-spacing: 0.5px;">medhaexam.site</span>
         <span class="page-num-span" style="font-weight: 700; color: #334155;">পৃষ্ঠা ${toBengaliDigits(pageNumber)}</span>
@@ -376,11 +539,11 @@ export async function downloadExamQuestionPdf(
   };
 
   try {
-    // Ensure document fonts are ready
+    // Ensure document fonts are fully loaded
     if (document.fonts && document.fonts.ready) {
       await document.fonts.ready;
     }
-    await new Promise(r => setTimeout(r, 150));
+    await new Promise(r => setTimeout(r, 250));
 
     const pages: PageElements[] = [];
     let currentPage = createPage(1);
@@ -439,6 +602,7 @@ export async function downloadExamQuestionPdf(
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4',
+      compress: true,
     });
 
     const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -449,18 +613,19 @@ export async function downloadExamQuestionPdf(
       if (onProgress) onProgress(`পেজ ${toBengaliDigits(i + 1)} / ${toBengaliDigits(totalPagesCount)} প্রস্তুত হচ্ছে...`);
       
       const canvas = await html2canvas(pages[i].pageEl, {
-        scale: 2.0, // High definition crisp Bengali text
+        scale: 2.2, // Ultra-sharp Bengali & math typography
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
       });
 
-      const pageImgData = canvas.toDataURL('image/jpeg', 0.96);
+      // Lossless PNG format ensures clean numbers, superscripts, math operators, and zero JPEG compression artifacts
+      const pageImgData = canvas.toDataURL('image/png');
 
       if (i > 0) {
         pdf.addPage();
       }
-      pdf.addImage(pageImgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      pdf.addImage(pageImgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
     }
 
     // Save and download file

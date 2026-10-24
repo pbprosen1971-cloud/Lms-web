@@ -1,6 +1,7 @@
 [build]
   publish = "dist"
   command = "npm run build"
+  functions = "netlify/functions"
 
 [[headers]]
   for = "/sitemap.xml"
@@ -13,6 +14,11 @@
   [headers.values]
     Content-Type = "text/plain; charset=UTF-8"
     Cache-Control = "public, max-age=0, must-revalidate"
+
+[[redirects]]
+  from = "/api/cloudinary-sign"
+  to = "/.netlify/functions/cloudinary-sign"
+  status = 200
 
 [[redirects]]
   from = "/*"

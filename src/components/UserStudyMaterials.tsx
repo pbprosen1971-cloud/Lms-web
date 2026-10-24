@@ -15,7 +15,9 @@ import {
   Calendar,
   X,
   Loader2,
-  Sparkles
+  Sparkles,
+  Share2,
+  Check
 } from 'lucide-react';
 import { MaterialAccessRecord, UserProfile } from '../types';
 import {
@@ -35,6 +37,29 @@ export default function UserStudyMaterials({ user, setView }: UserStudyMaterials
   const [records, setRecords] = useState<MaterialAccessRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewRecord, setPreviewRecord] = useState<MaterialAccessRecord | null>(null);
+  const [copiedRecordId, setCopiedRecordId] = useState<string | null>(null);
+
+  const handleShareRecord = async (rec: MaterialAccessRecord) => {
+    if (rec.accessType === 'premium') return;
+    const shareUrl = `${window.location.origin}/?view=study-materials`;
+    const shareText = `📚 "${rec.materialTitle}"\nক্যাটাগরি: ${rec.category || 'স্টাডি রিসোর্স'}\n\nমেধা পরীক্ষা পোর্টালে এই ফ্রি স্টাডি ম্যাটেরিয়ালটি পড়ুন ও ডাউনলোড করুন:\n${shareUrl}`;
+
+    if (typeof navigator !== 'undefined' && 'share' in navigator) {
+      try {
+        await navigator.share({
+          title: `মেধা স্টাডি ম্যাটেরিয়াল: ${rec.materialTitle}`,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch (err) {}
+    }
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setCopiedRecordId(rec.id);
+      setTimeout(() => setCopiedRecordId(null), 2500);
+    } catch (e) {}
+  };
 
   // Check if current user has active premium membership
   const isUserPremium = useMemo(() => {
@@ -157,13 +182,40 @@ export default function UserStudyMaterials({ user, setView }: UserStudyMaterials
                     </span>
 
                     {isPremium ? (
+                      /* Premium material - Strictly NO share option */
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                         <Crown className="h-2.5 w-2.5" /> Premium
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                        <span>🆓</span> Free
-                      </span>
+                      /* Free material - includes Free badge and Share button */
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                          <span>🆓</span> Free
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleShareRecord(rec);
+                          }}
+                          title="ফ্রি ম্যাটেরিয়ালটি বন্ধুদের সাথে শেয়ার করুন"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 dark:bg-slate-800 dark:hover:bg-emerald-950/40 dark:text-slate-300 dark:hover:text-emerald-400 text-[10px] font-semibold border border-slate-200/70 dark:border-slate-700 transition-all cursor-pointer active:scale-95"
+                        >
+                          {copiedRecordId === rec.id ? (
+                            <>
+                              <Check className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
+                              <span className="text-emerald-600 dark:text-emerald-400 text-[9px] font-bold">কপি</span>
+                            </>
+                          ) : (
+                            <>
+                              <Share2 className="h-2.5 w-2.5" />
+                              <span>শেয়ার</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     )}
                   </div>
 
