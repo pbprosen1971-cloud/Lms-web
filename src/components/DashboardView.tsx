@@ -28,6 +28,7 @@ import { Exam, ExamResult, UserProfile, DailyPracticeSession, WrongQuestionRecor
 import { formatSafeDisplay } from '../lib/dateUtils';
 import ActivityHeatmap from './ActivityHeatmap';
 import { subscribeToTodayDailyPractice, subscribeToUserWrongQuestions } from '../services/firestoreService';
+import { DashboardMetricsSkeleton, DashboardRecentExamSkeleton, Skeleton } from './SkeletonLoader';
 
 interface DashboardViewProps {
   user: UserProfile;
@@ -36,6 +37,7 @@ interface DashboardViewProps {
   setView: (view: string) => void;
   setSelectedExam: (exam: Exam) => void;
   setSelectedResult: (result: ExamResult) => void;
+  isLoading?: boolean;
 }
 
 export default function DashboardView({
@@ -45,6 +47,7 @@ export default function DashboardView({
   setView,
   setSelectedExam,
   setSelectedResult,
+  isLoading = false,
 }: DashboardViewProps) {
   // Filter exams by statuses
   const liveExams = useMemo(() => exams.filter((e) => e.status === 'live'), [exams]);
@@ -287,35 +290,54 @@ export default function DashboardView({
         
         {/* Statistics Summary - Left col */}
         <div className="lg:col-span-4 space-y-4 flex flex-col justify-between">
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm flex items-center gap-4">
-            <div className="p-3 bg-rose-500/10 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 rounded-2xl">
-              <Flame className="h-6 w-6 fill-current" />
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm flex items-center gap-4"
+                >
+                  <Skeleton className="w-12 h-12 rounded-2xl shrink-0" />
+                  <div className="space-y-2 flex-1">
+                    <Skeleton className="h-3.5 w-20" />
+                    <Skeleton className="h-6 w-24" />
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <p className="text-xs text-slate-400 font-semibold">ডেইলি স্ট্রাক</p>
-              <h3 className="text-xl font-extrabold">{stats.streak} দিন</h3>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm flex items-center gap-4">
+                <div className="p-3 bg-rose-500/10 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 rounded-2xl">
+                  <Flame className="h-6 w-6 fill-current" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 font-semibold">ডেইলি স্ট্রাক</p>
+                  <h3 className="text-xl font-extrabold">{stats.streak} দিন</h3>
+                </div>
+              </div>
 
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm flex items-center gap-4">
-            <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400 rounded-2xl">
-              <CheckCircle2 className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-semibold">অংশগ্রহণকৃত এক্সাম</p>
-              <h3 className="text-xl font-extrabold">{stats.totalTaken} টি</h3>
-            </div>
-          </div>
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm flex items-center gap-4">
+                <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400 rounded-2xl">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 font-semibold">অংশগ্রহণকৃত এক্সাম</p>
+                  <h3 className="text-xl font-extrabold">{stats.totalTaken} টি</h3>
+                </div>
+              </div>
 
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm flex items-center gap-4">
-            <div className="p-3 bg-amber-500/10 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400 rounded-2xl">
-              <Award className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-400 font-semibold">গড় পরীক্ষার মার্কস</p>
-              <h3 className="text-xl font-extrabold">{stats.avgScore}%</h3>
-            </div>
-          </div>
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm flex items-center gap-4">
+                <div className="p-3 bg-amber-500/10 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400 rounded-2xl">
+                  <Award className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 font-semibold">গড় পরীক্ষার মার্কস</p>
+                  <h3 className="text-xl font-extrabold">{stats.avgScore}%</h3>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Dynamic Progress Chart Card - Right col */}
@@ -577,63 +599,69 @@ export default function DashboardView({
           </div>
 
           <div className="space-y-4">
-            {/* Live Exams list */}
-            {liveExams.map((exam) => (
-              <div
-                key={exam.id}
-                className="bg-white dark:bg-slate-800 p-4 border border-emerald-500/20 dark:border-emerald-500/10 rounded-2xl flex justify-between items-center gap-4 hover:shadow-md transition-shadow"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded dark:bg-emerald-950/40 dark:text-emerald-400">
-                      LIVE EXAM
-                    </span>
-                    <span className="text-xs text-slate-400">{exam.subject}</span>
-                  </div>
-                  <h4 className="font-bold text-sm sm:text-base leading-snug line-clamp-1">{exam.title}</h4>
-                  <div className="flex items-center gap-4 text-xs text-slate-400">
-                    <span>{exam.totalQuestions} টি প্রশ্ন</span>
-                    <span>•</span>
-                    <span>{exam.durationMinutes} মিনিট</span>
-                  </div>
-                </div>
+            {isLoading ? (
+              <DashboardRecentExamSkeleton count={3} />
+            ) : (
+              <>
+                {/* Live Exams list */}
+                {liveExams.map((exam) => (
+                  <div
+                    key={exam.id}
+                    className="bg-white dark:bg-slate-800 p-4 border border-emerald-500/20 dark:border-emerald-500/10 rounded-2xl flex justify-between items-center gap-4 hover:shadow-md transition-shadow"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded dark:bg-emerald-950/40 dark:text-emerald-400">
+                          LIVE EXAM
+                        </span>
+                        <span className="text-xs text-slate-400">{exam.subject}</span>
+                      </div>
+                      <h4 className="font-bold text-sm sm:text-base leading-snug line-clamp-1">{exam.title}</h4>
+                      <div className="flex items-center gap-4 text-xs text-slate-400">
+                        <span>{exam.totalQuestions} টি প্রশ্ন</span>
+                        <span>•</span>
+                        <span>{exam.durationMinutes} মিনিট</span>
+                      </div>
+                    </div>
 
-                <button
-                  onClick={() => handleStartExam(exam)}
-                  className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-sm transition-transform hover:-translate-y-0.5"
-                >
-                  পরীক্ষা দিন
-                </button>
-              </div>
-            ))}
-
-            {/* Upcoming Exams list */}
-            {upcomingExams.map((exam) => (
-              <div
-                key={exam.id}
-                className="bg-white dark:bg-slate-800 p-4 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl flex justify-between items-center gap-4 opacity-85"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded dark:bg-amber-950/40 dark:text-amber-400">
-                      UPCOMING
-                    </span>
-                    <span className="text-xs text-slate-400">{exam.subject}</span>
+                    <button
+                      onClick={() => handleStartExam(exam)}
+                      className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-sm transition-transform hover:-translate-y-0.5"
+                    >
+                      পরীক্ষা দিন
+                    </button>
                   </div>
-                  <h4 className="font-bold text-sm leading-snug text-slate-700 dark:text-slate-200 line-clamp-1">{exam.title}</h4>
-                  <div className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
-                    সময়: {exam.startTime}
-                  </div>
-                </div>
+                ))}
 
-                <button
-                  disabled
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-xs font-bold rounded-xl cursor-not-allowed"
-                >
-                  অপেক্ষা করুন
-                </button>
-              </div>
-            ))}
+                {/* Upcoming Exams list */}
+                {upcomingExams.map((exam) => (
+                  <div
+                    key={exam.id}
+                    className="bg-white dark:bg-slate-800 p-4 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl flex justify-between items-center gap-4 opacity-85"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded dark:bg-amber-950/40 dark:text-amber-400">
+                          UPCOMING
+                        </span>
+                        <span className="text-xs text-slate-400">{exam.subject}</span>
+                      </div>
+                      <h4 className="font-bold text-sm leading-snug text-slate-700 dark:text-slate-200 line-clamp-1">{exam.title}</h4>
+                      <div className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
+                        সময়: {exam.startTime}
+                      </div>
+                    </div>
+
+                    <button
+                      disabled
+                      className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-xs font-bold rounded-xl cursor-not-allowed"
+                    >
+                      অপেক্ষা করুন
+                    </button>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
 
           {/* Archived / Past Exams */}

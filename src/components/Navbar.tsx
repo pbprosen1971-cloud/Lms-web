@@ -3,13 +3,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { Moon, Sun, Menu, X, LogOut, User, LayoutDashboard, Settings, Bell, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Moon, Sun, Menu, X, LogOut, User, LayoutDashboard, Settings, Bell, ExternalLink, ChevronDown } from 'lucide-react';
 import { UserProfile } from '../types';
 import MedhaLogo from './MedhaLogo';
 import Tooltip from './Tooltip';
 import NotificationModal from './NotificationModal';
 import { subscribeToNotifications } from '../services/notificationService';
+
+export const STUDY_DROPDOWN_CATEGORIES = [
+  { id: 'all', label: 'All Ebooks', bnLabel: 'সকল স্টাডি ম্যাটেরিয়াল' },
+  { id: 'Bangla', label: 'Bangla', bnLabel: 'বাংলা' },
+  { id: 'English', label: 'English', bnLabel: 'ইংরেজি' },
+  { id: 'Mathematics', label: 'Mathematics', bnLabel: 'গণিত' },
+  { id: 'Bangladesh Affairs', label: 'Bangladesh Affairs', bnLabel: 'বাংলাদেশ বিষয়াবলি' },
+  { id: 'International Affairs', label: 'International Affairs', bnLabel: 'আন্তর্জাতিক বিষয়াবলি' },
+  { id: 'General Science', label: 'General Science', bnLabel: 'সাধারণ বিজ্ঞান' },
+  { id: 'Computer', label: 'Computer', bnLabel: 'কম্পিউটার ও আইসিটি' },
+  { id: 'Mental Ability', label: 'Mental Ability', bnLabel: 'মানসিক দক্ষতা' },
+  { id: 'Geography', label: 'Geography', bnLabel: 'ভূগোল ও পরিবেশ' },
+  { id: 'Ethics & Values', label: 'Ethics & Values', bnLabel: 'নৈতিকতা ও সুশাসন' },
+  { id: 'Previous Questions', label: 'Previous Questions', bnLabel: 'বিগত সালের প্রশ্ন' },
+  { id: 'Model Test', label: 'Model Test', bnLabel: 'মডেল টেস্ট সমাধান' },
+  { id: 'Syllabus', label: 'Syllabus', bnLabel: 'সিলেবাস ও গাইডলাইন' },
+  { id: 'Suggestion', label: 'Suggestion', bnLabel: 'স্পেশাল সাজেশন' },
+  { id: 'Notes', label: 'Handnotes & Summary', bnLabel: 'হ্যান্ডনোট ও সামারি' },
+  { id: 'Job Preparation', label: 'Job Preparation', bnLabel: 'জব প্রিপারেশন' },
+];
 
 interface NavbarProps {
   currentView: string;
@@ -28,9 +49,13 @@ export default function Navbar({
   darkMode,
   toggleDarkMode,
 }: NavbarProps) {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
   const [notifCount, setNotifCount] = useState<number>(0);
+  const [isStudyDropdownOpen, setIsStudyDropdownOpen] = useState(false);
+  const [isMobileStudyOpen, setIsMobileStudyOpen] = useState(false);
+  const studyDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsub = subscribeToNotifications((list) => {
@@ -38,6 +63,21 @@ export default function Navbar({
     });
     return () => unsub();
   }, []);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (studyDropdownRef.current && !studyDropdownRef.current.contains(event.target as Node)) {
+        setIsStudyDropdownOpen(false);
+      }
+    };
+    if (isStudyDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isStudyDropdownOpen]);
 
   const isAdminUser =
     user?.role === 'admin' ||
@@ -55,6 +95,8 @@ export default function Navbar({
 
   const navItems: NavItem[] = [
     { label: 'হোম', view: 'home', path: '/', href: '/' },
+    { label: 'লাইভ পরিক্ষা', view: 'live-exam', path: '/live-exam', href: '/live-exam' },
+    { label: 'প্রশ্নব্যাংক', view: 'job-questionbank', path: '/job-questionbank', href: '/job-questionbank' },
     { label: 'স্টাডি ম্যাটেরিয়াল', view: 'study-materials', path: '/study-materials', href: '/study-materials' },
     { label: 'বয়স ক্যালকুলেটর', view: 'age-calculator', path: '/age-calculator', href: '/age-calculator' },
     { label: 'রেফারেল', view: 'referral', path: '/referral', href: '/referral' },
@@ -65,6 +107,31 @@ export default function Navbar({
   const handleNavClick = (view: string) => {
     setView(view);
     setIsOpen(false);
+    setIsStudyDropdownOpen(false);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  };
+
+  const handleSelectStudyCategory = (categoryId: string) => {
+    setIsStudyDropdownOpen(false);
+    setIsMobileStudyOpen(false);
+    setIsOpen(false);
+
+    const query = categoryId === 'all' ? '' : `?category=${encodeURIComponent(categoryId)}`;
+    const targetUrl = `/study-materials${query}`;
+
+    // Update browser URL and view state
+    navigate(targetUrl);
+    setView('study-materials');
+
+    // Notify StudyMaterialsView to immediately update state
+    window.dispatchEvent(
+      new CustomEvent('study_material_category_change', {
+        detail: { category: categoryId }
+      })
+    );
+
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
@@ -122,6 +189,106 @@ export default function Navbar({
                   </a>
                 );
               }
+              if (item.view === 'study-materials') {
+                return (
+                  <div
+                    key={item.view}
+                    ref={studyDropdownRef}
+                    className="relative"
+                    onMouseEnter={() => setIsStudyDropdownOpen(true)}
+                    onMouseLeave={() => setIsStudyDropdownOpen(false)}
+                  >
+                    <a
+                      href={item.path}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setIsStudyDropdownOpen((prev) => !prev);
+                        if (currentView !== 'study-materials') {
+                          handleNavClick('study-materials');
+                        }
+                      }}
+                      className={`relative px-3.5 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer group flex items-center justify-center gap-1.5 ${
+                        isActive
+                          ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-400 font-semibold shadow-xs shadow-primary/10'
+                          : 'text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-emerald-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+                      }`}
+                      aria-expanded={isStudyDropdownOpen}
+                    >
+                      <span
+                        className={`relative z-10 transition-colors duration-200 ${
+                          isActive
+                            ? 'text-primary dark:text-emerald-400 font-bold'
+                            : 'group-hover:text-primary dark:group-hover:text-emerald-400'
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 transition-transform duration-200 relative z-10 ${
+                          isStudyDropdownOpen
+                            ? 'rotate-180 text-primary dark:text-emerald-400'
+                            : 'text-slate-400 group-hover:text-primary dark:group-hover:text-emerald-400'
+                        }`}
+                      />
+
+                      <span
+                        className={`absolute bottom-0.5 left-2.5 right-2.5 h-[2.5px] rounded-full transition-all duration-300 ease-out ${
+                          isActive
+                            ? 'bg-gradient-to-r from-emerald-500 via-primary to-teal-500 dark:from-emerald-400 dark:via-emerald-300 dark:to-teal-400 scale-x-100 opacity-100 shadow-sm shadow-emerald-500/40'
+                            : 'bg-primary/50 dark:bg-emerald-400/50 scale-x-0 group-hover:scale-x-100 opacity-0 group-hover:opacity-75 origin-center'
+                        }`}
+                        aria-hidden="true"
+                      />
+
+                      <span
+                        className={`absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 rounded-full transition-all duration-300 ease-out ${
+                          isActive
+                            ? 'w-3 bg-gradient-to-r from-emerald-500 to-teal-500 dark:from-emerald-400 dark:to-teal-300 shadow-md shadow-emerald-500/60 opacity-100 scale-100'
+                            : 'w-0 bg-transparent opacity-0 scale-50'
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </a>
+
+                    {/* Dropdown Menu Container */}
+                    {isStudyDropdownOpen && (
+                      <div className="absolute top-full left-0 mt-1.5 w-64 max-h-[72vh] overflow-y-auto overscroll-contain bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                        {/* All Ebooks Header */}
+                        <button
+                          type="button"
+                          onClick={() => handleSelectStudyCategory('all')}
+                          className="w-full text-left px-4 py-2.5 flex items-center justify-between text-sm font-semibold text-slate-800 hover:text-emerald-600 hover:bg-emerald-50/70 dark:text-slate-100 dark:hover:text-emerald-400 dark:hover:bg-slate-800/80 transition-colors cursor-pointer group"
+                        >
+                          <span className="group-hover:translate-x-0.5 transition-transform duration-150">All Ebooks</span>
+                          <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                            সকল বই
+                          </span>
+                        </button>
+
+                        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1 mx-2" />
+
+                        {/* Category List */}
+                        {STUDY_DROPDOWN_CATEGORIES.filter((c) => c.id !== 'all').map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => handleSelectStudyCategory(cat.id)}
+                            className="w-full text-left px-4 py-2 flex items-center justify-between text-sm text-slate-700 hover:text-emerald-600 hover:bg-emerald-50/70 dark:text-slate-300 dark:hover:text-emerald-400 dark:hover:bg-slate-800/80 transition-colors cursor-pointer group"
+                          >
+                            <span className="font-medium group-hover:translate-x-1 transition-transform duration-150">
+                              {cat.label}
+                            </span>
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                              {cat.bnLabel}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <a
                   key={item.view}
@@ -404,6 +571,66 @@ export default function Navbar({
                   </a>
                 );
               }
+              if (item.view === 'study-materials') {
+                return (
+                  <div key={item.view} className="rounded-xl overflow-hidden bg-slate-50/50 dark:bg-slate-800/20 border border-slate-200/50 dark:border-slate-800/50">
+                    <div className="flex items-center justify-between w-full px-3.5 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleNavClick(item.view);
+                        }}
+                        className={`text-left flex-1 text-base font-medium transition-colors ${
+                          isActive ? 'text-primary dark:text-emerald-400 font-bold' : 'text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsMobileStudyOpen((prev) => !prev);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700/70 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+                        aria-label="Toggle study materials categories"
+                      >
+                        <ChevronDown
+                          className={`h-4 w-4 transition-transform duration-200 ${
+                            isMobileStudyOpen ? 'rotate-180 text-primary dark:text-emerald-400' : ''
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {isMobileStudyOpen && (
+                      <div className="px-3 pb-2.5 pt-1 space-y-1 bg-white/70 dark:bg-slate-900/60 border-t border-slate-200/60 dark:border-slate-800/60 max-h-64 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectStudyCategory('all')}
+                          className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-100 hover:text-primary dark:hover:text-emerald-400 rounded-lg hover:bg-emerald-50 dark:hover:bg-slate-800 flex items-center justify-between cursor-pointer"
+                        >
+                          <span>All Ebooks</span>
+                          <span className="text-[10px] text-slate-400">সকল বই</span>
+                        </button>
+                        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
+                        {STUDY_DROPDOWN_CATEGORIES.filter((c) => c.id !== 'all').map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => handleSelectStudyCategory(cat.id)}
+                            className="w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400 rounded-lg hover:bg-emerald-50/60 dark:hover:bg-slate-800/60 flex items-center justify-between cursor-pointer"
+                          >
+                            <span className="font-medium">{cat.label}</span>
+                            <span className="text-[10px] text-slate-400">{cat.bnLabel}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <a
                   key={item.view}

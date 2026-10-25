@@ -91,6 +91,8 @@ const isUserAdminAccount = (u?: UserProfile | null): boolean => {
 
 const pathToView = (pathname: string): string => {
   const p = pathname.toLowerCase().replace(/\/$/, '') || '/';
+  if (p === '/live-exam' || p === '/live-exams' || p === '/liveexam') return 'live-exam';
+  if (p === '/job-questionbank' || p === '/questionbank' || p === '/question-bank' || p === '/jobquestionbank') return 'job-questionbank';
   if (p === '/registration' || p === '/register') return 'register';
   if (p === '/login') return 'login';
   if (p === '/exam') return 'exam';
@@ -112,6 +114,10 @@ const pathToView = (pathname: string): string => {
 
 const viewToPath = (view: string): string => {
   switch (view) {
+    case 'live-exam':
+      return '/live-exam';
+    case 'job-questionbank':
+      return '/job-questionbank';
     case 'register':
       return '/registration';
     case 'login':
@@ -206,6 +212,8 @@ export default function App() {
   });
   const [exams, setExams] = useState<Exam[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
+  const [isExamsLoading, setIsExamsLoading] = useState<boolean>(true);
+  const [isResultsLoading, setIsResultsLoading] = useState<boolean>(true);
   const [ministryBanks, setMinistryBanks] = useState<MinistryQuestionBank[]>([]);
   const [upcomingExamSettings, setUpcomingExamSettings] = useState<UpcomingExamSettings | null>(null);
 
@@ -491,8 +499,10 @@ export default function App() {
           return merged;
         });
       }
+      setIsResultsLoading(false);
     }, (err) => {
       console.warn("Exam results live snapshot error:", err);
+      setIsResultsLoading(false);
     });
 
     return () => unsubscribeResults();
@@ -562,6 +572,7 @@ export default function App() {
         });
         setExams(INITIAL_EXAMS.map(normalizeExamSubject));
       }
+      setIsExamsLoading(false);
     });
 
     return () => unsubscribeExams();
@@ -1058,8 +1069,28 @@ export default function App() {
     setCurrentView(matchedView);
   }, [location.pathname, location.search, user, selectedExam, selectedResult, exams, navigate]);
 
-  // Automatically scroll to the top on every page/view or route change
+  // Automatically scroll to the top or designated section on every page/view or route change
   useEffect(() => {
+    if (currentView === 'live-exam') {
+      const timer = setTimeout(() => {
+        const el = document.getElementById('featured-exams');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+
+    if (currentView === 'job-questionbank') {
+      const timer = setTimeout(() => {
+        const el = document.getElementById('ministry-banks-section');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+
     // If navigating to a specific in-page anchor hash (e.g. #live-exams), scroll smoothly to that element
     if (window.location.hash) {
       const el = document.querySelector(window.location.hash);
@@ -1076,8 +1107,8 @@ export default function App() {
 
   // Dynamic SEO metadata synchronization on view/route change
   useEffect(() => {
-    applySEO(currentView);
-  }, [currentView]);
+    applySEO(currentView || location.pathname);
+  }, [currentView, location.pathname]);
 
   const setView = (nextView: string) => {
     setCurrentView(nextView);
@@ -1092,19 +1123,24 @@ export default function App() {
       }
       navigate(targetPath);
     }
-    // Instant scroll to top when changing view
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
+    if (nextView !== 'live-exam' && nextView !== 'job-questionbank') {
+      // Instant scroll to top when changing view
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
   };
 
   // Render current view content
   const renderView = () => {
     switch (currentView) {
       case 'home':
+      case 'live-exam':
+      case 'job-questionbank':
         return (
           <HomeView
             exams={exams}
+            isLoadingExams={isExamsLoading}
             setView={setView}
             setSelectedExam={setSelectedExam}
             user={user}
@@ -1128,6 +1164,7 @@ export default function App() {
             user={user}
             exams={exams}
             results={results}
+            isLoading={isExamsLoading || isResultsLoading}
             setView={setView}
             setSelectedExam={setSelectedExam}
             setSelectedResult={setSelectedResult}
@@ -1174,6 +1211,7 @@ export default function App() {
         ) : (
           <HomeView
             exams={exams}
+            isLoadingExams={isExamsLoading}
             setView={setView}
             setSelectedExam={setSelectedExam}
             user={user}
@@ -1187,6 +1225,7 @@ export default function App() {
         ) : (
           <HomeView
             exams={exams}
+            isLoadingExams={isExamsLoading}
             setView={setView}
             setSelectedExam={setSelectedExam}
             user={user}

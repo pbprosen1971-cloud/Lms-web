@@ -328,4 +328,14 @@ a[href*="netlify.com"]:has(img[alt*="Netlify"]) {
   pointer-events: none !important;
 }
 
+/* Shimmer wave effect for skeleton screens */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 

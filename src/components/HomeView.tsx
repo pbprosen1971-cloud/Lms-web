@@ -64,6 +64,7 @@ import FaqSection from './FaqSection';
 import { detectQuestionSubject } from '../lib/subjectClassifier';
 import QuestionBankPdfModal from './QuestionBankPdfModal';
 import { normalizeMinistryName, getMinistryComparisonKey } from '../services/questionBankService';
+import { ExamGridSkeleton, Skeleton } from './SkeletonLoader';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -151,6 +152,7 @@ interface HomeViewProps {
   onUpdateUser?: (updated: UserProfile) => void;
   ministryBanks?: MinistryQuestionBank[];
   upcomingExamSettings?: UpcomingExamSettings | null;
+  isLoadingExams?: boolean;
 }
 
 export default function HomeView({
@@ -161,6 +163,7 @@ export default function HomeView({
   onUpdateUser,
   ministryBanks = [],
   upcomingExamSettings: propUpcomingSettings,
+  isLoadingExams = false,
 }: HomeViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
@@ -1377,7 +1380,9 @@ export default function HomeView({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Left Column: Live Exams Grid */}
           <div className="lg:col-span-8">
-            {liveExams.length === 0 ? (
+            {isLoadingExams ? (
+              <ExamGridSkeleton count={4} />
+            ) : liveExams.length === 0 ? (
               <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-12 text-center h-full flex flex-col justify-center items-center">
                 <FileText className="h-12 w-12 text-slate-400 mb-4" />
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">কোনো চলমান পরীক্ষা পাওয়া যায়নি</h3>
@@ -1504,7 +1509,24 @@ export default function HomeView({
               </h3>
 
               {/* Unified Upcoming Exams List */}
-              {(() => {
+              {isLoadingExams ? (
+                <div className="space-y-4">
+                  {[1, 2].map((i) => (
+                    <div
+                      key={i}
+                      className="p-4 bg-amber-50/60 dark:bg-slate-800/60 border border-amber-200/70 dark:border-amber-500/20 rounded-2xl space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <Skeleton className="h-5 w-20 rounded-md" />
+                        <Skeleton className="h-5 w-16 rounded-md" />
+                      </div>
+                      <Skeleton className="h-5 w-4/5" />
+                      <Skeleton className="h-3.5 w-3/5" />
+                      <Skeleton className="h-9 w-full rounded-xl" />
+                    </div>
+                  ))}
+                </div>
+              ) : (() => {
                 const upcomingList = unifiedUpcomingExams;
 
                 if (upcomingList.length === 0) {

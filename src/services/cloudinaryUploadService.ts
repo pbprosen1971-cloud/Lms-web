@@ -6,6 +6,7 @@
  */
 
 import { auth } from '../lib/firebase';
+import { resizeAndCompressTo512 } from '../utils/imageOptimizer';
 
 export interface CloudinarySignResponse {
   success: boolean;
@@ -79,9 +80,22 @@ export async function uploadImageToCloudinary(
     throw new Error('Cloudinary কনফিগারেশন অসম্পূর্ণ। দয়া করে পরিবেশ ভেরিয়েবলসমূহ চেক করুন।');
   }
 
-  // 4. Construct FormData for Cloudinary Upload
+  // 4. Ensure image is compressed to exactly 512x512 pixels before reaching the server
+  let payloadBlob = blob;
+  try {
+    const compressed = await resizeAndCompressTo512(blob, {
+      targetWidth: 512,
+      targetHeight: 512,
+      quality: 0.85,
+    });
+    payloadBlob = compressed.blob;
+  } catch (compErr) {
+    console.warn('Pre-upload client compression warning (fallback to original blob):', compErr);
+  }
+
+  // 5. Construct FormData for Cloudinary Upload
   const formData = new FormData();
-  formData.append('file', blob, fileName);
+  formData.append('file', payloadBlob, fileName);
   formData.append('api_key', apiKey);
   formData.append('timestamp', String(timestamp));
   formData.append('signature', signature);

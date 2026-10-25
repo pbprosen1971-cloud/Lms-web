@@ -13,6 +13,7 @@ import { formatSafeDisplay, safeTimestampToString } from '../lib/dateUtils';
 import { deleteAuthenticatedUserAccount } from '../services/accountDeletionService';
 import { optimizeProfileImage, OptimizedImageResult } from '../utils/imageOptimizer';
 import { uploadImageToCloudinary } from '../services/cloudinaryUploadService';
+import ImageCropperModal from './ImageCropperModal';
 import ReferralDashboard from './ReferralDashboard';
 import UserStudyMaterials from './UserStudyMaterials';
 import UserPaymentHistory from './UserPaymentHistory';
@@ -40,65 +41,126 @@ export default function ProfileView({
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Local Device Image Upload states
+  // Local Device Image Upload & Cropper states
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [optimizedImage, setOptimizedImage] = useState<OptimizedImageResult | null>(null);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [isCropperOpen, setIsCropperOpen] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUploadError(null);
     setUploadSuccess(null);
     const file = e.target.files?.[0];
     if (!file) return;
 
-    try {
-      setSelectedFile(file);
-      const optimized = await optimizeProfileImage(file);
-      setOptimizedImage(optimized);
-    } catch (err: any) {
-      setSelectedFile(null);
-      setOptimizedImage(null);
-      setUploadError(err?.message || 'ছবি প্রসেস করতে সমস্যা হয়েছে।');
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
+    // Validate format
+    const mimeType = file.type?.toLowerCase();
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    const isAllowedExt = ['jpg', 'jpeg', 'png', 'webp'].includes(extension);
+    const isAllowedMime = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(mimeType);
 
-  const handleUploadImage = async () => {
-    if (!optimizedImage) {
-      setUploadError('প্রথমে একটি ছবি নির্বাচন করুন।');
+    if (!isAllowedMime && !isAllowedExt) {
+      setUploadError('শুধুমাত্র JPG, JPEG, PNG এবং WebP ফরম্যাটের ছবি গ্রহণযোগ্য।');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
+    // Validate size (max 2 MB)
+    if (file.size > 2 * 1024 * 1024) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+      setUploadError(`ছবির আকার সর্বোচ্চ ২ মেগাবাইট (2 MB) হতে পারবে। নির্বাচিত ফাইলের আকার: ${sizeMb} MB`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setSelectedFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setCropImageSrc(objectUrl);
+    setIsCropperOpen(true);
+  };
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
     setIsUploadingImage(true);
     setUploadProgress(0);
     setUploadError(null);
-    setUploadSuccess(null);
+
+    const targetUid = user.id || user.uid || auth.currentUser?.uid;
+    if (!targetUid) {
+      setIsUploadingImage(false);
+      setUploadError('ব্যবহারকারীর আইডি পাওয়া যায়নি। অনুগ্রহ করে পুনরায় লগইন করুন।');
+      return;
+    }
 
     try {
+      // 1. Upload cropped blob to Cloudinary
       const result = await uploadImageToCloudinary(
-        optimizedImage.blob,
-        optimizedImage.originalName,
+        croppedBlob,
+        selectedFile?.name || 'profile_avatar.jpg',
         {
           onProgress: (percent) => setUploadProgress(percent),
         }
       );
 
-      // Successfully uploaded! Update avatar
       const newPhotoUrl = result.secureUrl;
+      if (!newPhotoUrl) {
+        throw new Error('নিরাপদ ছবির লিংক পাওয়া যায়নি।');
+      }
+
+      // 2. Immediately save to Firestore users/{uid} document
+      await setDoc(
+        doc(db, 'users', targetUid),
+        {
+          avatar: newPhotoUrl,
+          photoURL: newPhotoUrl,
+        },
+        { merge: true }
+      );
+
+      // 3. Update Firebase Auth Profile
+      if (auth.currentUser) {
+        try {
+          await updateProfile(auth.currentUser, {
+            photoURL: newPhotoUrl,
+          });
+        } catch (authErr) {
+          console.warn('Auth profile photoURL update warning:', authErr);
+        }
+      }
+
+      // 4. Update local state & Parent App state
+      const updatedUser: UserProfile = {
+        ...user,
+        avatar: newPhotoUrl,
+        photoURL: newPhotoUrl,
+      };
+
       setAvatar(newPhotoUrl);
+      onUpdateUser(updatedUser);
+
+      // 5. Update cached session in localStorage
+      try {
+        localStorage.setItem('active_user_session', JSON.stringify(updatedUser));
+      } catch (e) {}
+
+      // 6. Close cropper modal and clean up
+      setIsCropperOpen(false);
+      if (cropImageSrc) {
+        URL.revokeObjectURL(cropImageSrc);
+        setCropImageSrc(null);
+      }
       setSelectedFile(null);
-      setOptimizedImage(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      setUploadSuccess('ছবি সফলভাবে ক্লাউডিনারিতে আপলোড হয়েছে! পরিবর্তন সম্পন্ন করতে নিচে "পরিবর্তন সংরক্ষণ করুন" বাটনে চাপুন।');
-      setTimeout(() => setUploadSuccess(null), 6000);
+
+      setUploadSuccess('প্রোফাইল ছবি সফলভাবে ক্রপ ও ফায়ারবেসে সংরক্ষিত হয়েছে!');
+      setTimeout(() => setUploadSuccess(null), 5000);
     } catch (err: any) {
-      console.error('Cloudinary upload failure:', err);
-      // Upload ব্যর্থ হলে পুরোনো profile photo URL অক্ষত থাকবে
-      setUploadError(err?.message || 'ছবি আপলোড করতে ব্যর্থ হয়েছে। পূর্বের প্রোফাইল ছবি অক্ষত রয়েছে।');
+      console.error('Profile photo upload or persistence error:', err);
+      // Upload বা Firestore ব্যর্থ হলে পুরোনো profile photo URL অক্ষত থাকবে
+      setUploadError(err?.message || 'ছবি আপলোড বা সংরক্ষণ ব্যর্থ হয়েছে। পূর্বের প্রোফাইল ছবি অপরিবর্তিত রয়েছে।');
     } finally {
       setIsUploadingImage(false);
     }
@@ -106,7 +168,11 @@ export default function ProfileView({
 
   const handleClearSelectedImage = () => {
     setSelectedFile(null);
-    setOptimizedImage(null);
+    if (cropImageSrc) {
+      URL.revokeObjectURL(cropImageSrc);
+      setCropImageSrc(null);
+    }
+    setIsCropperOpen(false);
     setUploadError(null);
     setUploadSuccess(null);
     setUploadProgress(0);
@@ -403,7 +469,7 @@ export default function ProfileView({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                       <Upload className="h-3.5 w-3.5 text-primary" />
-                      ডিভাইস থেকে আপলোড করুন (Cloudinary)
+                      ডিভাইস থেকে আপলোড করুন
                     </span>
                     <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full">
                       সুরক্ষিত আপলোড
@@ -420,80 +486,60 @@ export default function ProfileView({
                     id="profile-device-file-picker"
                   />
 
-                  {!optimizedImage ? (
+                  {!selectedFile ? (
                     <label
                       htmlFor="profile-device-file-picker"
                       className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-emerald-300 dark:border-emerald-700/60 hover:border-primary bg-white/80 dark:bg-slate-800/80 rounded-xl cursor-pointer transition-all hover:bg-emerald-50/40 group text-center"
                     >
                       <Upload className="h-6 w-6 text-emerald-600 dark:text-emerald-400 mb-1.5 group-hover:scale-110 transition-transform" />
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        মোবাইল বা কম্পিউটার থেকে ছবি নির্বাচন করুন
+                        মোবাইল বা কম্পিউটার থেকে ছবি নির্বাচন ও ক্রপ করুন
                       </span>
                       <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        JPG, JPEG, PNG বা WebP • সর্বোচ্চ ২ MB
+                        JPG, JPEG, PNG বা WebP • সর্বোচ্চ ২ MB • ক্রপার টুল সহ
                       </span>
                     </label>
                   ) : (
                     <div className="space-y-3 bg-white dark:bg-slate-800 p-3 rounded-xl border border-emerald-200 dark:border-emerald-700/50 shadow-xs">
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <img
-                            src={optimizedImage.previewUrl}
-                            alt="Optimized Preview"
-                            className="w-12 h-12 rounded-lg object-cover border border-emerald-400 shadow-sm shrink-0"
-                          />
+                          {cropImageSrc && (
+                            <img
+                              src={cropImageSrc}
+                              alt="Selected Preview"
+                              className="w-12 h-12 rounded-lg object-cover border border-emerald-400 shadow-sm shrink-0"
+                            />
+                          )}
                           <div className="text-left min-w-0">
                             <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate block">
-                              {optimizedImage.originalName}
+                              {selectedFile.name}
                             </span>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400">
-                              <span>ডাইমেনশন: {optimizedImage.width}×{optimizedImage.height}px</span>
-                              <span>•</span>
-                              <span>আকার: {(optimizedImage.optimizedSize / 1024).toFixed(0)} KB</span>
-                            </div>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                              আকার: {(selectedFile.size / 1024).toFixed(0)} KB
+                            </span>
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={handleClearSelectedImage}
-                          disabled={isUploadingImage}
-                          className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors shrink-0 cursor-pointer"
-                          title="বাতিল করুন"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setIsCropperOpen(true)}
+                            disabled={isUploadingImage}
+                            className="px-2.5 py-1 text-xs font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 rounded-lg transition-colors cursor-pointer"
+                          >
+                            ক্রপার খুলুন
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleClearSelectedImage}
+                            disabled={isUploadingImage}
+                            className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors shrink-0 cursor-pointer"
+                            title="বাতিল করুন"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
-
-                      {/* Upload Progress Bar */}
-                      {isUploadingImage && (
-                        <div className="space-y-1.5 pt-1">
-                          <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                            <span className="flex items-center gap-1.5">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> ক্লাউডে আপলোড হচ্ছে...
-                            </span>
-                            <span>{uploadProgress}%</span>
-                          </div>
-                          <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                            <div
-                              className="bg-emerald-500 h-full rounded-full transition-all duration-200"
-                              style={{ width: `${uploadProgress}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Upload Action Button */}
-                      {!isUploadingImage && (
-                        <button
-                          type="button"
-                          onClick={handleUploadImage}
-                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                          <span>ক্লাউডিনারিতে আপলোড নিশ্চিত করুন</span>
-                        </button>
-                      )}
                     </div>
                   )}
 
@@ -855,6 +901,20 @@ export default function ProfileView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Image Cropper Modal with react-easy-crop */}
+      {cropImageSrc && (
+        <ImageCropperModal
+          isOpen={isCropperOpen}
+          imageSrc={cropImageSrc}
+          fileName={selectedFile?.name || 'profile_picture.jpg'}
+          onClose={handleClearSelectedImage}
+          onCropComplete={handleCropComplete}
+          isUploading={isUploadingImage}
+          uploadProgress={uploadProgress}
+          uploadError={uploadError}
+        />
       )}
 
     </div>
