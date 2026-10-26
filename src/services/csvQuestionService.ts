@@ -1,6 +1,13 @@
 /**
  * CSV Question parser, validator, and template generator for Upcoming Exams.
  * Supports standard RFC 4180 CSV with quotes, newlines, Bengali UTF-8 characters.
+ * Enhanced with:
+ * - Multi-encoding & BOM sanitization (FEFF, EF BB BF, zero-width chars, non-breaking spaces).
+ * - Unicode NFC normalization and Bengali decomposed character handling (য + ় vs য়).
+ * - Smart column alias matching (বিষয়/টপিক, বিষয়, বিষয়, Subject, Topic, etc.).
+ * - Auto-detection of column positions by content if headers have unusual names.
+ * - Excel merged cell inheritance (carrying forward subject across empty merged rows).
+ * - Automatic delimiter sniffing (comma, semicolon, tab).
  */
 
 export interface CsvQuestionRow {
@@ -29,6 +36,8 @@ export interface CsvParseResult {
   invalidCount: number;
   headers: string[];
   fileErrors: string[];
+  detectedSubjectColumn?: string;
+  usedDelimiter?: string;
 }
 
 /**
@@ -46,14 +55,45 @@ export const REQUIRED_CSV_COLUMNS = [
 ];
 
 /**
- * Standard CSV line parser that properly handles quotes, commas inside quotes, escaped quotes, and newlines.
+ * Normalizes text by removing BOMs, zero-width characters, non-breaking spaces,
+ * and canonicalizing Unicode (NFC) with Bengali nukta normalization.
  */
-export function parseCsvText(csvText: string): string[][] {
+export function sanitizeText(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/^[\uFEFF\uFFFE\u00EF\u00BB\u00BF]+/, '')
+    .replace(/[\u200B-\u200D\uFEFF\u00A0\uFFFD\u00EF\u00BB\u00BF]/g, '')
+    .normalize('NFC')
+    // Canonicalize Bengali decomposed nukta: য (U+09AF) + ় (U+09BC) -> য় (U+09DF)
+    .replace(/\u09AF\u09BC/g, '\u09DF')
+    .trim();
+}
+
+/**
+ * Detect delimiter by analyzing the first line (comma, semicolon, tab).
+ */
+export function detectDelimiter(text: string): string {
+  const firstLine = text.split(/\r?\n/)[0] || '';
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semicolonCount = (firstLine.match(/;/g) || []).length;
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+
+  if (semicolonCount > commaCount && semicolonCount > tabCount) return ';';
+  if (tabCount > commaCount && tabCount > semicolonCount) return '\t';
+  return ',';
+}
+
+/**
+ * Standard CSV line parser that properly handles quotes, commas inside quotes,
+ * escaped quotes, delimiters, and newlines.
+ */
+export function parseCsvText(csvText: string, customDelimiter?: string): { rows: string[][]; delimiter: string } {
   // Strip UTF-8 BOM if present
-  let cleanText = csvText;
-  if (cleanText.charCodeAt(0) === 0xFEFF) {
-    cleanText = cleanText.slice(1);
-  }
+  let cleanText = csvText
+    .replace(/^[\uFEFF\uFFFE\u00EF\u00BB\u00BF]+/, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+  const delimiter = customDelimiter || detectDelimiter(cleanText);
 
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -80,20 +120,20 @@ export function parseCsvText(csvText: string): string[][] {
     } else {
       if (char === '"') {
         inQuotes = true;
-      } else if (char === ',') {
-        currentRow.push(currentField);
+      } else if (char === delimiter) {
+        currentRow.push(sanitizeText(currentField));
         currentField = '';
       } else if (char === '\r') {
         // Carriage return: check if next is \n
         if (nextChar === '\n') {
           i++;
         }
-        currentRow.push(currentField);
+        currentRow.push(sanitizeText(currentField));
         rows.push(currentRow);
         currentRow = [];
         currentField = '';
       } else if (char === '\n') {
-        currentRow.push(currentField);
+        currentRow.push(sanitizeText(currentField));
         rows.push(currentRow);
         currentRow = [];
         currentField = '';
@@ -105,11 +145,11 @@ export function parseCsvText(csvText: string): string[][] {
 
   // Push last field & row if anything left
   if (currentField !== '' || currentRow.length > 0) {
-    currentRow.push(currentField);
+    currentRow.push(sanitizeText(currentField));
     rows.push(currentRow);
   }
 
-  return rows;
+  return { rows, delimiter };
 }
 
 /**
@@ -121,7 +161,7 @@ export function parseCsvText(csvText: string): string[][] {
  */
 export function mapCorrectAnswer(input: string): { index: number; letter: string } {
   if (!input) return { index: -1, letter: '' };
-  const trimmed = input.trim();
+  const trimmed = sanitizeText(input);
   const lower = trimmed.toLowerCase();
 
   // English letters
@@ -154,33 +194,33 @@ export function validateQuestionRow(
   existingExamQuestionTexts: string[] = []
 ): { isValid: boolean; errors: string[]; isDuplicateInCsv: boolean; isDuplicateInDb: boolean } {
   const errors: string[] = [];
-  const normalizedQuestion = row.questionText.trim().toLowerCase();
+  const normalizedQuestion = sanitizeText(row.questionText).toLowerCase();
 
-  if (!row.subject.trim()) {
+  if (!sanitizeText(row.subject)) {
     errors.push('বিষয়/টপিক খালি রাখা যাবে না');
   }
 
-  if (!row.questionText.trim()) {
+  if (!sanitizeText(row.questionText)) {
     errors.push('প্রশ্ন বিবরণ খালি রাখা যাবে না');
   }
 
-  if (!row.optionA.trim()) {
+  if (!sanitizeText(row.optionA)) {
     errors.push('Option A খালি রাখা যাবে না');
   }
 
-  if (!row.optionB.trim()) {
+  if (!sanitizeText(row.optionB)) {
     errors.push('Option B খালি রাখা যাবে না');
   }
 
-  if (!row.optionC.trim()) {
+  if (!sanitizeText(row.optionC)) {
     errors.push('Option C খালি রাখা যাবে না');
   }
 
-  if (!row.optionD.trim()) {
+  if (!sanitizeText(row.optionD)) {
     errors.push('Option D খালি রাখা যাবে না');
   }
 
-  if (!row.correctAnswerRaw.trim()) {
+  if (!sanitizeText(row.correctAnswerRaw)) {
     errors.push('সঠিক উত্তর উল্লেখ করা হয়নি');
   } else if (row.correctAnswerIndex < 0 || !row.correctAnswerLetter) {
     errors.push('সঠিক উত্তর শুধুমাত্র A/B/C/D অথবা ক/খ/গ/ঘ হতে হবে');
@@ -188,7 +228,7 @@ export function validateQuestionRow(
 
   // Duplicate in CSV check
   const duplicateCountInCsv = allCsvQuestionTexts.filter(
-    q => q.trim().toLowerCase() === normalizedQuestion && normalizedQuestion.length > 0
+    q => sanitizeText(q).toLowerCase() === normalizedQuestion && normalizedQuestion.length > 0
   ).length;
   const isDuplicateInCsv = duplicateCountInCsv > 1;
   if (isDuplicateInCsv) {
@@ -197,7 +237,7 @@ export function validateQuestionRow(
 
   // Duplicate in Existing Exam check
   const isDuplicateInDb = existingExamQuestionTexts.some(
-    eq => eq.trim().toLowerCase() === normalizedQuestion && normalizedQuestion.length > 0
+    eq => sanitizeText(eq).toLowerCase() === normalizedQuestion && normalizedQuestion.length > 0
   );
   if (isDuplicateInDb) {
     errors.push('এই প্রশ্নটি উক্ত পরীক্ষায় ইতিমধ্যে সংরক্ষিত আছে (Duplicate in Exam)');
@@ -212,14 +252,34 @@ export function validateQuestionRow(
 }
 
 /**
+ * Common known subjects in Bengali job exams to assist position/content-based auto-detection
+ */
+const KNOWN_SUBJECT_KEYWORDS = [
+  'বাংলা', 'ইংরেজি', 'গণিত', 'বাংলাদেশ', 'আন্তর্জাতিক', 'বিজ্ঞান', 'আইসিটি',
+  'ict', 'কম্পিউটার', 'ভূগোল', 'নৈতিকতা', 'সাধারণ জ্ঞান', 'gk', 'math', 'english',
+  'bangla', 'bcs', 'bank', 'primary', 'পৌরনীতি', 'অর্থনীতি', 'ইতিহাস'
+];
+
+/**
+ * Checks if a string looks like a subject name
+ */
+function looksLikeSubject(val: string): boolean {
+  if (!val) return false;
+  const clean = sanitizeText(val).toLowerCase();
+  return KNOWN_SUBJECT_KEYWORDS.some(k => clean.includes(k));
+}
+
+/**
  * Parse uploaded CSV file contents, check headers, and validate rows.
+ * Includes auto-detection for column headers, aliases, and merged cell carryover.
  */
 export function processCsvData(
   csvText: string,
-  existingExamQuestions: { text: string }[] = []
+  existingExamQuestions: { text: string }[] = [],
+  fallbackSubject?: string
 ): CsvParseResult {
   const fileErrors: string[] = [];
-  const rawRows = parseCsvText(csvText);
+  const { rows: rawRows, delimiter } = parseCsvText(csvText);
 
   if (!rawRows || rawRows.length === 0) {
     return {
@@ -229,11 +289,12 @@ export function processCsvData(
       invalidCount: 0,
       headers: [],
       fileErrors: ['CSV ফাইলটি খালি। অনুগ্রহ করে সঠিক CSV ফাইল আপলোড করুন।'],
+      usedDelimiter: delimiter,
     };
   }
 
   // Filter out completely blank lines at the top
-  const firstNonEmptyIndex = rawRows.findIndex(r => r.some(cell => cell.trim().length > 0));
+  const firstNonEmptyIndex = rawRows.findIndex(r => r.some(cell => sanitizeText(cell).length > 0));
   if (firstNonEmptyIndex === -1) {
     return {
       rows: [],
@@ -242,32 +303,178 @@ export function processCsvData(
       invalidCount: 0,
       headers: [],
       fileErrors: ['CSV ফাইলে কোনো ডেটা পাওয়া যায়নি।'],
+      usedDelimiter: delimiter,
     };
   }
 
-  const rawHeaders = rawRows[firstNonEmptyIndex].map(h => h.trim());
+  const rawHeaders = rawRows[firstNonEmptyIndex].map(h => sanitizeText(h));
   const dataRows = rawRows.slice(firstNonEmptyIndex + 1);
 
-  // Validate headers
-  // Clean headers (remove zero-width characters or subtle BOM)
-  const cleanedHeaders = rawHeaders.map(h => h.replace(/[\u200B-\u200D\uFEFF]/g, '').trim());
+  // Clean headers (remove zero-width characters, spaces, punctuation)
+  const cleanedHeaders = rawHeaders.map(h => sanitizeText(h));
+  const strippedHeaders = cleanedHeaders.map(h =>
+    h.toLowerCase().replace(/[\s\/\-_()|,\.:]/g, '')
+  );
 
-  // Check required column matches (flexible normalization for minor whitespace)
-  const findColIndex = (colName: string): number => {
-    return cleanedHeaders.findIndex(
-      h => h.toLowerCase() === colName.toLowerCase() ||
-           h.replace(/\s+/g, '') === colName.replace(/\s+/g, '')
-    );
+  /**
+   * Smart column index finder with broad aliases and regex matching
+   */
+  const findColIndexByAliases = (
+    aliases: string[],
+    regex?: RegExp,
+    excludeRegex?: RegExp
+  ): number => {
+    // 1. Direct exact or stripped match
+    for (const alias of aliases) {
+      const aliasClean = sanitizeText(alias).toLowerCase();
+      const aliasStripped = aliasClean.replace(/[\s\/\-_()|,\.:]/g, '');
+
+      const idx = cleanedHeaders.findIndex((h, i) => {
+        const hClean = h.toLowerCase();
+        const hStripped = strippedHeaders[i];
+        return hClean === aliasClean || hStripped === aliasStripped;
+      });
+      if (idx !== -1) return idx;
+    }
+
+    // 2. Regex fallback
+    if (regex) {
+      const idx = cleanedHeaders.findIndex((h) => {
+        if (excludeRegex && excludeRegex.test(h)) return false;
+        return regex.test(h) || regex.test(sanitizeText(h));
+      });
+      if (idx !== -1) return idx;
+    }
+
+    return -1;
   };
 
-  const subjectCol = findColIndex('বিষয়/টপিক');
-  const questionCol = findColIndex('প্রশ্ন বিবরণ');
-  const optACol = findColIndex('Option A');
-  const optBCol = findColIndex('Option B');
-  const optCCol = findColIndex('Option C');
-  const optDCol = findColIndex('Option D');
-  const ansCol = findColIndex('সঠিক উত্তর');
-  const expCol = findColIndex('ব্যাখ্যা');
+  // SUBJECT column matching
+  let subjectCol = findColIndexByAliases(
+    [
+      'বিষয়/টপিক',
+      'বিষয়/টপিক',
+      'বিষয় / টপিক',
+      'বিষয় / টপিক',
+      'বিষয়টপিক',
+      'বিষয়টপিক',
+      'বিষয়',
+      'বিষয়',
+      'টপিক',
+      'টপিক্স',
+      'বিষয়বস্তু',
+      'বিষয়বস্তু',
+      'বিভাগ',
+      'সাবজেক্ট',
+      'subject/topic',
+      'subject / topic',
+      'subjecttopic',
+      'subject',
+      'topic',
+      'sub',
+    ],
+    /(?:বিষয়|বিষয়|টপিক|subject|topic)/i,
+    /(?:প্রশ্ন|question|বিবরণ)/i // Don't mistakenly match question column
+  );
+
+  // QUESTION column matching
+  const questionCol = findColIndexByAliases(
+    [
+      'প্রশ্ন বিবরণ',
+      'প্রশ্নবিবরণ',
+      'প্রশ্ন',
+      'প্রশ্নসমূহ',
+      'question',
+      'question text',
+      'questiontext',
+      'questions',
+      'qs',
+      'q',
+    ],
+    /(?:প্রশ্ন|question)/i
+  );
+
+  // OPTION A
+  const optACol = findColIndexByAliases(
+    ['option a', 'optiona', 'opt a', 'opta', 'option-a', 'ক', 'অপশন ক', 'অপশন এ', 'choice a'],
+    /(?:option\s*a|opt\s*a|^ক$|^a$)/i
+  );
+
+  // OPTION B
+  const optBCol = findColIndexByAliases(
+    ['option b', 'optionb', 'opt b', 'optb', 'option-b', 'খ', 'অপশন খ', 'অপশন বি', 'choice b'],
+    /(?:option\s*b|opt\s*b|^খ$|^b$)/i
+  );
+
+  // OPTION C
+  const optCCol = findColIndexByAliases(
+    ['option c', 'optionc', 'opt c', 'optc', 'option-c', 'গ', 'অপশন গ', 'অপশন সি', 'choice c'],
+    /(?:option\s*c|opt\s*c|^গ$|^c$)/i
+  );
+
+  // OPTION D
+  const optDCol = findColIndexByAliases(
+    ['option d', 'optiond', 'opt d', 'optd', 'option-d', 'ঘ', 'অপশন ঘ', 'অপশন ডি', 'choice d'],
+    /(?:option\s*d|opt\s*d|^ঘ$|^d$)/i
+  );
+
+  // CORRECT ANSWER
+  const ansCol = findColIndexByAliases(
+    [
+      'সঠিক উত্তর',
+      'সঠিকউত্তর',
+      'উত্তর',
+      'সঠিক',
+      'correct answer',
+      'correctanswer',
+      'answer',
+      'ans',
+      'correct',
+      'correct option',
+      'right answer',
+    ],
+    /(?:সঠিক|উত্তর|answer|ans)/i
+  );
+
+  // EXPLANATION
+  const expCol = findColIndexByAliases(
+    [
+      'ব্যাখ্যা',
+      'উত্তর ব্যাখ্যা',
+      'সমাধান',
+      'ব্যাখ্যা/সমাধান',
+      'explanation',
+      'explain',
+      'solution',
+      'notes',
+      'note',
+    ],
+    /(?:ব্যাখ্যা|সমাধান|explanation|solution)/i
+  );
+
+  // FALLBACK: If Subject Column is still not found by header name:
+  // Check if Column 0 is the Subject column (common in standard 8-column templates where Question is Col 1)
+  if (subjectCol === -1) {
+    if (questionCol === 1 && cleanedHeaders.length >= 7) {
+      subjectCol = 0;
+    } else {
+      // Check first few data rows to see if any column looks like known subjects
+      for (let c = 0; c < cleanedHeaders.length; c++) {
+        if (c === questionCol || c === optACol || c === optBCol || c === optCCol || c === optDCol || c === ansCol || c === expCol) {
+          continue;
+        }
+        const sampleMatches = dataRows.slice(0, 5).filter(r => looksLikeSubject(r[c]));
+        if (sampleMatches.length >= 1) {
+          subjectCol = c;
+          break;
+        }
+      }
+    }
+    // If still -1 and questionCol is found and not at 0, default to column 0
+    if (subjectCol === -1 && questionCol > 0) {
+      subjectCol = 0;
+    }
+  }
 
   const missingColumns: string[] = [];
   if (subjectCol === -1) missingColumns.push('বিষয়/টপিক');
@@ -287,26 +494,39 @@ export function processCsvData(
 
   // Pre-collect all question texts to detect duplicates
   const allQuestionTexts: string[] = [];
-  const existingDbQuestionTexts = existingExamQuestions.map(q => q.text || '');
+  const existingDbQuestionTexts = existingExamQuestions.map(q => sanitizeText(q.text || ''));
 
-  // Step 1: Pre-process non-empty rows
+  // Step 1: Pre-process non-empty rows & handle Excel merged cells carryover
   const parsedRows: Array<Omit<CsvQuestionRow, 'isValid' | 'errors' | 'isDuplicateInCsv' | 'isDuplicateInDb'>> = [];
   let rowSerialCounter = 1;
+  let lastSeenSubject = fallbackSubject || '';
 
   for (let rIdx = 0; rIdx < dataRows.length; rIdx++) {
     const row = dataRows[rIdx];
     // Skip totally empty rows
-    const isRowEmpty = row.every(cell => cell.trim().length === 0);
+    const isRowEmpty = row.every(cell => sanitizeText(cell).length === 0);
     if (isRowEmpty) continue;
 
-    const subject = subjectCol !== -1 && row[subjectCol] !== undefined ? row[subjectCol].trim() : '';
-    const questionText = questionCol !== -1 && row[questionCol] !== undefined ? row[questionCol].trim() : '';
-    const optionA = optACol !== -1 && row[optACol] !== undefined ? row[optACol].trim() : '';
-    const optionB = optBCol !== -1 && row[optBCol] !== undefined ? row[optBCol].trim() : '';
-    const optionC = optCCol !== -1 && row[optCCol] !== undefined ? row[optCCol].trim() : '';
-    const optionD = optDCol !== -1 && row[optDCol] !== undefined ? row[optDCol].trim() : '';
-    const correctAnswerRaw = ansCol !== -1 && row[ansCol] !== undefined ? row[ansCol].trim() : '';
-    const explanation = expCol !== -1 && row[expCol] !== undefined ? row[expCol].trim() : '';
+    let rawSubject = subjectCol !== -1 && row[subjectCol] !== undefined ? sanitizeText(row[subjectCol]) : '';
+
+    // Merge-forward / fill-down logic:
+    // If a user merged cells in Excel, subsequent rows in CSV have an empty cell for subject.
+    // Carry forward the previous row's subject so merged cells work seamlessly!
+    if (!rawSubject && lastSeenSubject) {
+      rawSubject = lastSeenSubject;
+    } else if (rawSubject) {
+      lastSeenSubject = rawSubject;
+    } else if (fallbackSubject) {
+      rawSubject = fallbackSubject;
+    }
+
+    const questionText = questionCol !== -1 && row[questionCol] !== undefined ? sanitizeText(row[questionCol]) : '';
+    const optionA = optACol !== -1 && row[optACol] !== undefined ? sanitizeText(row[optACol]) : '';
+    const optionB = optBCol !== -1 && row[optBCol] !== undefined ? sanitizeText(row[optBCol]) : '';
+    const optionC = optCCol !== -1 && row[optCCol] !== undefined ? sanitizeText(row[optCCol]) : '';
+    const optionD = optDCol !== -1 && row[optDCol] !== undefined ? sanitizeText(row[optDCol]) : '';
+    const correctAnswerRaw = ansCol !== -1 && row[ansCol] !== undefined ? sanitizeText(row[ansCol]) : '';
+    const explanation = expCol !== -1 && row[expCol] !== undefined ? sanitizeText(row[expCol]) : '';
 
     const { index: ansIdx, letter: ansLetter } = mapCorrectAnswer(correctAnswerRaw);
 
@@ -315,7 +535,7 @@ export function processCsvData(
     parsedRows.push({
       id: `csv-row-${rowSerialCounter}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
       serial: rowSerialCounter,
-      subject,
+      subject: rawSubject,
       questionText,
       optionA,
       optionB,
@@ -356,6 +576,8 @@ export function processCsvData(
     invalidCount,
     headers: cleanedHeaders,
     fileErrors,
+    detectedSubjectColumn: subjectCol !== -1 ? cleanedHeaders[subjectCol] : undefined,
+    usedDelimiter: delimiter,
   };
 }
 
@@ -391,6 +613,24 @@ export function revalidateAllRows(
   const invalidCount = updatedRows.length - validCount;
 
   return { rows: updatedRows, validCount, invalidCount };
+}
+
+/**
+ * Bulk set subject for all rows or for rows with empty subjects
+ */
+export function bulkSetSubject(
+  rows: CsvQuestionRow[],
+  newSubject: string,
+  onlyEmpty = false,
+  existingExamQuestions: { text: string }[] = []
+): { rows: CsvQuestionRow[]; validCount: number; invalidCount: number } {
+  const updated = rows.map(r => {
+    if (!onlyEmpty || !r.subject.trim()) {
+      return { ...r, subject: newSubject.trim() };
+    }
+    return r;
+  });
+  return revalidateAllRows(updated, existingExamQuestions);
 }
 
 /**

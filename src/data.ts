@@ -42,6 +42,20 @@ export const SUBJECTS: SubjectStats[] = [
     colorClass: 'from-purple-500/10 to-purple-500/20 text-purple-600 dark:text-purple-400',
   },
   {
+    subject: 'বিজ্ঞান',
+    examsCount: 14,
+    questionsCount: 280,
+    iconName: 'FlaskConical',
+    colorClass: 'from-teal-500/10 to-teal-500/20 text-teal-600 dark:text-teal-400',
+  },
+  {
+    subject: 'ICT',
+    examsCount: 8,
+    questionsCount: 160,
+    iconName: 'Cpu',
+    colorClass: 'from-cyan-500/10 to-cyan-500/20 text-cyan-600 dark:text-cyan-400',
+  },
+  {
     subject: 'BCS',
     examsCount: 35,
     questionsCount: 700,

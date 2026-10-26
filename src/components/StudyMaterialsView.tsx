@@ -110,8 +110,33 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const cat = urlParams.get('category');
+      if (cat) return cat;
+    } catch (e) {}
+    return 'all';
+  });
   const [accessFilter, setAccessFilter] = useState<'all' | 'free' | 'premium'>('all');
+
+  // Sync category when URL query parameter changes
+  useEffect(() => {
+    const handleUrlChange = () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const cat = urlParams.get('category');
+        if (cat) {
+          setSelectedCategory(cat);
+        } else {
+          setSelectedCategory('all');
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
+  }, []);
 
   // Preview Modal State
   const [previewMaterial, setPreviewMaterial] = useState<StudyMaterial | null>(null);

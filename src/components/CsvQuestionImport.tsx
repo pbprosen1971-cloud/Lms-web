@@ -21,6 +21,7 @@ import {
   CsvParseResult,
   processCsvData,
   revalidateAllRows,
+  bulkSetSubject,
   downloadCsvQuestionTemplate,
 } from '../services/csvQuestionService';
 import { saveQuestionsBatchToExamContent } from '../services/firestoreService';
@@ -41,6 +42,7 @@ export const CsvQuestionImport: React.FC<CsvQuestionImportProps> = ({
   const [parseResult, setParseResult] = useState<CsvParseResult | null>(null);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<CsvQuestionRow>>({});
+  const [bulkSubjectValue, setBulkSubjectValue] = useState<string>(selectedExam.subject || 'বাংলা');
   const [importing, setImporting] = useState<boolean>(false);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string>('');
@@ -59,7 +61,7 @@ export const CsvQuestionImport: React.FC<CsvQuestionImportProps> = ({
     reader.onload = (event) => {
       try {
         const text = event.target?.result as string;
-        const result = processCsvData(text, selectedExam.questions || []);
+        const result = processCsvData(text, selectedExam.questions || [], selectedExam.subject);
         setParseResult(result);
         if (result.fileErrors.length > 0) {
           setImportErrorMsg(result.fileErrors[0]);
@@ -139,6 +141,24 @@ export const CsvQuestionImport: React.FC<CsvQuestionImportProps> = ({
   const handleCancelEdit = () => {
     setEditingRowId(null);
     setEditForm({});
+  };
+
+  // Bulk apply subject to all or empty rows
+  const handleApplyBulkSubject = (onlyEmpty = true) => {
+    if (!parseResult || !bulkSubjectValue.trim()) return;
+    const reval = bulkSetSubject(
+      parseResult.rows,
+      bulkSubjectValue.trim(),
+      onlyEmpty,
+      selectedExam.questions || []
+    );
+    setParseResult({
+      ...parseResult,
+      rows: reval.rows,
+      totalCount: reval.rows.length,
+      validCount: reval.validCount,
+      invalidCount: reval.invalidCount,
+    });
   };
 
   // Execute bulk import into existing Firestore structure
@@ -391,6 +411,41 @@ export const CsvQuestionImport: React.FC<CsvQuestionImportProps> = ({
                 <strong>মনোযোগ দিন:</strong> {parseResult.invalidCount}টি প্রশ্নে ভুল বা অসম্পূর্ণ তথ্য রয়েছে (লাল দাগ চিহ্নিত)। 
                 ডানপাশের <strong>✏️ Edit</strong> বাটনে ক্লিক করে তথ্য ঠিক করুন অথবা অপ্রয়োজনীয় হলে <strong>🗑️ Delete</strong> করুন। 
                 সবগুলো সারি Valid হলেই “সবগুলো Import করুন” বাটনটি সক্রিয় হবে।
+              </div>
+            </div>
+          )}
+
+          {/* Quick Subject Auto-Fix Tool if any row is missing a subject */}
+          {parseResult.rows.some((r) => !r.subject.trim()) && (
+            <div className="p-3 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fade-in">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                <span className="font-semibold text-amber-900 dark:text-amber-200">
+                  কিছু প্রশ্নে বিষয়/টপিক খালি রয়েছে। এক ক্লিকে বিষয় নির্ধারণ করুন:
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="text"
+                  value={bulkSubjectValue}
+                  onChange={(e) => setBulkSubjectValue(e.target.value)}
+                  placeholder="যেমন: বাংলা, ইংরেজি, গণিত..."
+                  className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 rounded-lg text-xs font-bold text-slate-800 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleApplyBulkSubject(true)}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-xs transition-colors"
+                >
+                  খালি ঘরগুলোতে দিন
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyBulkSubject(false)}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-xs transition-colors"
+                >
+                  সবগুলোতে দিন
+                </button>
               </div>
             </div>
           )}

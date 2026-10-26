@@ -1370,7 +1370,7 @@ export default function AdminView({
       options: [newQuestOptions[0].trim(), newQuestOptions[1].trim(), newQuestOptions[2].trim(), newQuestOptions[3].trim()],
       correctAnswer: newQuestCorrect,
       subject: newQuestSubject || selectedUpcomingExamForQuestions.subject || 'বাংলা',
-      explanation: newQuestExplanation.trim() || undefined,
+      explanation: newQuestExplanation.trim() || '',
       questionNumber: questionNumber,
     };
 

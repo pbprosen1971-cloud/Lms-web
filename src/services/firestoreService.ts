@@ -45,6 +45,68 @@ import {
 import { INITIAL_EXAMS, INITIAL_MINISTRY_BANKS } from '../data';
 import { detectQuestionSubject } from '../lib/subjectClassifier';
 
+/**
+ * Recursively removes all `undefined` values from an object, array, or nested structure.
+ * This guarantees Firestore `setDoc`, `updateDoc`, and `addDoc` will NEVER fail with
+ * "Unsupported field value: undefined".
+ */
+export function removeUndefinedFields<T>(val: T): T {
+  if (val === null || val === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(val)) {
+    return val
+      .filter((item) => item !== undefined)
+      .map((item) => removeUndefinedFields(item)) as any;
+  }
+  if (typeof val === 'object') {
+    if (val instanceof Date) {
+      return val;
+    }
+    const proto = Object.getPrototypeOf(val);
+    if (proto !== null && proto !== Object.prototype) {
+      // Non-plain object (e.g. FieldValue, DocumentReference, serverTimestamp())
+      return val;
+    }
+    const clean: Record<string, any> = {};
+    for (const [key, value] of Object.entries(val as Record<string, any>)) {
+      if (value !== undefined) {
+        clean[key] = removeUndefinedFields(value);
+      }
+    }
+    return clean as T;
+  }
+  return val;
+}
+
+/**
+ * Normalizes question object so it never contains `undefined` properties
+ * when written as an element in Firestore's `questions` array.
+ */
+export function sanitizeQuestionForFirestore(q: any): Record<string, any> {
+  if (!q || typeof q !== 'object') return {};
+  const options = Array.isArray(q.options)
+    ? q.options.map((o: any) => String(o ?? ''))
+    : [String(q.optionA ?? ''), String(q.optionB ?? ''), String(q.optionC ?? ''), String(q.optionD ?? '')];
+  while (options.length < 4) {
+    options.push('');
+  }
+
+  const cleanQ: Record<string, any> = {
+    id: String(q.id || q.questionId || `q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`),
+    text: String(q.text || q.question || q.questionText || ''),
+    options: options.slice(0, 4),
+    correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
+    subject: String(q.subject || 'সাধারণ'),
+    explanation: String(q.explanation || ''),
+    questionNumber: Number(q.questionNumber || 1),
+  };
+  if (q.category) {
+    cleanQ.category = String(q.category);
+  }
+  return cleanQ;
+}
+
 export interface FirestoreQuestion {
   id: string;
   examId: string;
@@ -97,7 +159,7 @@ export function mapFirestoreDocToQuestion(docSnap: any): Question {
     sub = detectQuestionSubject(qText, options, data.explanation);
   }
 
-  return {
+  const mappedQ: Question = {
     id,
     text: qText,
     options,
@@ -105,8 +167,11 @@ export function mapFirestoreDocToQuestion(docSnap: any): Question {
     explanation: data.explanation || '',
     questionNumber: data.questionNumber || 1,
     subject: sub,
-    category: cat || undefined,
   };
+  if (cat) {
+    mappedQ.category = cat;
+  }
+  return mappedQ;
 }
 
 // ==========================================
@@ -212,7 +277,7 @@ export async function saveUpcomingExamScheduleToFirestore(
 
   try {
     // 1. Write to /exam/{examId}
-    await setDoc(examRef, payload, { merge: true });
+    await setDoc(examRef, removeUndefinedFields(payload), { merge: true });
 
     // 2. Also write to /Exam/{examId} (actual exam container)
     const capitalExamRef = doc(db, 'Exam', targetExamId);
@@ -238,7 +303,7 @@ export async function saveUpcomingExamScheduleToFirestore(
     if (!isExisting) {
       capitalPayload.createdAt = serverTimestamp();
     }
-    await setDoc(capitalExamRef, capitalPayload, { merge: true });
+    await setDoc(capitalExamRef, removeUndefinedFields(capitalPayload), { merge: true });
 
     // 3. Write questions to /Exam/{examId}/questions if provided
     if (examData.questions && examData.questions.length > 0) {
@@ -248,7 +313,7 @@ export async function saveUpcomingExamScheduleToFirestore(
 
     // 4. Backward compatibility: also sync to /exams/{examId}
     const legacyExamRef = doc(db, 'exams', targetExamId);
-    await setDoc(legacyExamRef, {
+    await setDoc(legacyExamRef, removeUndefinedFields({
       id: targetExamId,
       title: examData.title.trim(),
       description: (examData.description || '').trim(),
@@ -270,7 +335,7 @@ export async function saveUpcomingExamScheduleToFirestore(
       archiveDateTime: archiveDateTime || '',
       dateCreated: (examData as any).dateCreated || new Date().toISOString().split('T')[0],
       createdAt: (examData as any).createdAt || serverTimestamp(),
-    }, { merge: true });
+    }), { merge: true });
 
     // 5. Update siteSettings/upcomingExam ONLY IF status is 'upcoming'
     if (status === 'upcoming') {
@@ -679,46 +744,54 @@ export async function updateUpcomingExamInFirestore(
     const examDateTime = rawDateTime !== undefined ? (rawDateTime ? rawDateTime.trim() : '') : undefined;
     const startDate = examDateTime !== undefined ? (examDateTime ? (examDateTime.includes('T') ? examDateTime.split('T')[0] : examDateTime) : '') : (updates.startDate !== undefined ? updates.startDate : undefined);
 
-    const payload: any = {
+    const sanitizedQuestions = updates.questions
+      ? updates.questions.map(q => sanitizeQuestionForFirestore(q))
+      : undefined;
+
+    const payload: any = removeUndefinedFields({
       ...updates,
-      ...(examDateTime !== undefined && { examDateTime, startTime: examDateTime, startDate, examDate: startDate }),
+      ...(sanitizedQuestions !== undefined && { questions: sanitizedQuestions }),
+      ...(examDateTime !== undefined && { examDateTime, startTime: examDateTime, startDate: startDate || '', examDate: startDate || '' }),
       updatedAt: serverTimestamp(),
-    };
+    });
     await setDoc(examRef, payload, { merge: true });
 
     // Also update /Exam/{examId}
     const capitalExamRef = doc(db, 'Exam', examId);
-    const capitalUpdates: any = { updatedAt: serverTimestamp() };
-    if (updates.title) capitalUpdates.title = updates.title;
-    if (updates.description !== undefined) capitalUpdates.description = updates.description;
-    if (updates.examType) capitalUpdates.examType = updates.examType;
-    if (updates.durationMinutes || updates.duration) capitalUpdates.duration = updates.durationMinutes || updates.duration;
-    if (updates.status) capitalUpdates.status = updates.status;
-    if (updates.totalQuestions !== undefined) capitalUpdates.totalQuestions = updates.totalQuestions;
-    if (updates.totalMarks !== undefined) capitalUpdates.totalMarks = updates.totalMarks;
-    if (updates.questions !== undefined) capitalUpdates.questions = updates.questions;
-    if (examDateTime !== undefined) {
-      capitalUpdates.examDateTime = examDateTime;
-      capitalUpdates.startTime = examDateTime;
-      capitalUpdates.startDate = startDate;
-      capitalUpdates.examDate = startDate;
-    }
+    const capitalUpdates: any = removeUndefinedFields({
+      updatedAt: serverTimestamp(),
+      ...(updates.title && { title: updates.title }),
+      ...(updates.description !== undefined && { description: updates.description }),
+      ...(updates.examType && { examType: updates.examType }),
+      ...(updates.durationMinutes || updates.duration ? { duration: updates.durationMinutes || updates.duration } : {}),
+      ...(updates.status && { status: updates.status }),
+      ...(updates.totalQuestions !== undefined && { totalQuestions: updates.totalQuestions }),
+      ...(updates.totalMarks !== undefined && { totalMarks: updates.totalMarks }),
+      ...(sanitizedQuestions !== undefined && { questions: sanitizedQuestions }),
+      ...(examDateTime !== undefined && {
+        examDateTime,
+        startTime: examDateTime,
+        startDate: startDate || '',
+        examDate: startDate || '',
+      }),
+    });
     await setDoc(capitalExamRef, capitalUpdates, { merge: true });
 
     // Also sync /exams/{examId}
     const legacyRef = doc(db, 'exams', examId);
-    await setDoc(legacyRef, {
+    const legacyUpdates: any = removeUndefinedFields({
       ...(updates.title && { title: updates.title }),
       ...(updates.subject && { subject: updates.subject, category: updates.subject }),
       ...(updates.status && { status: updates.status }),
       ...(updates.isPublished !== undefined && { isPublished: updates.isPublished }),
       ...(updates.examType && { isPremium: updates.examType === 'premium' }),
-      ...(examDateTime !== undefined && { startTime: examDateTime, startDate: startDate, examDateTime: examDateTime, examDate: startDate }),
+      ...(examDateTime !== undefined && { startTime: examDateTime, startDate: startDate || '', examDateTime: examDateTime, examDate: startDate || '' }),
       ...(updates.archiveDateTime && { archiveTime: updates.archiveDateTime, archiveDateTime: updates.archiveDateTime }),
       ...(updates.totalQuestions !== undefined && { totalQuestions: updates.totalQuestions }),
       ...(updates.totalMarks !== undefined && { totalMarks: updates.totalMarks }),
-      ...(updates.questions !== undefined && { questions: updates.questions }),
-    }, { merge: true });
+      ...(sanitizedQuestions !== undefined && { questions: sanitizedQuestions }),
+    });
+    await setDoc(legacyRef, legacyUpdates, { merge: true });
 
     // If exam is live or archived, clear upcoming site settings if matching
     if (updates.status === 'live' || updates.status === 'archive' || updates.status === 'completed') {
@@ -838,29 +911,30 @@ export async function syncExamMetadataAndCaches(examId: string): Promise<{ count
     });
     allQuestions.sort((a, b) => (a.questionNumber || 0) - (b.questionNumber || 0));
     const count = allQuestions.length;
+    const sanitizedQuestions = allQuestions.map(q => sanitizeQuestionForFirestore(q));
 
     // 1. Update /Exam/{examId}
-    await setDoc(doc(db, 'Exam', examId), {
+    await setDoc(doc(db, 'Exam', examId), removeUndefinedFields({
       totalQuestions: count,
       totalMarks: count,
-      questions: allQuestions,
+      questions: sanitizedQuestions,
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    }), { merge: true });
 
     // 2. Update /exam/{examId}
-    await setDoc(doc(db, 'exam', examId), {
+    await setDoc(doc(db, 'exam', examId), removeUndefinedFields({
       totalQuestions: count,
       totalMarks: count,
-      questions: allQuestions,
+      questions: sanitizedQuestions,
       updatedAt: serverTimestamp(),
-    }, { merge: true });
+    }), { merge: true });
 
     // 3. Update /exams/{examId} legacy collection
-    await setDoc(doc(db, 'exams', examId), {
+    await setDoc(doc(db, 'exams', examId), removeUndefinedFields({
       totalQuestions: count,
       totalMarks: count,
-      questions: allQuestions,
-    }, { merge: true });
+      questions: sanitizedQuestions,
+    }), { merge: true });
 
     // 4. Update siteSettings/upcomingExam if referencing this exam
     try {
@@ -879,11 +953,11 @@ export async function syncExamMetadataAndCaches(examId: string): Promise<{ count
             return it;
           });
         }
-        await setDoc(siteSettingsRef, {
+        await setDoc(siteSettingsRef, removeUndefinedFields({
           ...(siteData.examId === examId ? { totalQuestions: count, totalMarks: count } : {}),
           ...(itemsUpdated ? { items: newItems } : {}),
           updatedAt: serverTimestamp(),
-        }, { merge: true });
+        }), { merge: true });
       }
     } catch (e) {}
 

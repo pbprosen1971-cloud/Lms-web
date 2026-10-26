@@ -252,6 +252,9 @@ export const QuestionManagementView: React.FC<QuestionManagementViewProps> = ({
 
       const sub = q.subject || 'অনুপস্থিত';
       subjectCounts[sub] = (subjectCounts[sub] || 0) + 1;
+      if (sub !== 'বিজ্ঞান' && (sub.includes('বিজ্ঞান') || sub.toLowerCase().includes('science'))) {
+        subjectCounts['বিজ্ঞান'] = (subjectCounts['বিজ্ঞান'] || 0) + 1;
+      }
 
       const cat = q.category || q.examSubject || 'সাধারণ';
       categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
@@ -281,7 +284,18 @@ export const QuestionManagementView: React.FC<QuestionManagementViewProps> = ({
         if (selectedSubject === 'missing') {
           if (q.subject && q.subject.trim()) return false;
         } else if (q.subject !== selectedSubject) {
-          return false;
+          const qSub = (q.subject || '').trim();
+          if (selectedSubject === 'বিজ্ঞান' && (qSub.includes('বিজ্ঞান') || qSub.toLowerCase().includes('science'))) {
+            // match science variations
+          } else if (selectedSubject === 'বাংলা' && qSub.includes('বাংলা')) {
+            // match bangla variations
+          } else if (selectedSubject === 'ইংরেজি' && (qSub.includes('ইংরেজি') || qSub.toLowerCase().includes('english'))) {
+            // match english variations
+          } else if (selectedSubject === 'গণিত' && (qSub.includes('গণিত') || qSub.toLowerCase().includes('math'))) {
+            // match math variations
+          } else {
+            return false;
+          }
         }
       }
 
@@ -502,6 +516,7 @@ export const QuestionManagementView: React.FC<QuestionManagementViewProps> = ({
       case 'ICT':
         return 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800';
       case 'বিজ্ঞান':
+      case 'সাধারণ বিজ্ঞান':
         return 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800';
       case 'নৈতিকতা মূল্যবোধ ও সুশাসন':
         return 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
@@ -679,6 +694,13 @@ export const QuestionManagementView: React.FC<QuestionManagementViewProps> = ({
                     {sub} ({metrics.subjectCounts[sub] || 0})
                   </option>
                 ))}
+                {Object.keys(metrics.subjectCounts)
+                  .filter((sub) => sub !== 'অনুপস্থিত' && !HOME_SUBJECT_OPTIONS.includes(sub))
+                  .map((sub) => (
+                    <option key={sub} value={sub}>
+                      {sub} ({metrics.subjectCounts[sub] || 0})
+                    </option>
+                  ))}
                 <option value="missing">অনুপস্থিত / ফাঁকা</option>
               </select>
             </div>
@@ -744,7 +766,7 @@ export const QuestionManagementView: React.FC<QuestionManagementViewProps> = ({
           >
             সব ({allQuestions.length})
           </button>
-          {HOME_SUBJECT_OPTIONS.slice(0, 7).map((sub) => {
+          {HOME_SUBJECT_OPTIONS.map((sub) => {
             const count = metrics.subjectCounts[sub] || 0;
             return (
               <button

@@ -3,13 +3,42 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { Moon, Sun, Menu, X, LogOut, User, LayoutDashboard, Settings, Bell, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Moon, 
+  Sun, 
+  Menu, 
+  X, 
+  LogOut, 
+  User, 
+  LayoutDashboard, 
+  Settings, 
+  Bell, 
+  ExternalLink, 
+  ChevronDown,
+  Home,
+  Radio,
+  BookOpen,
+  GraduationCap,
+  Calculator,
+  Gift
+} from 'lucide-react';
 import { UserProfile } from '../types';
 import MedhaLogo from './MedhaLogo';
 import Tooltip from './Tooltip';
 import NotificationModal from './NotificationModal';
 import { subscribeToNotifications } from '../services/notificationService';
+
+export const STUDY_NAV_CATEGORIES = [
+  { id: 'all', label: 'সকল স্টাডি ম্যাটেরিয়াল', badge: 'ALL' },
+  { id: 'Syllabus', label: 'সিলেবাস', badge: 'PDF' },
+  { id: 'Notes', label: 'হ্যান্ড নোট ও সামারি', badge: 'NOTE' },
+  { id: 'Suggestion', label: 'স্পেশাল সাজেশন', badge: 'HOT' },
+  { id: 'Previous Questions', label: 'বিগত সালের প্রশ্ন', badge: 'JOB' },
+  { id: 'Job Preparation', label: 'জব প্রিপারেশন', badge: 'PREP' },
+  { id: 'Admission Preparation', label: 'ভর্তি প্রস্তুতি', badge: 'EDU' },
+  { id: 'Other', label: 'অন্যান্য', badge: 'EXTRA' },
+];
 
 interface NavbarProps {
   currentView: string;
@@ -31,6 +60,10 @@ export default function Navbar({
   const [isOpen, setIsOpen] = useState(false);
   const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
   const [notifCount, setNotifCount] = useState<number>(0);
+  const [isStudyDropdownOpen, setIsStudyDropdownOpen] = useState(false);
+  const [isMobileStudyOpen, setIsMobileStudyOpen] = useState(false);
+  const [hoveredNav, setHoveredNav] = useState<string | null>(null);
+  const dropdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const unsub = subscribeToNotifications((list) => {
@@ -50,23 +83,39 @@ export default function Navbar({
     view: string;
     path: string;
     href: string;
+    icon: React.ComponentType<{ className?: string }>;
     isExternal?: boolean;
   }
 
   const navItems: NavItem[] = [
-    { label: 'হোম', view: 'home', path: '/', href: '/' },
-    { label: 'লাইভ পরিক্ষা', view: 'live-exam', path: '/live-exam', href: '/live-exam' },
-    { label: 'প্রশ্নব্যাংক', view: 'job-questionbank', path: '/job-questionbank', href: '/job-questionbank' },
-    { label: 'স্টাডি ম্যাটেরিয়াল', view: 'study-materials', path: '/study-materials', href: '/study-materials' },
-    { label: 'বয়স ক্যালকুলেটর', view: 'age-calculator', path: '/age-calculator', href: '/age-calculator' },
-    { label: 'রেফারেল', view: 'referral', path: '/referral', href: '/referral' },
-    ...(user ? [{ label: 'ড্যাশবোর্ড', view: 'dashboard', path: '/dashboard', href: '/dashboard' }] : []),
-    ...(isAdminUser ? [{ label: 'এডমিন প্যানেল', view: 'admin', path: '/admin', href: '/admin' }] : []),
+    { label: 'হোম', view: 'home', path: '/', href: '/', icon: Home },
+    { label: 'লাইভ পরিক্ষা', view: 'live-exam', path: '/live-exam', href: '/live-exam', icon: Radio },
+    { label: 'প্রশ্নব্যাংক', view: 'job-questionbank', path: '/job-questionbank', href: '/job-questionbank', icon: BookOpen },
+    { label: 'স্টাডি ম্যাটেরিয়াল', view: 'study-materials', path: '/study-materials', href: '/study-materials', icon: GraduationCap },
+    { label: 'বয়স ক্যালকুলেটর', view: 'age-calculator', path: '/age-calculator', href: '/age-calculator', icon: Calculator },
+    { label: 'রেফারেল', view: 'referral', path: '/referral', href: '/referral', icon: Gift },
+    ...(user ? [{ label: 'ড্যাশবোর্ড', view: 'dashboard', path: '/dashboard', href: '/dashboard', icon: LayoutDashboard }] : []),
+    ...(isAdminUser ? [{ label: 'এডমিন প্যানেল', view: 'admin', path: '/admin', href: '/admin', icon: Settings }] : []),
   ];
 
   const handleNavClick = (view: string) => {
     setView(view);
     setIsOpen(false);
+    setIsStudyDropdownOpen(false);
+    setIsMobileStudyOpen(false);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  };
+
+  const handleCategoryNavClick = (catId: string) => {
+    setIsStudyDropdownOpen(false);
+    setIsMobileStudyOpen(false);
+    setIsOpen(false);
+    const targetPath = catId === 'all' ? '/study-materials' : `/study-materials?category=${encodeURIComponent(catId)}`;
+    window.history.pushState({}, '', targetPath);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    setView('study-materials');
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
@@ -99,10 +148,14 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Desktop Navigation Links */}
-          <div className="hidden md:flex items-center space-x-1 lg:space-x-2">
+          {/* Desktop Navigation Links - Expanding Capsule Pill Bar */}
+          <div className="hidden md:flex items-center p-1 rounded-full bg-slate-100/90 dark:bg-slate-800/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-700/70 shadow-inner space-x-1">
             {navItems.map((item) => {
+              const Icon = item.icon;
               const isActive = currentView === item.view;
+              const isHovered = hoveredNav === item.view;
+              const isExpanded = isActive || isHovered;
+
               if (item.isExternal) {
                 return (
                   <a
@@ -110,64 +163,160 @@ export default function Navbar({
                     href={item.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="relative px-3 py-2 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group flex items-center justify-center text-slate-700 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30"
-                    title="Exam Routine - মেধা এক্সাম অফিশিয়াল ফেসবুক পেজ"
+                    onMouseEnter={() => setHoveredNav(item.view)}
+                    onMouseLeave={() => setHoveredNav(null)}
+                    className={`relative flex items-center h-9 rounded-full text-xs font-semibold transition-all duration-300 ease-out cursor-pointer select-none ${
+                      isHovered
+                        ? 'bg-white dark:bg-slate-700/80 text-primary dark:text-emerald-400 shadow-xs px-3'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-emerald-400 px-2.5'
+                    }`}
+                    title={item.label}
+                    aria-label={item.label}
                   >
-                    <span className="relative z-10 flex items-center gap-1.5 transition-colors duration-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <div
+                      className={`overflow-hidden transition-all duration-300 ease-in-out whitespace-nowrap flex items-center ${
+                        isExpanded
+                          ? 'max-w-[140px] opacity-100 ml-1.5'
+                          : 'max-w-0 opacity-0 ml-0'
+                      }`}
+                    >
                       <span>{item.label}</span>
-                      <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100 transition-opacity" />
-                    </span>
-                    <span
-                      className="absolute bottom-0.5 left-2.5 right-2.5 h-[2px] rounded-full transition-all duration-300 ease-out bg-emerald-500 scale-x-0 group-hover:scale-x-100 opacity-0 group-hover:opacity-100 origin-center"
-                      aria-hidden="true"
-                    />
+                      <ExternalLink className="h-3 w-3 ml-1 opacity-70 shrink-0" />
+                    </div>
                   </a>
                 );
               }
+
+              if (item.view === 'study-materials') {
+                return (
+                  <div
+                    key={item.view}
+                    className="relative"
+                    onMouseEnter={() => {
+                      if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
+                      setHoveredNav(item.view);
+                      setIsStudyDropdownOpen(true);
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredNav(null);
+                      dropdownTimerRef.current = setTimeout(() => {
+                        setIsStudyDropdownOpen(false);
+                      }, 200);
+                    }}
+                  >
+                    <a
+                      href={item.path}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleNavClick(item.view);
+                        setIsStudyDropdownOpen((prev) => !prev);
+                      }}
+                      className={`relative flex items-center h-9 rounded-full text-xs font-semibold transition-all duration-300 ease-out cursor-pointer select-none ${
+                        isActive
+                          ? 'bg-primary text-white shadow-sm shadow-primary/30 px-3.5 font-bold'
+                          : isHovered
+                          ? 'bg-white dark:bg-slate-700/80 text-primary dark:text-emerald-400 shadow-xs px-3'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-emerald-400 px-2.5'
+                      }`}
+                      aria-haspopup="true"
+                      aria-expanded={isStudyDropdownOpen}
+                      title={item.label}
+                      aria-label={item.label}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <div
+                        className={`overflow-hidden transition-all duration-300 ease-in-out whitespace-nowrap flex items-center ${
+                          isExpanded
+                            ? 'max-w-[160px] opacity-100 ml-1.5'
+                            : 'max-w-0 opacity-0 ml-0'
+                        }`}
+                      >
+                        <span>{item.label}</span>
+                        <ChevronDown
+                          className={`h-3.5 w-3.5 ml-1 transition-transform duration-300 ease-in-out shrink-0 ${
+                            isStudyDropdownOpen
+                              ? 'rotate-180 text-current'
+                              : 'rotate-0 text-current opacity-70'
+                          }`}
+                        />
+                      </div>
+                    </a>
+
+                    {/* Smooth Dropdown Box */}
+                    {isStudyDropdownOpen && (
+                      <div
+                        className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 rounded-2xl p-1.5 shadow-2xl z-50 animate-fade-in origin-top space-y-0.5"
+                        onMouseEnter={() => {
+                          if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current);
+                          setHoveredNav(item.view);
+                          setIsStudyDropdownOpen(true);
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredNav(null);
+                          dropdownTimerRef.current = setTimeout(() => {
+                            setIsStudyDropdownOpen(false);
+                          }, 200);
+                        }}
+                      >
+                        <div className="px-3 py-1.5 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 mb-1">
+                          ক্যাটাগরি অনুযায়ী দেখুন
+                        </div>
+
+                        {STUDY_NAV_CATEGORIES.map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => handleCategoryNavClick(cat.id)}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/40 transition-all flex items-center justify-between group/cat cursor-pointer"
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600 group-hover/cat:bg-emerald-500 transition-colors" />
+                              <span>{cat.label}</span>
+                            </span>
+                            {cat.badge && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover/cat:bg-emerald-100 dark:group-hover/cat:bg-emerald-900/50 group-hover/cat:text-emerald-700 dark:group-hover/cat:text-emerald-300 transition-colors">
+                                {cat.badge}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <a
                   key={item.view}
                   href={item.path}
+                  onMouseEnter={() => setHoveredNav(item.view)}
+                  onMouseLeave={() => setHoveredNav(null)}
                   onClick={(e) => {
                     e.preventDefault();
                     handleNavClick(item.view);
                   }}
-                  className={`relative px-3.5 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer group flex items-center justify-center ${
+                  className={`relative flex items-center h-9 rounded-full text-xs font-semibold transition-all duration-300 ease-out cursor-pointer select-none ${
                     isActive
-                      ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-400 font-semibold shadow-xs shadow-primary/10'
-                      : 'text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-emerald-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+                      ? 'bg-primary text-white shadow-sm shadow-primary/30 px-3.5 font-bold'
+                      : isHovered
+                      ? 'bg-white dark:bg-slate-700/80 text-primary dark:text-emerald-400 shadow-xs px-3'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-emerald-400 px-2.5'
                   }`}
+                  title={item.label}
+                  aria-label={item.label}
                 >
-                  {/* Span 1: Navigation Text with conditional active color */}
-                  <span
-                    className={`relative z-10 transition-colors duration-200 ${
-                      isActive
-                        ? 'text-primary dark:text-emerald-400 font-bold'
-                        : 'group-hover:text-primary dark:group-hover:text-emerald-400'
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <div
+                    className={`overflow-hidden transition-all duration-300 ease-in-out whitespace-nowrap ${
+                      isExpanded
+                        ? 'max-w-[140px] opacity-100 ml-1.5'
+                        : 'max-w-0 opacity-0 ml-0'
                     }`}
                   >
-                    {item.label}
-                  </span>
-
-                  {/* Span 2: Subtle bottom underline transition */}
-                  <span
-                    className={`absolute bottom-0.5 left-2.5 right-2.5 h-[2.5px] rounded-full transition-all duration-300 ease-out ${
-                      isActive
-                        ? 'bg-gradient-to-r from-emerald-500 via-primary to-teal-500 dark:from-emerald-400 dark:via-emerald-300 dark:to-teal-400 scale-x-100 opacity-100 shadow-sm shadow-emerald-500/40'
-                        : 'bg-primary/50 dark:bg-emerald-400/50 scale-x-0 group-hover:scale-x-100 opacity-0 group-hover:opacity-75 origin-center'
-                    }`}
-                    aria-hidden="true"
-                  />
-
-                  {/* Span 3: Distinct active indicator badge/pill beneath active link */}
-                  <span
-                    className={`absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 rounded-full transition-all duration-300 ease-out ${
-                      isActive
-                        ? 'w-3 bg-gradient-to-r from-emerald-500 to-teal-500 dark:from-emerald-400 dark:to-teal-300 shadow-md shadow-emerald-500/60 opacity-100 scale-100'
-                        : 'w-0 bg-transparent opacity-0 scale-50'
-                    }`}
-                    aria-hidden="true"
-                  />
+                    <span>{item.label}</span>
+                  </div>
                 </a>
               );
             })}
@@ -406,6 +555,52 @@ export default function Navbar({
                   </a>
                 );
               }
+              if (item.view === 'study-materials') {
+                return (
+                  <div key={item.view} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <a
+                        href={item.path}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleNavClick(item.view);
+                        }}
+                        className={`flex-1 text-left px-3.5 py-2.5 rounded-xl text-base font-medium cursor-pointer transition-all duration-200 ${
+                          isActive
+                            ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-emerald-400 font-bold border-l-4 border-primary dark:border-emerald-400 pl-3'
+                            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className={isActive ? 'text-primary dark:text-emerald-400 font-bold' : ''}>{item.label}</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setIsMobileStudyOpen((prev) => !prev)}
+                        className="p-2.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 rounded-xl"
+                        aria-label="ক্যাটাগরি সমূহ"
+                      >
+                        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isMobileStudyOpen ? 'rotate-180 text-primary' : 'rotate-0'}`} />
+                      </button>
+                    </div>
+                    {isMobileStudyOpen && (
+                      <div className="pl-5 pr-2 py-1 space-y-1 border-l-2 border-emerald-500/20 ml-4">
+                        {STUDY_NAV_CATEGORIES.map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => handleCategoryNavClick(cat.id)}
+                            className="w-full text-left py-1.5 px-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-primary rounded-lg transition-colors flex items-center justify-between"
+                          >
+                            <span>{cat.label}</span>
+                            <span className="text-[9px] text-slate-400 dark:text-slate-500">{cat.badge}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <a
                   key={item.view}

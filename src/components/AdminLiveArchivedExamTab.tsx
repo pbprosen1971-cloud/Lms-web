@@ -166,7 +166,24 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
 
   // Unique Subjects for filtering
   const subjectsList = useMemo(() => {
-    const subs = new Set<string>();
+    const baseKnown = [
+      'BCS',
+      'Bank',
+      '11th - 20th Grade Job',
+      'NTRCA - নিবন্ধন',
+      'Primary',
+      'বাংলা',
+      'ইংরেজি',
+      'গণিত',
+      'বাংলাদেশ বিষয়াবলি -GK',
+      'আন্তর্জাতিক সাধারন জ্ঞান',
+      'ICT',
+      'বিজ্ঞান',
+      'বাংলা ব্যাকরণ',
+      'নৈতিকতা মূল্যবোধ ও সুশাসন',
+      'ভূগোল',
+    ];
+    const subs = new Set<string>(baseKnown);
     exams.forEach(e => {
       if (e.subject) subs.add(e.subject);
     });
