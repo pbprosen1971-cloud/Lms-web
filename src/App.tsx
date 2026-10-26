@@ -1107,8 +1107,8 @@ export default function App() {
 
   // Dynamic SEO metadata synchronization on view/route change
   useEffect(() => {
-    applySEO(currentView || location.pathname);
-  }, [currentView, location.pathname]);
+    applySEO(currentView);
+  }, [currentView]);
 
   const setView = (nextView: string) => {
     setCurrentView(nextView);

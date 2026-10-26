@@ -47,17 +47,6 @@ const CATEGORIES = [
   { id: 'Suggestion', label: 'স্পেশাল সাজেশন' },
   { id: 'Job Preparation', label: 'জব প্রিপারেশন' },
   { id: 'Admission Preparation', label: 'ভর্তি প্রস্তুতি' },
-  { id: 'Bangla', label: 'বাংলা' },
-  { id: 'English', label: 'ইংরেজি' },
-  { id: 'Mathematics', label: 'গণিত' },
-  { id: 'Bangladesh Affairs', label: 'বাংলাদেশ বিষয়াবলি' },
-  { id: 'International Affairs', label: 'আন্তর্জাতিক বিষয়াবলি' },
-  { id: 'General Science', label: 'সাধারণ বিজ্ঞান' },
-  { id: 'Computer', label: 'কম্পিউটার ও আইসিটি' },
-  { id: 'Mental Ability', label: 'মানসিক দক্ষতা' },
-  { id: 'Geography', label: 'ভূগোল ও পরিবেশ' },
-  { id: 'Ethics & Values', label: 'নৈতিকতা ও সুশাসন' },
-  { id: 'Model Test', label: 'মডেল টেস্ট সমাধান' },
   { id: 'Other', label: 'অন্যান্য' },
 ];
 
@@ -79,39 +68,13 @@ const DEFAULT_STUDY_MATERIALS: StudyMaterial[] = [
     id: 'mat_math_shortcuts',
     title: 'বিসিএস ও সরকারি চাকরি গণিত শর্টকাট টেকনিক ও পূর্ণাঙ্গ হ্যান্ডনোট',
     description: 'পাটিগণিত, বীজগণিত ও জ্যামিতির জটিল অঙ্কগুলো সহজে ১০-১৫ সেকেন্ডে সমাধানের প্রয়োজনীয় সূত্রাবলী ও ব্যাখ্যা।',
-    category: 'Mathematics',
+    category: 'Notes',
     driveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view',
     driveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
     accessType: 'free',
     status: 'published',
     displayOrder: 2,
     createdAt: '2026-09-09T14:30:00.000Z',
-    createdBy: 'admin',
-  },
-  {
-    id: 'mat_bangla_literature',
-    title: 'বাংলা ব্যাকরণ ও সাহিত্য স্পেশাল রিভিশন শিট (প্রাচীন, মধ্য ও আধুনিক যুগ)',
-    description: 'চর্যাপদ, মঙ্গলকাব্য থেকে শুরু করে আধুনিক যুগের গুরুত্বপূর্ণ সাহিত্যিকদের প্রধান গ্রন্থ, চরিত্র ও গুরুত্বপূর্ণ উক্তি।',
-    category: 'Bangla',
-    driveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view',
-    driveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
-    accessType: 'free',
-    status: 'published',
-    displayOrder: 3,
-    createdAt: '2026-09-12T08:00:00.000Z',
-    createdBy: 'admin',
-  },
-  {
-    id: 'mat_english_grammar',
-    title: 'English Grammar Rules, Vocabulary, Idioms & Prepositions Master Sheet',
-    description: 'Most frequently repeated English questions in BCS, Bank and Ministry competitive exams with detailed explanations.',
-    category: 'English',
-    driveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view',
-    driveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
-    accessType: 'free',
-    status: 'published',
-    displayOrder: 4,
-    createdAt: '2026-09-13T11:00:00.000Z',
     createdBy: 'admin',
   },
   {
@@ -123,7 +86,7 @@ const DEFAULT_STUDY_MATERIALS: StudyMaterial[] = [
     driveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
     accessType: 'premium',
     status: 'published',
-    displayOrder: 5,
+    displayOrder: 3,
     createdAt: '2026-09-11T04:00:00.000Z',
     createdBy: 'admin',
   },
@@ -136,34 +99,8 @@ const DEFAULT_STUDY_MATERIALS: StudyMaterial[] = [
     driveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
     accessType: 'premium',
     status: 'published',
-    displayOrder: 6,
+    displayOrder: 4,
     createdAt: '2026-09-08T09:15:00.000Z',
-    createdBy: 'admin',
-  },
-  {
-    id: 'mat_bangladesh_affairs',
-    title: 'বাংলাদেশ বিষয়াবলি: সংবিধান, মুক্তিযুদ্ধ, প্রাচীন ইতিহাস ও অর্থনৈতিক সমীক্ষা',
-    description: 'বাংলাদেশের সংবিধানের গুরুত্বপূর্ণ অনুচ্ছেদ, ৭ই মার্চের ভাষণ, মুক্তিযুদ্ধের সেক্টর কমান্ডার ও মেগা প্রজেক্ট সংক্রান্ত স্পেশাল হ্যান্ডনোট।',
-    category: 'Bangladesh Affairs',
-    driveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view',
-    driveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
-    accessType: 'free',
-    status: 'published',
-    displayOrder: 7,
-    createdAt: '2026-09-14T05:00:00.000Z',
-    createdBy: 'admin',
-  },
-  {
-    id: 'mat_computer_ict',
-    title: 'কম্পিউটার ও তথ্যপ্রযুক্তি পূর্ণাঙ্গ সংক্ষিপ্ত হ্যান্ডনোট ও বিগত প্রশ্নাবলী',
-    description: 'অপারেটিং সিস্টেম, ক্লাউড কম্পিউটিং, ডাটাবেজ, নেটওয়ার্কিং ও সাইবার সিকিউরিটি সংক্রান্ত শীর্ষ প্রশ্ন ও সংক্ষিপ্ত উত্তর।',
-    category: 'Computer',
-    driveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/view',
-    driveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
-    accessType: 'free',
-    status: 'published',
-    displayOrder: 8,
-    createdAt: '2026-09-15T07:30:00.000Z',
     createdBy: 'admin',
   },
 ];
@@ -173,14 +110,7 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(() => {
-    try {
-      const p = new URLSearchParams(window.location.search);
-      return p.get('category') || p.get('cat') || 'all';
-    } catch {
-      return 'all';
-    }
-  });
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [accessFilter, setAccessFilter] = useState<'all' | 'free' | 'premium'>('all');
 
   // Preview Modal State
@@ -220,72 +150,12 @@ export default function StudyMaterialsView({ user, setView }: StudyMaterialsView
     return () => unsub();
   }, []);
 
-  // Listen for category updates from Navbar dropdown and browser back/forward
-  useEffect(() => {
-    const syncFromUrl = () => {
-      try {
-        const p = new URLSearchParams(window.location.search);
-        const cat = p.get('category') || p.get('cat') || 'all';
-        setSelectedCategory(cat);
-      } catch {}
-    };
-
-    window.addEventListener('popstate', syncFromUrl);
-    window.addEventListener('study_material_category_change', syncFromUrl);
-    syncFromUrl();
-
-    return () => {
-      window.removeEventListener('popstate', syncFromUrl);
-      window.removeEventListener('study_material_category_change', syncFromUrl);
-    };
-  }, []);
-
-  const handleSelectCategory = (catId: string) => {
-    setSelectedCategory(catId);
-    try {
-      const url = new URL(window.location.href);
-      if (catId && catId !== 'all') {
-        url.searchParams.set('category', catId);
-      } else {
-        url.searchParams.delete('category');
-        url.searchParams.delete('cat');
-      }
-      window.history.replaceState({}, '', url.pathname + url.search);
-    } catch {}
-  };
-
   // Filtered materials
   const filteredMaterials = useMemo(() => {
     return materials.filter((m) => {
       // Category filter
-      if (selectedCategory && selectedCategory !== 'all') {
-        const catKey = selectedCategory.toLowerCase().trim();
-        const mCat = (m.category || '').toLowerCase().trim();
-        const mTitle = (m.title || '').toLowerCase().trim();
-        const mDesc = (m.description || '').toLowerCase().trim();
-
-        // Exact category check
-        const matchCat = mCat === catKey;
-        // Textual matches (handles Bangla, English, Mathematics, etc.)
-        const matchText = mTitle.includes(catKey) || mDesc.includes(catKey);
-
-        // Subject aliases
-        const isBangla = (catKey === 'bangla' || catKey === 'বাংলা') && (mCat.includes('bangla') || mCat.includes('বাংলা') || mTitle.includes('বাংলা') || mDesc.includes('বাংলা'));
-        const isEnglish = (catKey === 'english' || catKey === 'ইংরেজি') && (mCat.includes('english') || mCat.includes('ইংরেজি') || mTitle.includes('ইংরেজি') || mTitle.includes('english'));
-        const isMath = (catKey === 'mathematics' || catKey === 'math' || catKey === 'গণিত') && (mCat.includes('math') || mCat.includes('গণিত') || mTitle.includes('গণিত') || mDesc.includes('গণিত'));
-        const isBD = (catKey.includes('bangladesh') || catKey.includes('বাংলাদেশ')) && (mCat.includes('বাংলাদেশ') || mTitle.includes('বাংলাদেশ') || mDesc.includes('বাংলাদেশ'));
-        const isIntl = (catKey.includes('international') || catKey.includes('আন্তর্জাতিক')) && (mCat.includes('আন্তর্জাতিক') || mTitle.includes('আন্তর্জাতিক') || mDesc.includes('আন্তর্জাতিক'));
-        const isScience = (catKey.includes('science') || catKey.includes('বিজ্ঞান')) && (mCat.includes('বিজ্ঞান') || mTitle.includes('বিজ্ঞান') || mDesc.includes('বিজ্ঞান'));
-        const isComputer = (catKey.includes('computer') || catKey.includes('ict') || catKey.includes('কম্পিউটার')) && (mCat.includes('কম্পিউটার') || mTitle.includes('কম্পিউটার') || mTitle.includes('ict') || mDesc.includes('কম্পিউটার'));
-        const isMental = (catKey.includes('mental') || catKey.includes('মানসিক')) && (mCat.includes('মানসিক') || mTitle.includes('মানসিক') || mDesc.includes('মানসিক'));
-        const isGeo = (catKey.includes('geography') || catKey.includes('ভূগোল')) && (mCat.includes('ভূগোল') || mTitle.includes('ভূগোল') || mDesc.includes('ভূগোল'));
-        const isEthics = (catKey.includes('ethics') || catKey.includes('নৈতিকতা')) && (mCat.includes('নৈতিকতা') || mTitle.includes('নৈতিকতা') || mDesc.includes('নৈতিকতা'));
-        const isModel = (catKey.includes('model') || catKey.includes('মডেল')) && (mCat.includes('model') || mTitle.includes('মডেল') || mDesc.includes('মডেল'));
-        const isPrev = (catKey.includes('previous') || catKey.includes('বিগত')) && (mCat.includes('previous') || mCat.includes('বিগত') || mTitle.includes('বিগত'));
-
-        if (!matchCat && !matchText && !isBangla && !isEnglish && !isMath && !isBD && !isIntl && !isScience && !isComputer && !isMental && !isGeo && !isEthics && !isModel && !isPrev) {
-          return false;
-        }
+      if (selectedCategory !== 'all' && m.category !== selectedCategory) {
+        return false;
       }
       // Access filter
       if (accessFilter !== 'all' && m.accessType !== accessFilter) {
