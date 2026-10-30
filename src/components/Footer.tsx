@@ -274,10 +274,25 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
             <h3 className="text-white font-semibold text-sm tracking-wider uppercase mb-4">গুরুত্বপূর্ণ লিঙ্ক</h3>
             <ul className="space-y-2.5 text-sm">
               <li>
-                <button onClick={() => setView('home')} className="hover:text-primary transition-colors duration-200">হোম পেজ</button>
+                <a href="/" onClick={(e) => { e.preventDefault(); setView('home'); }} className="hover:text-primary transition-colors duration-200 block">হোম পেজ</a>
               </li>
               <li>
-                <button onClick={() => setView('job-result')} className="hover:text-emerald-400 text-emerald-300 font-semibold transition-colors duration-200">🏆 চাকরি পরীক্ষার ফলাফল</button>
+                <a href="/all-job-result" onClick={(e) => { e.preventDefault(); setView('job-result'); }} className="hover:text-emerald-400 text-emerald-300 font-semibold transition-colors duration-200 block">🏆 চাকরি পরীক্ষার ফলাফল</a>
+              </li>
+              <li>
+                <a href="/study-materials" onClick={(e) => { e.preventDefault(); setView('study-materials'); }} className="hover:text-primary transition-colors duration-200 block">📚 স্টাডি ম্যাটেরিয়ালস</a>
+              </li>
+              <li>
+                <a href="/live-exam" onClick={(e) => { e.preventDefault(); setView('live-exam'); }} className="hover:text-primary transition-colors duration-200 block">🎯 লাইভ মডেল টেস্ট</a>
+              </li>
+              <li>
+                <a href="/job-questionbank" onClick={(e) => { e.preventDefault(); setView('job-questionbank'); }} className="hover:text-primary transition-colors duration-200 block">📖 জব প্রশ্নব্যাংক</a>
+              </li>
+              <li>
+                <a href="/age-calculator" onClick={(e) => { e.preventDefault(); setView('age-calculator'); }} className="hover:text-primary transition-colors duration-200 block">⏱️ চাকরির বয়স ক্যালকুলেটর</a>
+              </li>
+              <li>
+                <a href="/daily-practice" onClick={(e) => { e.preventDefault(); setView('daily-practice'); }} className="hover:text-primary transition-colors duration-200 block">📝 দৈনিক প্র্যাকটিস</a>
               </li>
               <li>
                 <a
@@ -292,31 +307,22 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
                 </a>
               </li>
               <li>
-                <button onClick={() => setView('study-materials')} className="hover:text-primary transition-colors duration-200">📚 স্টাডি ম্যাটেরিয়াল</button>
+                <button onClick={() => setView('dashboard')} className="hover:text-primary transition-colors duration-200 text-left">স্টুডেন্ট ড্যাশবোর্ড</button>
               </li>
               <li>
-                <button onClick={() => setView('dashboard')} className="hover:text-primary transition-colors duration-200">স্টুডেন্ট ড্যাশবোর্ড</button>
+                <button onClick={() => setView('referral')} className="hover:text-amber-400 text-amber-400/90 font-medium transition-colors duration-200 text-left">🎁 রেফারেল প্রোগ্রাম</button>
               </li>
               <li>
-                <button onClick={() => setView('referral')} className="hover:text-amber-400 text-amber-400/90 font-medium transition-colors duration-200">🎁 রেফারেল প্রোগ্রাম</button>
+                <a href="/faq" onClick={(e) => { e.preventDefault(); setView('faq'); }} className="hover:text-emerald-400 text-slate-300 font-medium transition-colors duration-200 block">❓ সাধারণ প্রশ্নোত্তর (FAQ)</a>
               </li>
               <li>
-                <button onClick={() => setView('profile')} className="hover:text-primary transition-colors duration-200">প্রোফাইল সেটিংস</button>
+                <a href="/privacy-policy" onClick={(e) => { e.preventDefault(); setView('privacy-policy'); }} className="hover:text-primary transition-colors duration-200 block">🔒 Privacy Policy</a>
               </li>
               <li>
-                <button onClick={() => setView('login')} className="hover:text-primary transition-colors duration-200">লগইন / রেজিস্টার</button>
+                <a href="/terms-and-conditions" onClick={(e) => { e.preventDefault(); setView('terms-and-conditions'); }} className="hover:text-primary transition-colors duration-200 block">📜 Terms &amp; Conditions</a>
               </li>
               <li>
-                <button onClick={() => setView('faq')} className="hover:text-emerald-400 text-slate-300 font-medium transition-colors duration-200">❓ সাধারণ প্রশ্নোত্তর (FAQ)</button>
-              </li>
-              <li>
-                <button onClick={() => setView('privacy-policy')} className="hover:text-primary transition-colors duration-200">🔒 Privacy Policy</button>
-              </li>
-              <li>
-                <button onClick={() => setView('terms-and-conditions')} className="hover:text-primary transition-colors duration-200">📜 Terms &amp; Conditions</button>
-              </li>
-              <li>
-                <button onClick={() => setView('delete-account')} className="hover:text-rose-400 transition-colors duration-200">🗑️ Delete Account</button>
+                <a href="/delete-account" onClick={(e) => { e.preventDefault(); setView('delete-account'); }} className="hover:text-rose-400 transition-colors duration-200 block">🗑️ Delete Account</a>
               </li>
             </ul>
           </div>

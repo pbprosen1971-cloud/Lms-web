@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 
@@ -1322,8 +1323,38 @@ async function startServer() {
     }
   });
 
+  // Explicit XML and TXT handlers for Search Engine Crawlers
+  app.get("/sitemap.xml", (_req, res) => {
+    const sitemapPath = path.join(process.cwd(), "public", "sitemap.xml");
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(sitemapPath);
+  });
+
+  app.get("/robots.txt", (_req, res) => {
+    const robotsPath = path.join(process.cwd(), "public", "robots.txt");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(robotsPath);
+  });
+
   // Serve public assets directory statically
   app.use(express.static(path.join(process.cwd(), "public")));
+
+  // In production, serve dedicated pre-rendered SEO static pages if available
+  const SEO_STATIC_ROUTES = [
+    '/all-job-result',
+    '/study-materials',
+    '/live-exam',
+    '/job-questionbank',
+    '/age-calculator',
+    '/daily-practice',
+    '/faq',
+    '/terms-and-conditions',
+    '/privacy-policy'
+  ];
+
+  const distPath = path.join(process.cwd(), "dist");
 
   // Vite middleware for development vs static build for production
   if (process.env.NODE_ENV !== "production") {
@@ -1333,7 +1364,17 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    // Explicit route check for pre-rendered static HTML
+    SEO_STATIC_ROUTES.forEach((r) => {
+      app.get(r, (_req, res, next) => {
+        const staticFile = path.join(distPath, r.replace(/^\//, ''), "index.html");
+        if (fs.existsSync(staticFile)) {
+          return res.sendFile(staticFile);
+        }
+        next();
+      });
+    });
+
     app.use(express.static(distPath));
     app.get("*", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
