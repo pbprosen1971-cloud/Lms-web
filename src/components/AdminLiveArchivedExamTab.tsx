@@ -335,7 +335,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
     setIsProcessing(true);
     setErrorMsg('');
     try {
-      await deleteExamPermanently(deleteModalExam.id);
+      await deleteExamPermanently(deleteModalExam.id, deleteModalExam.title);
       if (onDeleteExam) {
         onDeleteExam(deleteModalExam.id);
       }

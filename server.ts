@@ -55,6 +55,85 @@ async function startServer() {
   });
 
   // ==========================================
+  // JOB EXAMINATION RESULT SECURE VERIFICATION
+  // ==========================================
+  app.post("/api/check-job-result", async (req, res) => {
+    try {
+      const { resultId, rollNumber } = req.body;
+      if (!resultId || !rollNumber) {
+        return res.status(400).json({
+          success: false,
+          qualified: false,
+          message: "পরীক্ষার আইডি এবং রোল নম্বর প্রদান করা আবশ্যক।"
+        });
+      }
+
+      // Normalize roll number: convert Bengali digits to standard, preserve leading zeros
+      const BN_DIGITS: Record<string, string> = {
+        '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+        '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
+      };
+      let cleanRoll = String(rollNumber).trim().replace(/[০-৯]/g, m => BN_DIGITS[m] || m);
+      cleanRoll = cleanRoll.replace(/^["']+|["']+$/g, '').trim();
+
+      const apiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyA605aHyfXbYo2j667FyNte__41yrAPSgw";
+      const projectId = process.env.VITE_FIREBASE_PROJECT_ID || "medha-exam";
+      const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/jobresult/${encodeURIComponent(resultId)}?key=${apiKey}`;
+
+      const fRes = await fetch(firestoreUrl);
+      if (!fRes.ok) {
+        return res.status(404).json({
+          success: false,
+          qualified: false,
+          message: "ফলাফল খুঁজে পাওয়া যায়নি।"
+        });
+      }
+
+      const docJson = await fRes.json();
+      const fields = docJson.fields || {};
+
+      const status = fields.status?.stringValue || "";
+      if (status !== "published") {
+        return res.status(403).json({
+          success: false,
+          qualified: false,
+          message: "এই পরীক্ষার ফলাফল এখনও প্রকাশিত হয়নি।"
+        });
+      }
+
+      const examTitle = fields.examTitle?.stringValue || "চাকরি পরীক্ষা";
+      const examDate = fields.examDate?.stringValue || "";
+
+      // Extract rollNumbers array from Firestore REST representation
+      const rollValues = fields.rollNumbers?.arrayValue?.values || [];
+      const rollsSet = new Set<string>();
+      for (const val of rollValues) {
+        const rStr = val.stringValue ?? val.integerValue;
+        if (rStr !== undefined && rStr !== null) {
+          rollsSet.add(String(rStr).trim());
+        }
+      }
+
+      const isQualified = rollsSet.has(cleanRoll);
+
+      return res.json({
+        success: true,
+        qualified: isQualified,
+        examTitle,
+        examDate,
+        searchedRoll: cleanRoll,
+      });
+    } catch (err: any) {
+      console.warn("Error in /api/check-job-result:", err?.message || err);
+      return res.status(500).json({
+        success: false,
+        qualified: false,
+        message: "সার্ভারে ফলাফল যাচাই করতে ত্রুটি হয়েছে।"
+      });
+    }
+  });
+
+  // ==========================================
   // CLOUDINARY SECURE SIGNED UPLOAD ENDPOINT
   // ==========================================
   app.post("/api/cloudinary-sign", async (req, res) => {

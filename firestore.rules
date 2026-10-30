@@ -117,6 +117,16 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // Job Examination Results Collection (চাকরি পরীক্ষার ফলাফল)
+    match /jobresult/{resultId} {
+      allow read: if true;
+      allow write: if true;
+
+      match /rolls/{rollNumber} {
+        allow read, write: if true;
+      }
+    }
+
     // Default catch-all rule: Deny all unmatched collections
     match /{document=**} {
       allow read, write: if false;

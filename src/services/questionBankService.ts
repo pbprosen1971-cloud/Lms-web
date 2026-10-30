@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { MinistryQuestionBank, MinistryBankQuestion } from '../types';
+import { recordDeletedMinistryBankInRegistry } from './firestoreService';
 
 export interface QuestionBankItem {
   id: string;
@@ -1035,21 +1036,29 @@ export async function saveMinistryQuestionBankBundle(
 
 /**
  * Deletes a MinistryQuestionBank completely from Firestore /ministryQuestionBanks/{bankId}
- * and purges it from localStorage.
+ * and purges it from localStorage and the Firestore deletion registry.
  */
-export async function deleteMinistryQuestionBankFromFirestore(bankId: string): Promise<void> {
+export async function deleteMinistryQuestionBankFromFirestore(bankId: string, bankTitle?: string): Promise<void> {
+  const cleanId = (bankId || '').trim();
+  const cleanTitle = (bankTitle || '').trim();
   try {
-    await deleteDoc(doc(db, 'ministryQuestionBanks', bankId));
+    if (cleanId) {
+      await deleteDoc(doc(db, 'ministryQuestionBanks', cleanId));
+    }
   } catch (err) {
     console.warn('Failed to delete from Firestore /ministryQuestionBanks:', err);
-    throw err;
   }
+
+  // Record in Firestore Deletion Registry so it never re-seeds or reappears
+  try {
+    await recordDeletedMinistryBankInRegistry(cleanId, cleanTitle);
+  } catch (e) {}
 
   try {
     const raw = localStorage.getItem('ministry_question_banks');
     if (raw) {
       const list: MinistryQuestionBank[] = JSON.parse(raw);
-      const filtered = list.filter((b) => b.id !== bankId);
+      const filtered = list.filter((b) => b.id !== cleanId && (!cleanTitle || b.title !== cleanTitle));
       localStorage.setItem('ministry_question_banks', JSON.stringify(filtered));
     }
   } catch (e) {

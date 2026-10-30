@@ -44,6 +44,7 @@ import {
   Filter,
   Bell,
   Zap,
+  Award,
 } from 'lucide-react';
 import {
   Exam,
@@ -109,6 +110,7 @@ import { CsvQuestionImport } from './CsvQuestionImport';
 import AdminCsvDiagnosticsTab from './AdminCsvDiagnosticsTab';
 import QuestionManagementView from './QuestionManagementView';
 import { AdminQuestionBankView } from './AdminQuestionBankView';
+import AdminJobResultManagement from './AdminJobResultManagement';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -173,7 +175,7 @@ export default function AdminView({
   upcomingExamSettings,
   onSaveUpcomingExamSettings,
 }: AdminViewProps) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'question_management' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications' | 'csv_diagnostics'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'question_management' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications' | 'csv_diagnostics' | 'job_results'>('analytics');
 
   // Ministry Question Bank Admin Form State
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
@@ -1638,6 +1640,7 @@ export default function AdminView({
         institution: stud.institution || '',
         examsCount: studentExams.length || stud.examsCount || 0,
         joinedDate: stud.createdAt ? formatBanglaDateTime(stud.createdAt) : (stud.joinedDate || stud.joined || ''),
+        rawCreatedAt: stud.createdAt || (stud as any).rawCreatedAt || (stud as any).dateCreated || '',
         isPremium: isPrem,
         isPremiumDate: stud.isPremiumDate || '',
         isPremiumExpiryDate: stud.isPremiumExpiryDate || '',
@@ -1654,19 +1657,136 @@ export default function AdminView({
     requirePhone: true,
   });
 
+  // User list sorting options: 'recent' (default: recently joined first), 'name_asc' (English A-Z then Bengali script), 'oldest' (oldest first)
+  const [userSortOption, setUserSortOption] = useState<'recent' | 'name_asc' | 'oldest'>('recent');
+
+  // Extract first alphabetical character for name sorting
+  const getFirstAlphabeticalChar = (str: string): string => {
+    const clean = str.trim().replace(/^[^a-zA-Z\u0980-\u09FF]+/, '');
+    return clean.charAt(0);
+  };
+
+  const isEnglishLetter = (ch: string): boolean => {
+    return /^[a-zA-Z]$/.test(ch);
+  };
+
+  const isBengaliLetter = (ch: string): boolean => {
+    return /^[\u0980-\u09FF]$/.test(ch);
+  };
+
+  // Helper to extract timestamp in ms for student sorting
+  const getUserTimestamp = (stud: any): number => {
+    if (!stud) return 0;
+    const candidates = [
+      stud.rawCreatedAt,
+      stud.createdAt,
+      stud.dateCreated,
+      stud.joinedAt,
+      stud.lastLogin,
+      stud.joinedDate,
+    ];
+
+    for (const c of candidates) {
+      if (!c) continue;
+      if (typeof c === 'number' && c > 0) {
+        return c > 100000000000 ? c : c * 1000;
+      }
+      if (typeof c === 'string') {
+        const parsed = new Date(c).getTime();
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+        // Convert Bengali digits if present
+        let raw = c.trim();
+        for (const [bn, en] of Object.entries(bnDigits)) {
+          raw = raw.split(bn).join(en);
+        }
+        const parsedBn = new Date(raw).getTime();
+        if (!isNaN(parsedBn) && parsedBn > 0) return parsedBn;
+      }
+      if (typeof c === 'object' && c) {
+        if (typeof c.toDate === 'function') {
+          try { return c.toDate().getTime(); } catch {}
+        }
+        if ('seconds' in c && typeof c.seconds === 'number') {
+          return c.seconds * 1000;
+        }
+      }
+    }
+
+    const idStr = String(stud.uid || stud.id || '');
+    const match = idStr.match(/\d{10,13}/);
+    if (match) {
+      const num = parseInt(match[0], 10);
+      if (!isNaN(num) && num > 1000000000) {
+        return num > 100000000000 ? num : num * 1000;
+      }
+    }
+    return 0;
+  };
+
   const filteredStudents = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return students;
-    return students.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.institution.toLowerCase().includes(q) ||
-        s.email.toLowerCase().includes(q) ||
-        (s.phone && s.phone.includes(q)) ||
-        (s.uid && s.uid.toLowerCase().includes(q)) ||
-        (s.id && s.id.toLowerCase().includes(q))
-    );
-  }, [students, searchQuery]);
+    let list = students;
+    if (q) {
+      list = list.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.institution.toLowerCase().includes(q) ||
+          s.email.toLowerCase().includes(q) ||
+          (s.phone && s.phone.includes(q)) ||
+          (s.uid && s.uid.toLowerCase().includes(q)) ||
+          (s.id && s.id.toLowerCase().includes(q))
+      );
+    }
+
+    return [...list].sort((a, b) => {
+      // 1. Sort by name: English names (A-Z) first, then Bengali names in Bengali script order
+      if (userSortOption === 'name_asc') {
+        const nameA = String(a.name || a.fullName || a.email || '').trim();
+        const nameB = String(b.name || b.fullName || b.email || '').trim();
+
+        const letterA = getFirstAlphabeticalChar(nameA);
+        const letterB = getFirstAlphabeticalChar(nameB);
+
+        const isEngA = isEnglishLetter(letterA);
+        const isEngB = isEnglishLetter(letterB);
+
+        // English alphabet order first
+        if (isEngA && !isEngB) return -1;
+        if (!isEngA && isEngB) return 1;
+
+        if (isEngA && isEngB) {
+          return nameA.localeCompare(nameB, 'en', { sensitivity: 'base', numeric: true });
+        }
+
+        const isBnA = isBengaliLetter(letterA);
+        const isBnB = isBengaliLetter(letterB);
+
+        // Bengali alphabet order next
+        if (isBnA && !isBnB) return -1;
+        if (!isBnA && isBnB) return 1;
+
+        if (isBnA && isBnB) {
+          return nameA.localeCompare(nameB, 'bn', { sensitivity: 'base', numeric: true });
+        }
+
+        return nameA.localeCompare(nameB, undefined, { sensitivity: 'base', numeric: true });
+      }
+
+      // 2. Sort by oldest first
+      if (userSortOption === 'oldest') {
+        const timeA = getUserTimestamp(a);
+        const timeB = getUserTimestamp(b);
+        if (timeA !== timeB) return timeA - timeB;
+        return String(a.id || '').localeCompare(String(b.id || ''));
+      }
+
+      // 3. Default: Recently joined first (date/time descending - newest on top)
+      const timeA = getUserTimestamp(a);
+      const timeB = getUserTimestamp(b);
+      if (timeB !== timeA) return timeB - timeA;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }, [students, searchQuery, userSortOption]);
 
   // Handle deleting a student
   const handleDeleteStudent = async (id: string, email: string) => {
@@ -1975,6 +2095,17 @@ export default function AdminView({
           </button>
 
           <button
+            onClick={() => { setActiveTab('job_results'); setSearchQuery(''); }}
+            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+              activeTab === 'job_results'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/25'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
+            }`}
+          >
+            <Award className="h-4.5 w-4.5 text-amber-400" /> চাকরি পরীক্ষা ফলাফল ম্যানেজমেন্ট
+          </button>
+
+          <button
             onClick={() => { setActiveTab('questions'); setSearchQuery(''); }}
             className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between gap-2.5 transition-all ${
               activeTab === 'questions'
@@ -2166,6 +2297,28 @@ export default function AdminView({
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-3">
+                  {/* Sorting Filter Selector */}
+                  <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs shadow-xs">
+                    <Filter className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="text-slate-500 dark:text-slate-400 font-semibold shrink-0">ফিল্টার/সাজান:</span>
+                    <select
+                      value={userSortOption}
+                      onChange={(e) => setUserSortOption(e.target.value as 'recent' | 'name_asc' | 'oldest')}
+                      className="bg-transparent text-slate-800 dark:text-slate-200 font-bold focus:outline-none cursor-pointer text-xs"
+                      aria-label="ইউজার তালিকা ফিল্টার ও সাজানো"
+                    >
+                      <option value="recent" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                        তারিখ/সময় (সম্প্রতি যুক্ত আগে)
+                      </option>
+                      <option value="name_asc" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                        নাম ফিল্টার (ইংরেজী A-Z, নিচে বাংলা)
+                      </option>
+                      <option value="oldest" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                        তারিখ/সময় (পুরাতন আগে)
+                      </option>
+                    </select>
+                  </div>
+
                   <button
                     onClick={handleRepairCorruptedNames}
                     disabled={repairingNames}
@@ -2192,6 +2345,32 @@ export default function AdminView({
                 </div>
               </div>
 
+              {/* Active Filter & Order Indicator */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs bg-slate-50/80 dark:bg-slate-900/60 px-3.5 py-2.5 rounded-xl border border-slate-200/70 dark:border-slate-700/60">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-slate-500 dark:text-slate-400 font-medium">সাজানোর নিয়ম:</span>
+                  {userSortOption === 'recent' ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
+                      <Clock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>সম্প্রতি যুক্ত ইউজার উপরে (তারিখ/সময় অনুযায়ী)</span>
+                    </span>
+                  ) : userSortOption === 'name_asc' ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800">
+                      <span className="font-mono text-xs font-black">A-Z/বাংলা</span>
+                      <span>ইংরেজী বর্ণ অনুসারে আগে, বাংলা নাম নিচে বাংলা বর্ণ অনুসারে</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800">
+                      <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      <span>পুরাতন ইউজার আগে</span>
+                    </span>
+                  )}
+                </div>
+                <div className="text-slate-500 dark:text-slate-400 font-medium">
+                  তালিকায় শিক্ষার্থী: <strong className="text-slate-800 dark:text-slate-200 font-bold">{filteredStudents.length}</strong> জন
+                </div>
+              </div>
+
               {repairCount !== null && (
                 <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 text-xs font-semibold rounded-xl flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
@@ -2205,7 +2384,20 @@ export default function AdminView({
                   <thead>
                     <tr className="bg-slate-100/80 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold">
                       <th className="p-3 font-mono text-xs">UID / আইডি</th>
-                      <th className="p-3">শিক্ষার্থীর নাম</th>
+                      <th
+                        className="p-3 cursor-pointer hover:text-primary transition-colors select-none"
+                        onClick={() => setUserSortOption(prev => prev === 'name_asc' ? 'recent' : 'name_asc')}
+                        title="ক্লিক করে নাম ফিল্টার (ইংরেজী A-Z, নিচে বাংলা বর্ণ) পরিবর্তন করুন"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>শিক্ষার্থীর নাম</span>
+                          {userSortOption === 'name_asc' ? (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-primary text-white rounded font-mono font-bold">A-Z/বাংলা ▼</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 hover:text-primary">⇅</span>
+                          )}
+                        </div>
+                      </th>
                       <th className="p-3">শিক্ষা প্রতিষ্ঠান</th>
                       <th className="p-3">ইমেইল</th>
                       <th className="p-3">ফোন নম্বর</th>
@@ -2233,22 +2425,30 @@ export default function AdminView({
                               {stud.uid || stud.id}
                             </span>
                           </td>
-                          <td className="p-3 font-semibold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
-                            <span>{stud.name}</span>
-                            {stud.role === 'admin' ? (
-                              <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-700 dark:text-purple-300 font-extrabold text-[10px] rounded-md border border-purple-500/20">
-                                এডমিন
-                              </span>
-                            ) : (
-                              <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] rounded-md border border-emerald-500/20">
-                                শিক্ষার্থী
-                              </span>
-                            )}
-                            {stud.isPremium && (
-                              <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-700 dark:text-amber-300 font-extrabold text-[10px] rounded-md border border-amber-500/20 flex items-center gap-1">
-                                <Crown className="h-3 w-3 fill-current" />
-                                প্রিমিয়াম
-                              </span>
+                          <td className="p-3 font-semibold text-slate-900 dark:text-white">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span>{stud.name}</span>
+                              {stud.role === 'admin' ? (
+                                <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-700 dark:text-purple-300 font-extrabold text-[10px] rounded-md border border-purple-500/20">
+                                  এডমিন
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] rounded-md border border-emerald-500/20">
+                                  শিক্ষার্থী
+                                </span>
+                              )}
+                              {stud.isPremium && (
+                                <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-700 dark:text-amber-300 font-extrabold text-[10px] rounded-md border border-amber-500/20 flex items-center gap-1">
+                                  <Crown className="h-3 w-3 fill-current" />
+                                  প্রিমিয়াম
+                                </span>
+                              )}
+                            </div>
+                            {stud.joinedDate && (
+                              <div className="text-[10px] text-slate-600 dark:text-slate-300 font-normal flex items-center gap-1 mt-0.5">
+                                <Clock className="h-2.5 w-2.5 text-slate-500 shrink-0" />
+                                <span>যুক্ত: {stud.joinedDate}</span>
+                              </div>
                             )}
                           </td>
                           <td className="p-3 text-slate-700 dark:text-slate-300">
@@ -2723,6 +2923,14 @@ export default function AdminView({
                 )}
               </div>
             </div>
+          )}
+
+          {/* TAB: JOB RESULTS MANAGEMENT (চাকরি পরীক্ষা ফলাফল ম্যানেজমেন্ট) */}
+          {activeTab === 'job_results' && (
+            <AdminJobResultManagement
+              currentUserEmail={currentUser?.email}
+              onViewPublicPage={() => setView('job-result')}
+            />
           )}
 
           {/* TAB 4: CREATE EXAM FORM */}

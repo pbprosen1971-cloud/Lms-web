@@ -416,5 +416,42 @@ export interface BroadcastNotification {
   createdAt: string;
 }
 
+// ==========================================
+// JOB EXAMINATION RESULTS (চাকরি পরীক্ষার ফলাফল)
+// ==========================================
+export interface JobExamResult {
+  id: string;
+  examTitle: string;
+  examDate: string; // e.g. '2026-10-25'
+  rollNumbers: string[]; // List of qualified roll numbers
+  totalQualified: number;
+  status: 'published' | 'unpublished';
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  createdBy?: string;
+  notes?: string;
+}
+
+export interface JobExamResultSummary {
+  id: string;
+  examTitle: string;
+  examDate: string;
+  totalQualified: number;
+  status: 'published' | 'unpublished';
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+}
+
+export interface JobResultCheckResponse {
+  success: boolean;
+  qualified: boolean;
+  examTitle: string;
+  examDate: string;
+  searchedRoll: string;
+  message?: string;
+}
+
 
 

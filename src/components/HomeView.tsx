@@ -52,7 +52,7 @@ import { motion } from 'motion/react';
 import { SUBJECTS, MOCK_REVIEWS, MOCK_LEADERBOARD, INITIAL_STATS, INITIAL_MINISTRY_BANKS } from '../data';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { subscribeToUpcomingExamSettings } from '../services/firestoreService';
+import { subscribeToUpcomingExamSettings, KNOWN_PURGED_MINISTRY_IDS } from '../services/firestoreService';
 import { formatSafeDisplay, formatBengaliDateTimeSafe, toBengaliDigits, isScheduledLiveTimeReached } from '../lib/dateUtils';
 import heroExamPrepBg from '../assets/images/hero_exam_prep_1786609165056.jpg';
 import DailyChallengeWidget from './DailyChallengeWidget';
@@ -223,7 +223,7 @@ export default function HomeView({
 
   const publishedMinistryBanks = useMemo(() => {
     const raw = Array.isArray(ministryBanks) ? ministryBanks : INITIAL_MINISTRY_BANKS;
-    return raw.filter(b => b.isPublished !== false);
+    return raw.filter(b => b.isPublished !== false && !KNOWN_PURGED_MINISTRY_IDS.includes(b.id));
   }, [ministryBanks]);
 
   const existingMinistryFilters = useMemo(() => {
@@ -303,10 +303,11 @@ export default function HomeView({
   // Live Exam Share state
   const [sharingExam, setSharingExam] = useState<Exam | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [highlightedExamId, setHighlightedExamId] = useState<string | null>(null);
 
   const getExamShareUrl = (exam: Exam): string => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${origin}/?examId=${encodeURIComponent(exam.id)}`;
+    return `${origin}/?examId=${encodeURIComponent(exam.id)}#live-exam-${encodeURIComponent(exam.id)}`;
   };
 
   const handleShareLiveExam = async (exam: Exam, e?: React.MouseEvent) => {
@@ -982,6 +983,67 @@ export default function HomeView({
     return liveExams.length + unifiedUpcomingExams.length;
   }, [liveExams.length, unifiedUpcomingExams.length]);
 
+  // Auto-scroll to specific shared exam when entering via ?examId=... or #live-exam-...
+  useEffect(() => {
+    if (isLoadingExams) return;
+
+    // Detect target exam ID from search params (?examId=... or ?exam=...) or hash
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryExamId = searchParams.get('examId') || searchParams.get('exam');
+    let hashExamId = '';
+    if (window.location.hash) {
+      hashExamId = window.location.hash
+        .replace(/^#live-exam-/, '')
+        .replace(/^#upcoming-exam-/, '')
+        .replace(/^#/, '');
+    }
+
+    const targetExamId = (queryExamId || hashExamId)?.trim();
+    if (!targetExamId) return;
+
+    // If an active subject filter would hide this exam, clear filter to ensure visibility
+    if (selectedSubject) {
+      const isVisibleInFiltered = liveExams.some(e => e.id === targetExamId) || 
+                                  unifiedUpcomingExams.some(e => e.id === targetExamId);
+      if (!isVisibleInFiltered) {
+        setSelectedSubject(null);
+      }
+    }
+    if (searchQuery) {
+      setSearchQuery('');
+    }
+
+    let attempts = 0;
+    const maxAttempts = 30; // Retry up to 4.5 seconds to accommodate Firestore snapshot load and DOM mounting
+
+    const tryScrollToExam = () => {
+      attempts++;
+      const el = document.getElementById(`live-exam-${targetExamId}`) ||
+                 document.getElementById(`upcoming-exam-${targetExamId}`) ||
+                 document.getElementById(targetExamId) ||
+                 document.querySelector(`[data-exam-id="${targetExamId}"]`);
+
+      if (el) {
+        setHighlightedExamId(targetExamId);
+
+        // Smoothly scroll the page so the target exam card is centered in the viewport
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Auto-dismiss the highlight ring after 6 seconds
+        const timer = setTimeout(() => {
+          setHighlightedExamId(prev => (prev === targetExamId ? null : prev));
+        }, 6000);
+
+        return () => clearTimeout(timer);
+      } else if (attempts < maxAttempts) {
+        setTimeout(tryScrollToExam, 150);
+      }
+    };
+
+    const initialTimer = setTimeout(tryScrollToExam, 150);
+    return () => clearTimeout(initialTimer);
+  }, [exams, isLoadingExams, liveExams.length, unifiedUpcomingExams.length]);
+
   const handleStartExam = (exam: Exam) => {
     if (exam.isPremium && (!user || !user.isPremium)) {
       if (!user) {
@@ -1403,6 +1465,7 @@ export default function HomeView({
                   <motion.div
                     key={exam.id}
                     id={`live-exam-${exam.id}`}
+                    data-exam-id={exam.id}
                     initial={{ opacity: 0, y: 22 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-30px" }}
@@ -1411,8 +1474,23 @@ export default function HomeView({
                       delay: Math.min(index * 0.08, 0.32),
                       ease: [0.16, 1, 0.3, 1]
                     }}
-                    className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary/40 dark:hover:border-primary/40 transition-all duration-300 flex flex-col justify-between scroll-mt-28"
+                    className={`bg-white dark:bg-slate-900 border rounded-2xl overflow-hidden transition-all duration-300 flex flex-col justify-between scroll-mt-28 ${
+                      highlightedExamId === exam.id
+                        ? 'border-primary ring-4 ring-primary ring-offset-4 ring-offset-white dark:ring-offset-slate-900 shadow-2xl scale-[1.02] z-10'
+                        : 'border-slate-200/90 dark:border-slate-800 hover:shadow-xl hover:border-primary/40 dark:hover:border-primary/40'
+                    }`}
                   >
+                    {highlightedExamId === exam.id && (
+                      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white text-xs font-bold px-4 py-2 flex items-center justify-between shadow-sm animate-pulse">
+                        <span className="flex items-center gap-1.5">
+                          <Sparkles className="h-4 w-4" />
+                          <span>শেয়ারকৃত নির্দিষ্ট লাইভ পরীক্ষা</span>
+                        </span>
+                        <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold">
+                          সরাসরি লিংক
+                        </span>
+                      </div>
+                    )}
                     {/* Exam Status Badge & Subject */}
                     <div className="p-6 pb-4 space-y-3 flex-grow animate-fade-in-up">
                       <div className="flex items-center justify-between gap-2">
@@ -1544,8 +1622,25 @@ export default function HomeView({
                     {upcomingList.map((item, idx) => (
                       <div
                         key={`upcoming-item-${item.id}-${idx}`}
-                        className="p-4 bg-amber-50/80 dark:bg-slate-800/80 border border-amber-200/90 dark:border-amber-500/30 rounded-2xl space-y-3 relative overflow-hidden transition-all duration-200 hover:border-amber-500/50 hover:shadow-md"
+                        id={`live-exam-${item.id}`}
+                        data-exam-id={item.id}
+                        className={`p-4 rounded-2xl space-y-3 relative overflow-hidden transition-all duration-300 scroll-mt-28 ${
+                          highlightedExamId === item.id
+                            ? 'bg-amber-100/90 dark:bg-slate-800 border-2 border-amber-500 ring-4 ring-amber-400 ring-offset-2 shadow-xl scale-[1.02] z-10'
+                            : 'bg-amber-50/80 dark:bg-slate-800/80 border border-amber-200/90 dark:border-amber-500/30 hover:border-amber-500/50 hover:shadow-md'
+                        }`}
                       >
+                        {highlightedExamId === item.id && (
+                          <div className="bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 text-white text-xs font-bold px-3 py-1.5 -mt-4 -mx-4 mb-2 flex items-center justify-between shadow-sm animate-pulse">
+                            <span className="flex items-center gap-1.5">
+                              <Sparkles className="h-3.5 w-3.5" />
+                              <span>শেয়ারকৃত নির্দিষ্ট আসন্ন পরীক্ষা</span>
+                            </span>
+                            <span className="text-[10px] bg-white/25 px-2 py-0.5 rounded uppercase font-bold">
+                              আসন্ন
+                            </span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between gap-1.5 flex-wrap">
                           <span className="text-[10px] font-extrabold text-amber-900 dark:text-amber-300 bg-amber-100/90 dark:bg-amber-950/80 px-2 py-0.5 rounded-lg border border-amber-300/80 dark:border-amber-800">
                             {item.subject || 'BCS'}

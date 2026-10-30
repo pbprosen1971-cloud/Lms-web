@@ -19,6 +19,7 @@ import StudyMaterialsView from './components/StudyMaterialsView';
 import AgeCalculatorView from './components/AgeCalculatorView';
 import DailyPracticeView from './components/DailyPracticeView';
 import WrongQuestionView from './components/WrongQuestionView';
+import JobExaminationResultsView from './components/JobExaminationResultsView';
 import SubmissionSuccessAnimation from './components/SubmissionSuccessAnimation';
 import PrivacyPolicyView from './components/PrivacyPolicyView';
 import TermsAndConditionsView from './components/TermsAndConditionsView';
@@ -37,6 +38,7 @@ import {
   subscribeToExams,
   saveExamToFirestore,
   deleteExamFromFirestore,
+  deleteExamPermanently,
   deleteUpcomingExamFromFirestore,
   deleteUpcomingExamFromSiteSettings,
   saveResultToFirestore,
@@ -47,6 +49,9 @@ import {
   safeTimestampToString,
   safeDateOnlyString,
   generateReferralCode,
+  KNOWN_PURGED_EXAM_IDS,
+  KNOWN_PURGED_MINISTRY_IDS,
+  subscribeToDeletionRegistry,
 } from './services/firestoreService';
 import { isScheduledLiveTimeReached } from './lib/dateUtils';
 import {
@@ -56,7 +61,7 @@ import {
   startFirestoreRealtimeSheetsSync
 } from './services/googleSheetsService';
 import { isGoogleConnected } from './lib/googleAuth';
-import { saveMinistryQuestionBankToFirestore } from './services/questionBankService';
+import { saveMinistryQuestionBankToFirestore, deleteMinistryQuestionBankFromFirestore } from './services/questionBankService';
 
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, deleteDoc, getDocFromServer, onSnapshot, collection } from 'firebase/firestore';
@@ -93,6 +98,7 @@ const pathToView = (pathname: string): string => {
   const p = pathname.toLowerCase().replace(/\/$/, '') || '/';
   if (p === '/live-exam' || p === '/live-exams' || p === '/liveexam') return 'live-exam';
   if (p === '/job-questionbank' || p === '/questionbank' || p === '/question-bank' || p === '/jobquestionbank') return 'job-questionbank';
+  if (p === '/all-job-result' || p === '/all-job-results' || p === '/job-result' || p === '/job-results' || p === '/alljobresult') return 'job-result';
   if (p === '/registration' || p === '/register') return 'register';
   if (p === '/login') return 'login';
   if (p === '/exam') return 'exam';
@@ -118,6 +124,8 @@ const viewToPath = (view: string): string => {
       return '/live-exam';
     case 'job-questionbank':
       return '/job-questionbank';
+    case 'job-result':
+      return '/all-job-result';
     case 'register':
       return '/registration';
     case 'login':
@@ -556,22 +564,17 @@ export default function App() {
     };
 
     const unsubscribeExams = subscribeToExams((firestoreExams) => {
-      let deletedIds: string[] = [];
+      let deletedIds: string[] = [...KNOWN_PURGED_EXAM_IDS];
       try {
-        deletedIds = JSON.parse(localStorage.getItem('deleted_exam_ids') || '[]');
+        const local = JSON.parse(localStorage.getItem('deleted_exam_ids') || '[]');
+        if (Array.isArray(local)) {
+          deletedIds = Array.from(new Set([...deletedIds, ...local]));
+        }
       } catch (e) {}
       const activeFirestoreExams = firestoreExams.filter(e =>
         !deletedIds.includes(e.id) && (!e.title || !deletedIds.includes(e.title.trim().toLowerCase()))
       );
-      if (activeFirestoreExams.length > 0) {
-        setExams(activeFirestoreExams.map(normalizeExamSubject));
-      } else {
-        console.log("Seeding initial exams into Firestore database...");
-        INITIAL_EXAMS.forEach((exam) => {
-          saveExamToFirestore(exam, 'system-admin').catch(console.warn);
-        });
-        setExams(INITIAL_EXAMS.map(normalizeExamSubject));
-      }
+      setExams(activeFirestoreExams.map(normalizeExamSubject));
       setIsExamsLoading(false);
     });
 
@@ -657,46 +660,31 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Load or initialize Ministry Question Banks from localStorage initially
+    // 1. Initial filtered load from localStorage
     const savedBanks = localStorage.getItem('ministry_question_banks');
     if (savedBanks) {
       try {
-        setMinistryBanks(JSON.parse(savedBanks));
-      } catch (e) {
-        setMinistryBanks(INITIAL_MINISTRY_BANKS);
-      }
-    } else {
-      setMinistryBanks(INITIAL_MINISTRY_BANKS);
-      localStorage.setItem('ministry_question_banks', JSON.stringify(INITIAL_MINISTRY_BANKS));
+        const parsed = JSON.parse(savedBanks);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter(b => !KNOWN_PURGED_MINISTRY_IDS.includes(b.id));
+          setMinistryBanks(filtered);
+        }
+      } catch (e) {}
     }
 
-    // Subscribe to Firestore /ministryQuestionBanks in real-time
+    // 2. Subscribe to Firestore /ministryQuestionBanks in real-time
     const unsubMinistry = onSnapshot(collection(db, 'ministryQuestionBanks'), (snapshot) => {
       const firestoreBanks: MinistryQuestionBank[] = [];
       snapshot.forEach((docSnap) => {
-        firestoreBanks.push({ id: docSnap.id, ...docSnap.data() } as MinistryQuestionBank);
+        const bId = docSnap.id;
+        if (!KNOWN_PURGED_MINISTRY_IDS.includes(bId)) {
+          firestoreBanks.push({ id: bId, ...docSnap.data() } as MinistryQuestionBank);
+        }
       });
 
-      if (!snapshot.empty) {
-        setMinistryBanks(firestoreBanks);
-        localStorage.setItem('ministry_question_banks', JSON.stringify(firestoreBanks));
-        localStorage.setItem('ministry_banks_seeded', 'true');
-      } else {
-        const isSeeded = localStorage.getItem('ministry_banks_seeded');
-        if (isSeeded) {
-          // If Firestore is empty and already seeded, it means admin deleted all banks
-          setMinistryBanks([]);
-          localStorage.setItem('ministry_question_banks', JSON.stringify([]));
-        } else {
-          // First run initial seed
-          INITIAL_MINISTRY_BANKS.forEach((bank) => {
-            saveMinistryQuestionBankToFirestore(bank).catch(console.warn);
-          });
-          localStorage.setItem('ministry_banks_seeded', 'true');
-          setMinistryBanks(INITIAL_MINISTRY_BANKS);
-          localStorage.setItem('ministry_question_banks', JSON.stringify(INITIAL_MINISTRY_BANKS));
-        }
-      }
+      setMinistryBanks(firestoreBanks);
+      localStorage.setItem('ministry_question_banks', JSON.stringify(firestoreBanks));
+      localStorage.setItem('ministry_banks_seeded', 'true');
     }, (err) => {
       console.warn("Could not listen to /ministryQuestionBanks in Firestore:", err);
     });
@@ -925,7 +913,7 @@ export default function App() {
     try {
       await deleteUpcomingExamFromFirestore(examId, cleanTitle);
       await deleteUpcomingExamFromSiteSettings(examId, cleanTitle);
-      await deleteExamFromFirestore(examId);
+      await deleteExamPermanently(examId, cleanTitle);
     } catch (err) {
       console.warn("Failed to delete exam from Firestore:", err);
     }
@@ -959,7 +947,7 @@ export default function App() {
     });
 
     try {
-      await deleteDoc(doc(db, 'ministryQuestionBanks', bankId));
+      await deleteMinistryQuestionBankFromFirestore(bankId);
     } catch (err) {
       console.warn("Failed to delete ministry bank from Firestore:", err);
     }
@@ -1099,6 +1087,17 @@ export default function App() {
         return;
       }
     }
+
+    // Do NOT reset scroll to top if the URL targets a shared exam via ?examId, ?exam, or #live-exam-
+    const searchParams = new URLSearchParams(window.location.search);
+    if (
+      searchParams.get('examId') || 
+      searchParams.get('exam') || 
+      (window.location.hash && window.location.hash.includes('live-exam-'))
+    ) {
+      return;
+    }
+
     // Otherwise immediately scroll window and document to the top (0, 0)
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     document.documentElement.scrollTop = 0;
@@ -1199,6 +1198,10 @@ export default function App() {
       case 'age-calculator':
         return (
           <AgeCalculatorView setView={setView} />
+        );
+      case 'job-result':
+        return (
+          <JobExaminationResultsView setView={setView} />
         );
       case 'exam':
         return selectedExam ? (

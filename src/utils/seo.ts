@@ -97,6 +97,21 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
       'description': 'সরকারি চাকরির পরীক্ষার প্রস্তুতিমূলক লেকচার শিট ও স্টাডি ম্যাটেরিয়ালস।'
     }
   },
+  'job-result': {
+    title: 'চাকরি পরীক্ষার ফলাফল  | সরকারি চাকরির রেজাল্ট – Medha Exam',
+    description: 'Medha Exam থেকে বিভিন্ন সরকারি চাকরির পরীক্ষার ফলাফল দেখুন। পরীক্ষার শিরোনাম নির্বাচন করে আপনার রোল নম্বর দিয়ে সহজেই ফলাফল যাচাই করুন।',
+    keywords: 'চাকরি পরীক্ষার ফলাফল, সরকারি চাকরির রেজাল্ট, নিয়োগ পরীক্ষার রেজাল্ট, job exam result bangladesh, bcs result, রোল নম্বর দিয়ে রেজাল্ট যাচাই, Medha Exam Job Results',
+    canonicalPath: '/all-job-result',
+    ogType: 'website',
+    ogImage: DEFAULT_OG_IMAGE,
+    structuredData: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      'name': 'চাকরি পরীক্ষার ফলাফল  | সরকারি চাকরির রেজাল্ট – Medha Exam',
+      'url': `${BASE_SITE_URL}/all-job-result`,
+      'description': 'Medha Exam থেকে বিভিন্ন সরকারি চাকরির পরীক্ষার ফলাফল দেখুন। পরীক্ষার শিরোনাম নির্বাচন করে আপনার রোল নম্বর দিয়ে সহজেই ফলাফল যাচাই করুন।'
+    }
+  },
   'age-calculator': {
     title: 'চাকরির বয়স ক্যালকুলেটর | বিসিএস ও সরকারি চাকরির বয়স হিসাব — Medha Exam',
     description: 'সরকারি চাকরি ও ব্যাংক নিয়োগ সার্কুলারের নির্ধারিত তারিখ অনুযায়ী নির্ভুল বয়স হিসাব করুন। আপনার বয়স কত বছর, মাস ও দিন তা নিমেষেই গণনা করুন মেধা এক্সামে।',

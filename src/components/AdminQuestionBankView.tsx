@@ -489,7 +489,7 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
       const bankId = bankToDelete.id;
       const bankTitle = bankToDelete.title;
 
-      await deleteMinistryQuestionBankFromFirestore(bankId);
+      await deleteMinistryQuestionBankFromFirestore(bankId, bankTitle);
 
       if (onDeleteMinistryBank) {
         onDeleteMinistryBank(bankId);

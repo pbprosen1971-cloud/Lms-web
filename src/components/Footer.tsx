@@ -277,6 +277,9 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
                 <button onClick={() => setView('home')} className="hover:text-primary transition-colors duration-200">হোম পেজ</button>
               </li>
               <li>
+                <button onClick={() => setView('job-result')} className="hover:text-emerald-400 text-emerald-300 font-semibold transition-colors duration-200">🏆 চাকরি পরীক্ষার ফলাফল</button>
+              </li>
+              <li>
                 <a
                   href="https://www.facebook.com/medhaexam"
                   target="_blank"

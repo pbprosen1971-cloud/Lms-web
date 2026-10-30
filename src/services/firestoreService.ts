@@ -79,6 +79,124 @@ export function removeUndefinedFields<T>(val: T): T {
   return val;
 }
 
+// ==========================================
+// DELETION REGISTRY (PERMANENT DELETION TRACKING IN FIRESTORE)
+// ==========================================
+
+export interface DeletionRegistry {
+  deletedExamIds: string[];
+  deletedMinistryBankIds: string[];
+  isInitialized: boolean;
+  updatedAt?: string;
+}
+
+export const KNOWN_PURGED_EXAM_IDS = ['exam-2', 'exam-5'];
+export const KNOWN_PURGED_MINISTRY_IDS = ['min-bank-2', 'min-bank-3'];
+
+export async function getDeletionRegistry(): Promise<DeletionRegistry> {
+  try {
+    const regDoc = await getDoc(doc(db, 'siteSettings', 'deletionRegistry'));
+    if (regDoc.exists()) {
+      const data = regDoc.data();
+      const examIds = Array.isArray(data.deletedExamIds) ? data.deletedExamIds : [];
+      const minIds = Array.isArray(data.deletedMinistryBankIds) ? data.deletedMinistryBankIds : [];
+      return {
+        deletedExamIds: Array.from(new Set([...KNOWN_PURGED_EXAM_IDS, ...examIds])),
+        deletedMinistryBankIds: Array.from(new Set([...KNOWN_PURGED_MINISTRY_IDS, ...minIds])),
+        isInitialized: data.isInitialized !== false,
+      };
+    }
+  } catch (e) {
+    console.warn("Notice: could not fetch siteSettings/deletionRegistry:", e);
+  }
+  return {
+    deletedExamIds: [...KNOWN_PURGED_EXAM_IDS],
+    deletedMinistryBankIds: [...KNOWN_PURGED_MINISTRY_IDS],
+    isInitialized: true,
+  };
+}
+
+export function subscribeToDeletionRegistry(callback: (reg: DeletionRegistry) => void): Unsubscribe {
+  return onSnapshot(doc(db, 'siteSettings', 'deletionRegistry'), (snap) => {
+    if (snap.exists()) {
+      const data = snap.data();
+      const examIds = Array.isArray(data.deletedExamIds) ? data.deletedExamIds : [];
+      const minIds = Array.isArray(data.deletedMinistryBankIds) ? data.deletedMinistryBankIds : [];
+      callback({
+        deletedExamIds: Array.from(new Set([...KNOWN_PURGED_EXAM_IDS, ...examIds])),
+        deletedMinistryBankIds: Array.from(new Set([...KNOWN_PURGED_MINISTRY_IDS, ...minIds])),
+        isInitialized: data.isInitialized !== false,
+      });
+    } else {
+      callback({
+        deletedExamIds: [...KNOWN_PURGED_EXAM_IDS],
+        deletedMinistryBankIds: [...KNOWN_PURGED_MINISTRY_IDS],
+        isInitialized: true,
+      });
+    }
+  }, (err) => {
+    console.warn("Could not subscribe to deletionRegistry:", err);
+  });
+}
+
+export async function recordDeletedExamInRegistry(examId: string, examTitle?: string): Promise<void> {
+  try {
+    const cleanId = (examId || '').trim();
+    const cleanTitle = (examTitle || '').trim().toLowerCase();
+    const regRef = doc(db, 'siteSettings', 'deletionRegistry');
+    const snap = await getDoc(regRef);
+    let currentExamIds: string[] = [...KNOWN_PURGED_EXAM_IDS];
+    let currentMinIds: string[] = [...KNOWN_PURGED_MINISTRY_IDS];
+    if (snap.exists()) {
+      const data = snap.data();
+      if (Array.isArray(data.deletedExamIds)) currentExamIds = Array.from(new Set([...currentExamIds, ...data.deletedExamIds]));
+      if (Array.isArray(data.deletedMinistryBankIds)) currentMinIds = Array.from(new Set([...currentMinIds, ...data.deletedMinistryBankIds]));
+    }
+    if (cleanId && !currentExamIds.includes(cleanId)) currentExamIds.push(cleanId);
+    if (cleanTitle && !currentExamIds.includes(cleanTitle)) currentExamIds.push(cleanTitle);
+
+    await setDoc(regRef, {
+      deletedExamIds: currentExamIds,
+      deletedMinistryBankIds: currentMinIds,
+      isInitialized: true,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+
+    try {
+      localStorage.setItem('deleted_exam_ids', JSON.stringify(currentExamIds));
+    } catch (e) {}
+  } catch (err) {
+    console.warn("Could not record deleted exam in deletionRegistry:", err);
+  }
+}
+
+export async function recordDeletedMinistryBankInRegistry(bankId: string, bankTitle?: string): Promise<void> {
+  try {
+    const cleanId = (bankId || '').trim();
+    const cleanTitle = (bankTitle || '').trim().toLowerCase();
+    const regRef = doc(db, 'siteSettings', 'deletionRegistry');
+    const snap = await getDoc(regRef);
+    let currentExamIds: string[] = [...KNOWN_PURGED_EXAM_IDS];
+    let currentMinIds: string[] = [...KNOWN_PURGED_MINISTRY_IDS];
+    if (snap.exists()) {
+      const data = snap.data();
+      if (Array.isArray(data.deletedExamIds)) currentExamIds = Array.from(new Set([...currentExamIds, ...data.deletedExamIds]));
+      if (Array.isArray(data.deletedMinistryBankIds)) currentMinIds = Array.from(new Set([...currentMinIds, ...data.deletedMinistryBankIds]));
+    }
+    if (cleanId && !currentMinIds.includes(cleanId)) currentMinIds.push(cleanId);
+    if (cleanTitle && !currentMinIds.includes(cleanTitle)) currentMinIds.push(cleanTitle);
+
+    await setDoc(regRef, {
+      deletedExamIds: currentExamIds,
+      deletedMinistryBankIds: currentMinIds,
+      isInitialized: true,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (err) {
+    console.warn("Could not record deleted ministry bank in deletionRegistry:", err);
+  }
+}
+
 /**
  * Normalizes question object so it never contains `undefined` properties
  * when written as an element in Firestore's `questions` array.
@@ -407,6 +525,16 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
   let capitalDocsMap = new Map<string, Exam>();
   let legacyDocsMap = new Map<string, Exam>();
 
+  const deletedExamSet = new Set<string>(KNOWN_PURGED_EXAM_IDS.map(id => id.toLowerCase()));
+  try {
+    const local = JSON.parse(localStorage.getItem('deleted_exam_ids') || '[]');
+    if (Array.isArray(local)) {
+      local.forEach((id: string) => {
+        if (id) deletedExamSet.add(String(id).trim().toLowerCase());
+      });
+    }
+  } catch (e) {}
+
   const emitMergedList = () => {
     const combinedMap = new Map<string, Exam>();
     // First apply legacy /exams
@@ -444,7 +572,16 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       });
     });
 
-    const list = Array.from(combinedMap.values());
+    // Filter out permanently deleted exams from Firestore deletionRegistry
+    const list = Array.from(combinedMap.values()).filter((exam) => {
+      if (!exam || !exam.id) return false;
+      const idClean = exam.id.trim().toLowerCase();
+      const titleClean = (exam.title || '').trim().toLowerCase();
+      if (deletedExamSet.has(idClean)) return false;
+      if (titleClean && deletedExamSet.has(titleClean)) return false;
+      return true;
+    });
+
     list.sort((a, b) => {
       // 1. Pinned exams always come first
       if (a.isPinned && !b.isPinned) return -1;
@@ -478,6 +615,25 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
     });
     callback(list);
   };
+
+  const unsubRegistry = onSnapshot(doc(db, 'siteSettings', 'deletionRegistry'), (snap) => {
+    if (snap.exists()) {
+      const data = snap.data();
+      if (Array.isArray(data.deletedExamIds)) {
+        let changed = false;
+        data.deletedExamIds.forEach((id: any) => {
+          if (id) {
+            const cln = String(id).trim().toLowerCase();
+            if (!deletedExamSet.has(cln)) {
+              deletedExamSet.add(cln);
+              changed = true;
+            }
+          }
+        });
+        if (changed) emitMergedList();
+      }
+    }
+  }, () => {});
 
   const unsubExam = onSnapshot(examRef, (snapshot) => {
     examDocsMap.clear();
@@ -617,6 +773,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
   });
 
   return () => {
+    unsubRegistry();
     unsubExam();
     unsubCapitalExam();
     unsubLegacy();
@@ -892,6 +1049,16 @@ export async function deleteUpcomingExamFromFirestore(examId: string, examTitle?
   // Also clean up siteSettings/upcomingExam
   try {
     await deleteUpcomingExamFromSiteSettings(cleanId, examTitle);
+  } catch (e) {}
+
+  // Record in Firestore Deletion Registry permanently
+  try {
+    await recordDeletedExamInRegistry(cleanId, examTitle);
+    for (const id of Array.from(idsToDelete)) {
+      if (id !== cleanId) {
+        await recordDeletedExamInRegistry(id, examTitle);
+      }
+    }
   } catch (e) {}
 }
 
@@ -1553,46 +1720,66 @@ export async function batchSaveLiveExamsOrder(
 /**
  * Permanently delete an Exam and its associated questions from Firestore.
  * Deletes from /Exam/{examId} + subcollection /questions, /exam/{examId}, legacy /exams/{examId} & /questions.
- * Strictly preserves users, results, payments, and site settings.
+ * Records the deletion in Firestore siteSettings/deletionRegistry so it NEVER reappears.
  */
-export async function deleteExamPermanently(examId: string): Promise<void> {
+export async function deleteExamPermanently(examId: string, examTitle?: string): Promise<void> {
+  const cleanId = (examId || '').trim();
+  const cleanTitle = (examTitle || '').trim().toLowerCase();
   try {
-    // 1. Delete /Exam/{examId}/questions subcollection
-    const subQSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
-    const subQDeletes = subQSnap.docs.map(d => deleteDoc(d.ref));
-    await Promise.all(subQDeletes);
+    // 1a. Delete /Exam/{examId}/questions subcollection
+    try {
+      const subQSnap = await getDocs(collection(db, 'Exam', cleanId, 'questions'));
+      const subQDeletes = subQSnap.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(subQDeletes);
+    } catch (e) {}
+
+    // 1b. Delete /exam/{examId}/questions subcollection
+    try {
+      const subQSnap2 = await getDocs(collection(db, 'exam', cleanId, 'questions'));
+      const subQDeletes2 = subQSnap2.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(subQDeletes2);
+    } catch (e) {}
 
     // 2. Delete /Exam/{examId}
-    await deleteDoc(doc(db, 'Exam', examId));
+    try {
+      await deleteDoc(doc(db, 'Exam', cleanId));
+    } catch (e) {}
 
     // 3. Delete /exam/{examId}
-    await deleteDoc(doc(db, 'exam', examId));
+    try {
+      await deleteDoc(doc(db, 'exam', cleanId));
+    } catch (e) {}
 
-    // 4. Delete legacy /exams/{examId} and legacy /questions
-    await deleteExamFromFirestore(examId);
+    // 4. Delete legacy /exams/{examId}
+    try {
+      await deleteDoc(doc(db, 'exams', cleanId));
+    } catch (e) {}
+
+    // 4b. Delete questions associated with examId in legacy /questions
+    try {
+      const qQuery = query(collection(db, 'questions'), where('examId', '==', cleanId));
+      const qSnapshot = await getDocs(qQuery);
+      const deletePromises = qSnapshot.docs.map(qDoc => deleteDoc(doc(db, 'questions', qDoc.id)));
+      await Promise.all(deletePromises);
+    } catch (e) {}
 
     // 5. Clean up siteSettings if this exam was in upcoming settings
-    await clearUpcomingExamSettings(examId);
+    try {
+      await clearUpcomingExamSettings(cleanId, examTitle);
+      await deleteDoc(doc(db, 'siteSettings', `upcomingExam_${cleanId}`));
+    } catch (e) {}
+
+    // 6. Record in Firestore Deletion Registry permanently
+    await recordDeletedExamInRegistry(cleanId, examTitle);
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `Exam/${examId}`);
     throw err;
   }
 }
 
-// Delete Exam and its associated Questions from Firestore
-export async function deleteExamFromFirestore(examId: string): Promise<void> {
-  try {
-    // 1. Delete questions associated with examId in legacy /questions
-    const qQuery = query(collection(db, 'questions'), where('examId', '==', examId));
-    const qSnapshot = await getDocs(qQuery);
-    const deletePromises = qSnapshot.docs.map(qDoc => deleteDoc(doc(db, 'questions', qDoc.id)));
-    await Promise.all(deletePromises);
-
-    // 2. Delete /exams document
-    await deleteDoc(doc(db, 'exams', examId));
-  } catch (err) {
-    handleFirestoreError(err, OperationType.DELETE, `exams/${examId}`);
-  }
+// Delete Exam and its associated Questions from Firestore (Permanent across all collections)
+export async function deleteExamFromFirestore(examId: string, examTitle?: string): Promise<void> {
+  await deleteExamPermanently(examId, examTitle);
 }
 
 // Subscribe to questions for a specific examId from Firestore
