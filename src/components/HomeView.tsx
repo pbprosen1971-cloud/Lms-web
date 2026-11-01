@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   BookOpen,
   Languages,
@@ -47,12 +47,12 @@ import {
   Scale,
   Compass,
 } from 'lucide-react';
-import { Exam, LeaderboardUser, MinistryQuestionBank, Question, Review, SubjectStats, UserProfile, UpcomingExamSettings, PaymentPlan } from '../types';
+import { Exam, ExamResult, LeaderboardUser, MinistryQuestionBank, Question, Review, SubjectStats, UserProfile, UpcomingExamSettings, PaymentPlan } from '../types';
 import { motion } from 'motion/react';
 import { SUBJECTS, MOCK_REVIEWS, MOCK_LEADERBOARD, INITIAL_STATS, INITIAL_MINISTRY_BANKS } from '../data';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { subscribeToUpcomingExamSettings, KNOWN_PURGED_MINISTRY_IDS } from '../services/firestoreService';
+import { subscribeToUpcomingExamSettings, KNOWN_PURGED_MINISTRY_IDS, compareLiveExams } from '../services/firestoreService';
 import { formatSafeDisplay, formatBengaliDateTimeSafe, toBengaliDigits, isScheduledLiveTimeReached } from '../lib/dateUtils';
 import heroExamPrepBg from '../assets/images/hero_exam_prep_1786609165056.jpg';
 import DailyChallengeWidget from './DailyChallengeWidget';
@@ -65,6 +65,7 @@ import { detectQuestionSubject } from '../lib/subjectClassifier';
 import QuestionBankPdfModal from './QuestionBankPdfModal';
 import { normalizeMinistryName, getMinistryComparisonKey } from '../services/questionBankService';
 import { ExamGridSkeleton, Skeleton } from './SkeletonLoader';
+import Leaderboard from './Leaderboard';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -153,6 +154,8 @@ interface HomeViewProps {
   ministryBanks?: MinistryQuestionBank[];
   upcomingExamSettings?: UpcomingExamSettings | null;
   isLoadingExams?: boolean;
+  results?: ExamResult[];
+  setSelectedResult?: (result: ExamResult) => void;
 }
 
 export default function HomeView({
@@ -164,6 +167,8 @@ export default function HomeView({
   ministryBanks = [],
   upcomingExamSettings: propUpcomingSettings,
   isLoadingExams = false,
+  results = [],
+  setSelectedResult,
 }: HomeViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
@@ -180,11 +185,12 @@ export default function HomeView({
 
   useEffect(() => {
     // If not passed from parent, listen directly
+    if (propUpcomingSettings !== undefined) return;
     const unsubscribe = subscribeToUpcomingExamSettings((settings) => {
       setLocalUpcomingSettings(settings);
     });
     return () => unsubscribe();
-  }, []);
+  }, [propUpcomingSettings]);
 
   const activeUpcomingSetting = propUpcomingSettings || localUpcomingSettings;
 
@@ -333,6 +339,38 @@ export default function HomeView({
     }
     // Fallback or full share options modal
     setSharingExam(exam);
+    setShareCopied(false);
+  };
+
+  // Ministry Bank Share state
+  const [sharingMinistryBank, setSharingMinistryBank] = useState<MinistryQuestionBank | null>(null);
+
+  const getBankShareUrl = (bank: MinistryQuestionBank): string => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/#ministry-banks-section`;
+  };
+
+  const handleShareMinistryBank = async (bank: MinistryQuestionBank, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    const shareUrl = getBankShareUrl(bank);
+    const shareTitle = `${bank.title} - ${bank.ministryName} প্রশ্ন ব্যাংক | মেধা জব প্রিপারেশন`;
+    const shareText = `মেধা পোর্টালে ${bank.ministryName}-এর "${bank.title}" প্রশ্ন ব্যাংকটি পরীক্ষা ও অনুশীলনের জন্য দেখুন:\n${shareUrl}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+      }
+    }
+    setSharingMinistryBank(bank);
     setShareCopied(false);
   };
 
@@ -822,38 +860,14 @@ export default function HomeView({
       return exam.status === 'live';
     });
 
-    // Intelligent sorting:
-    // 1. Pinned to top
-    // 2. Custom manual order (liveOrder: 1, 2, 3...)
-    // 3. Newest live / scheduled / created first
-    // 4. Alphabetical / ID fallback
-    return list.sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-
-      const orderA = typeof a.liveOrder === 'number' ? a.liveOrder : (typeof a.sortOrder === 'number' ? a.sortOrder : Infinity);
-      const orderB = typeof b.liveOrder === 'number' ? b.liveOrder : (typeof b.sortOrder === 'number' ? b.sortOrder : Infinity);
-      if (orderA !== orderB) {
-        return orderA - orderB;
-      }
-
-      const getTimestamp = (e: Exam): number => {
-        const timeStr = e.liveAt || e.examDateTime || e.startTime || e.dateCreated;
-        if (timeStr) {
-          const t = new Date(timeStr).getTime();
-          if (!isNaN(t)) return t;
-        }
-        return 0;
-      };
-
-      const timeA = getTimestamp(a);
-      const timeB = getTimestamp(b);
-      if (timeA !== timeB && timeA > 0 && timeB > 0) {
-        return timeB - timeA;
-      }
-
-      return b.id.localeCompare(a.id);
-    });
+    // Intelligent sorting: Latest published live exam first at #1 position
+    const sorted = [...list].sort(compareLiveExams);
+    const targetIdx = sorted.findIndex(e => e.id === 'upcoming-exam-1793373735897' || e.id?.includes('1793373735897'));
+    if (targetIdx > 0) {
+      const [targetExam] = sorted.splice(targetIdx, 1);
+      sorted.unshift(targetExam);
+    }
+    return sorted;
   }, [filteredExams]);
 
   const archiveExams = useMemo(() => {
@@ -1044,7 +1058,109 @@ export default function HomeView({
     return () => clearTimeout(initialTimer);
   }, [exams, isLoadingExams, liveExams.length, unifiedUpcomingExams.length]);
 
+  // User submissions tracking for "One-time Live Exam" enforcement
+  const currentUid = user?.id || user?.uid;
+  const currentEmail = user?.email?.toLowerCase().trim();
+
+  const isExamSubmitted = useCallback((examId: string): boolean => {
+    if (!examId) return false;
+
+    // 1. Check realtime Firestore results prop
+    if (Array.isArray(results) && (currentUid || currentEmail)) {
+      const found = results.some((r) => {
+        if (r.examId !== examId) return false;
+        const matchesUser =
+          (currentUid && (r.userId === currentUid || r.studentId === currentUid)) ||
+          (currentEmail && r.studentEmail?.toLowerCase().trim() === currentEmail);
+        return matchesUser;
+      });
+      if (found) return true;
+    }
+
+    // 2. Check localStorage results sheet
+    try {
+      const savedResults = localStorage.getItem('exam_results_sheet');
+      if (savedResults) {
+        const parsed = JSON.parse(savedResults);
+        if (Array.isArray(parsed)) {
+          const found = parsed.some((r: any) => {
+            if (r.examId !== examId) return false;
+            const matchesUser =
+              (currentUid && (r.userId === currentUid || r.studentId === currentUid)) ||
+              (currentEmail && r.studentEmail?.toLowerCase().trim() === currentEmail);
+            return matchesUser;
+          });
+          if (found) return true;
+        }
+      }
+    } catch (e) {}
+
+    // 3. Check explicit per-user submission keys
+    if (currentUid) {
+      try {
+        if (localStorage.getItem(`medha_submitted_${currentUid}_${examId}`) === 'true') {
+          return true;
+        }
+        const userSubList = JSON.parse(localStorage.getItem(`medha_submitted_exams_${currentUid}`) || '[]');
+        if (Array.isArray(userSubList) && userSubList.includes(examId)) {
+          return true;
+        }
+      } catch (e) {}
+    }
+
+    // 4. Check device/browser submission log
+    try {
+      const browserSubs = JSON.parse(localStorage.getItem('medha_submitted_exam_ids') || '[]');
+      if (Array.isArray(browserSubs) && browserSubs.includes(examId)) {
+        return true;
+      }
+    } catch (e) {}
+
+    return false;
+  }, [results, currentUid, currentEmail]);
+
+  const getUserResult = useCallback((examId: string): ExamResult | undefined => {
+    if (!examId) return undefined;
+    if (Array.isArray(results)) {
+      const found = results.find((r) => {
+        if (r.examId !== examId) return false;
+        const matchesUser =
+          (currentUid && (r.userId === currentUid || r.studentId === currentUid)) ||
+          (currentEmail && r.studentEmail?.toLowerCase().trim() === currentEmail);
+        return matchesUser;
+      });
+      if (found) return found;
+    }
+    try {
+      const savedResults = localStorage.getItem('exam_results_sheet');
+      if (savedResults) {
+        const parsed = JSON.parse(savedResults);
+        if (Array.isArray(parsed)) {
+          const found = parsed.find((r: any) => {
+            if (r.examId !== examId) return false;
+            const matchesUser =
+              (currentUid && (r.userId === currentUid || r.studentId === currentUid)) ||
+              (currentEmail && r.studentEmail?.toLowerCase().trim() === currentEmail);
+            return matchesUser;
+          });
+          if (found) return found;
+        }
+      }
+    } catch (e) {}
+    return undefined;
+  }, [results, currentUid, currentEmail]);
+
   const handleStartExam = (exam: Exam) => {
+    // Enforce One-time Live Exam policy: If already submitted, open results and prevent retake
+    if (isExamSubmitted(exam.id)) {
+      const existing = getUserResult(exam.id);
+      if (existing && setSelectedResult) {
+        setSelectedResult(existing);
+        setView('result');
+      }
+      return;
+    }
+
     if (exam.isPremium && (!user || !user.isPremium)) {
       if (!user) {
         setView('login');
@@ -1508,6 +1624,12 @@ export default function HomeView({
                               Free
                             </span>
                           )}
+                          {isExamSubmitted(exam.id) && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-700">
+                              <CheckCircle2 className="h-2.5 w-2.5" />
+                              সাবমিট হয়েছে
+                            </span>
+                          )}
                         </div>
                         <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/70 px-2.5 py-0.5 rounded-full dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800/80">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -1544,9 +1666,26 @@ export default function HomeView({
 
                     {/* Exam Action Footer */}
                     <div className="p-6 pt-3 pb-4 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-950/60 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium truncate">
-                        তৈরি হয়েছে: {formatSafeDisplay(exam.dateCreated, '—')}
-                      </span>
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-[11px] text-slate-600 dark:text-slate-400 font-medium truncate">
+                          তৈরি হয়েছে: {formatSafeDisplay(exam.dateCreated, '—')}
+                        </span>
+                        {isExamSubmitted(exam.id) && getUserResult(exam.id) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const r = getUserResult(exam.id);
+                              if (r && setSelectedResult) {
+                                setSelectedResult(r);
+                                setView('result');
+                              }
+                            }}
+                            className="text-[11px] text-primary hover:text-primary-dark dark:text-emerald-400 font-bold hover:underline shrink-0"
+                          >
+                            • ফলাফল দেখুন
+                          </button>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {/* Share Button (Only for Live Exam) */}
                         <button
@@ -1558,13 +1697,25 @@ export default function HomeView({
                         >
                           <Share2 className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => handleStartExam(exam)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 hover:shadow-primary/30 transform hover:-translate-y-0.5 transition-all duration-200"
-                        >
-                          অংশ নিন
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </button>
+                        {isExamSubmitted(exam.id) ? (
+                          <button
+                            type="button"
+                            disabled
+                            title="আপনি ইতিমধ্যে এই লাইভ পরীক্ষাটি সম্পন্ন করেছেন। পুনরায় অংশগ্রহণ করা যাবে না।"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-700/80 rounded-xl text-xs font-bold shadow-none cursor-not-allowed select-none opacity-95 transition-colors"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                            সাবমিট হয়েছে
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleStartExam(exam)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 hover:shadow-primary/30 transform hover:-translate-y-0.5 transition-all duration-200"
+                          >
+                            অংশ নিন
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </motion.div>
@@ -1933,14 +2084,25 @@ export default function HomeView({
                     <button
                       type="button"
                       onClick={() => setSelectedMinistryFilter(normalizeMinistryName(bank.ministryName))}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs rounded-xl transition-colors cursor-pointer text-left"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 font-extrabold text-xs rounded-xl transition-colors cursor-pointer text-left truncate max-w-[55%] sm:max-w-[65%]"
                       title="এই মন্ত্রণালয়ের সকল প্রশ্ন ব্যাংক দেখুন"
                     >
-                      <span>🏢 {bank.ministryName}</span>
+                      <span className="truncate">🏢 {bank.ministryName}</span>
                     </button>
-                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
-                      {toBengaliDigits(bank.questions?.length || bank.totalQuestions || 0)} টি প্রশ্ন
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        {toBengaliDigits(bank.questions?.length || bank.totalQuestions || 0)} টি প্রশ্ন
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleShareMinistryBank(bank, e)}
+                        title="প্রশ্ন ব্যাংক শেয়ার করুন বা লিংক কপি করুন"
+                        aria-label="শেয়ার করুন"
+                        className="inline-flex items-center justify-center p-1.5 rounded-xl text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-emerald-400 bg-slate-50 hover:bg-emerald-50 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-200/80 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-600 transition-all cursor-pointer active:scale-95 shadow-2xs"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <h4 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white leading-snug group-hover:text-primary transition-colors">
@@ -2189,67 +2351,15 @@ export default function HomeView({
         
         {/* Top Students Leaderboard */}
         <div className="lg:col-span-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Trophy className="h-6 w-6 text-amber-500" />
-                মেধাবী শিক্ষার্থী লিডারবোর্ড
-              </h2>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">এই সপ্তাহের সেরা স্কোরধারী শিক্ষার্থীদের তালিকা।</p>
-            </div>
-            <span className="text-xs font-bold text-primary dark:text-emerald-400">সাপ্তাহিক আপডেট</span>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden shadow-md">
-            <div className="divide-y divide-slate-200/80 dark:divide-slate-800">
-              {MOCK_LEADERBOARD.map((student, idx) => (
-                <div
-                  key={student.rank}
-                  className="p-4 flex items-center justify-between hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors duration-200"
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Rank Badge */}
-                    <div className="w-8 flex justify-center">
-                      {student.rank === 1 ? (
-                        <Trophy className="h-6 w-6 text-amber-500" />
-                      ) : student.rank === 2 ? (
-                        <Trophy className="h-6 w-6 text-slate-400" />
-                      ) : student.rank === 3 ? (
-                        <Trophy className="h-6 w-6 text-amber-700" />
-                      ) : (
-                        <span className="text-sm font-bold text-slate-500 dark:text-slate-400">#{student.rank}</span>
-                      )}
-                    </div>
-
-                    <img
-                      src={student.avatar}
-                      alt={student.name}
-                      referrerPolicy="no-referrer"
-                      className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700"
-                    />
-
-                    <div>
-                      <h4 className="font-extrabold text-sm text-slate-900 dark:text-slate-100">{student.name}</h4>
-                      <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-medium">
-                        <span>{student.examsTaken} টি টেস্ট</span>
-                        <span>•</span>
-                        <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400 font-bold">
-                          <Flame className="h-3 w-3 fill-current" /> {student.streak} দিন স্ট্রাক
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Score badge */}
-                  <div className="text-right">
-                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 font-extrabold text-sm rounded-lg border border-emerald-500/20">
-                      {student.score} পয়েন্ট
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <Leaderboard
+            results={results}
+            exams={exams}
+            currentUser={user}
+            limit={10}
+            title="মেধাবী শিক্ষার্থী লিডারবোর্ড"
+            showTabs={true}
+            initialTab="overall"
+          />
         </div>
 
         {/* Student Reviews */}
@@ -2998,6 +3108,143 @@ export default function HomeView({
               <button
                 type="button"
                 onClick={() => setSharingExam(null)}
+                className="w-full py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8.5. Ministry Bank Share Modal */}
+      {sharingMinistryBank && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+          onClick={() => setSharingMinistryBank(null)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-5 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/60 text-primary dark:text-emerald-400 rounded-2xl border border-emerald-100 dark:border-emerald-900/50">
+                  <Share2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-slate-100">
+                    প্রশ্ন ব্যাংক শেয়ার করুন
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    বন্ধুদের সাথে প্রশ্ন ব্যাংকটি শেয়ার করুন
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSharingMinistryBank(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                aria-label="বন্ধ করুন"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Bank Details Card */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md">
+                  🏢 {sharingMinistryBank.ministryName}
+                </span>
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded-full dark:bg-emerald-950/70 dark:text-emerald-300">
+                  {toBengaliDigits(sharingMinistryBank.questions?.length || sharingMinistryBank.totalQuestions || 0)} টি প্রশ্ন
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
+                {sharingMinistryBank.title}
+              </h4>
+            </div>
+
+            {/* Social Share Buttons */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                সোশ্যাল মিডিয়ায় সরাসরি শেয়ার
+              </span>
+              <div className="grid grid-cols-3 gap-2.5">
+                {/* WhatsApp */}
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`🔥 মেধা জব পোর্টালে ${sharingMinistryBank.ministryName}-এর "${sharingMinistryBank.title}" প্রশ্ন ব্যাংকটি পরীক্ষা ও অনুশীলনের জন্য দেখুন:\n${getBankShareUrl(sharingMinistryBank)}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-emerald-50/80 hover:bg-emerald-100/80 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 border border-emerald-200/80 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs transition-all active:scale-95"
+                >
+                  <span className="text-base mb-1">💬</span>
+                  <span>হোয়াটসঅ্যাপ</span>
+                </a>
+
+                {/* Facebook */}
+                <a
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getBankShareUrl(sharingMinistryBank))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-blue-50/80 hover:bg-blue-100/80 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200/80 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 font-bold text-xs transition-all active:scale-95"
+                >
+                  <span className="text-base mb-1">📘</span>
+                  <span>ফেসবুক</span>
+                </a>
+
+                {/* Telegram */}
+                <a
+                  href={`https://t.me/share/url?url=${encodeURIComponent(getBankShareUrl(sharingMinistryBank))}&text=${encodeURIComponent(`🔥 মেধা জব পোর্টালে ${sharingMinistryBank.ministryName}-এর "${sharingMinistryBank.title}" প্রশ্ন ব্যাংকটি দেখুন!`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-sky-50/80 hover:bg-sky-100/80 dark:bg-sky-950/40 dark:hover:bg-sky-900/50 border border-sky-200/80 dark:border-sky-800/60 text-sky-700 dark:text-sky-300 font-bold text-xs transition-all active:scale-95"
+                >
+                  <span className="text-base mb-1">✈️</span>
+                  <span>টেলিগ্রাম</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Copy Link Section */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                প্রশ্ন ব্যাংকের লিংক কপি করুন
+              </span>
+              <div className="flex items-center gap-2 p-1.5 pl-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80">
+                <span className="text-xs text-slate-700 dark:text-slate-300 truncate flex-1 font-mono select-all">
+                  {getBankShareUrl(sharingMinistryBank)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copyShareLink(getBankShareUrl(sharingMinistryBank))}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                    shareCopied
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-primary hover:bg-primary-dark text-white shadow-sm'
+                  }`}
+                >
+                  {shareCopied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      <span>কপি হয়েছে!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>কপি লিংক</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Footer Button */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setSharingMinistryBank(null)}
                 className="w-full py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors"
               >
                 বন্ধ করুন

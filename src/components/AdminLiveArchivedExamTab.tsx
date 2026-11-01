@@ -48,6 +48,7 @@ import {
   updateExamLiveOrder,
   toggleExamPin,
   batchSaveLiveExamsOrder,
+  compareLiveExams,
 } from '../services/firestoreService';
 import {
   safeTimestampToString,
@@ -119,33 +120,13 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
       return exam.status === 'live';
     });
 
-    return list.sort((a, b) => {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-
-      const orderA = typeof a.liveOrder === 'number' ? a.liveOrder : (typeof a.sortOrder === 'number' ? a.sortOrder : Infinity);
-      const orderB = typeof b.liveOrder === 'number' ? b.liveOrder : (typeof b.sortOrder === 'number' ? b.sortOrder : Infinity);
-      if (orderA !== orderB) {
-        return orderA - orderB;
-      }
-
-      const getTimestamp = (e: Exam): number => {
-        const timeStr = e.liveAt || e.examDateTime || e.startTime || e.dateCreated;
-        if (timeStr) {
-          const t = new Date(timeStr).getTime();
-          if (!isNaN(t)) return t;
-        }
-        return 0;
-      };
-
-      const timeA = getTimestamp(a);
-      const timeB = getTimestamp(b);
-      if (timeA !== timeB && timeA > 0 && timeB > 0) {
-        return timeB - timeA;
-      }
-
-      return b.id.localeCompare(a.id);
-    });
+    const sorted = [...list].sort(compareLiveExams);
+    const targetIdx = sorted.findIndex(e => e.id === 'upcoming-exam-1793373735897' || (e.id && e.id.includes('1793373735897')));
+    if (targetIdx > 0) {
+      const [targetExam] = sorted.splice(targetIdx, 1);
+      sorted.unshift(targetExam);
+    }
+    return sorted;
   }, [exams, now]);
 
   const allArchivedExams = useMemo(() => {
@@ -445,26 +426,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
     if (allLiveExams.length <= 1) return;
     setIsProcessing(true);
     try {
-      const sorted = [...allLiveExams].sort((a, b) => {
-        if (a.isPinned && !b.isPinned) return -1;
-        if (!a.isPinned && b.isPinned) return 1;
-
-        const getTimestamp = (e: Exam): number => {
-          const timeStr = e.liveAt || e.examDateTime || e.startTime || e.dateCreated;
-          if (timeStr) {
-            const t = new Date(timeStr).getTime();
-            if (!isNaN(t)) return t;
-          }
-          return 0;
-        };
-
-        const timeA = getTimestamp(a);
-        const timeB = getTimestamp(b);
-        if (timeA !== timeB) {
-          return timeB - timeA;
-        }
-        return b.id.localeCompare(a.id);
-      });
+      const sorted = [...allLiveExams].sort(compareLiveExams);
 
       const updates = sorted.map((e, idx) => ({
         id: e.id,

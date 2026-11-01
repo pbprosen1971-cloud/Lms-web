@@ -78,6 +78,35 @@ export interface ExamResult {
   };
   questions?: Question[];
   userAnswers?: Record<string, number>;
+  isFirstAttempt?: boolean;
+  attemptNumber?: number;
+  isLiveExam?: boolean;
+  accuracy?: number;
+  examDate?: string;
+  examType?: string;
+}
+
+export interface MeritLeaderboardEntry {
+  rank: number;
+  studentId: string;
+  name: string;
+  avatar?: string;
+  meritPercentage: number;
+  eligibleLiveExamsCount: number;
+  totalObtainedMarks: number;
+  totalFullMarks: number;
+  averageAccuracy: number;
+  averageWrongAnswers: number;
+  totalWrongAnswers: number;
+  isCurrentUser: boolean;
+  firstAttemptExams?: Array<{
+    examId: string;
+    examTitle: string;
+    obtainedMarks: number;
+    fullMarks: number;
+    percentage: number;
+    submittedAt: string;
+  }>;
 }
 
 export interface UserProfile {
@@ -224,6 +253,9 @@ export interface UpcomingExamDoc {
   totalQuestions?: number;
   totalMarks?: number;
   questions?: Question[];
+  liveAt?: string;
+  liveOrder?: number;
+  sortOrder?: number;
 }
 
 export interface ExamContentDoc {

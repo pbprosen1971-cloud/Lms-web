@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   Sparkles,
   Flame,
@@ -27,6 +27,7 @@ import {
 import { Exam, ExamResult, UserProfile, DailyPracticeSession, WrongQuestionRecord } from '../types';
 import { formatSafeDisplay } from '../lib/dateUtils';
 import ActivityHeatmap from './ActivityHeatmap';
+import Leaderboard from './Leaderboard';
 import { subscribeToTodayDailyPractice, subscribeToUserWrongQuestions } from '../services/firestoreService';
 import { DashboardMetricsSkeleton, DashboardRecentExamSkeleton, Skeleton } from './SkeletonLoader';
 
@@ -80,6 +81,10 @@ export default function DashboardView({
   const [heatmapStreak, setHeatmapStreak] = useState<number | null>(null);
   const [dailyPracticeSession, setDailyPracticeSession] = useState<DailyPracticeSession | null>(null);
   const [wrongQuestionsList, setWrongQuestionsList] = useState<WrongQuestionRecord[]>([]);
+
+  const handleStreakCalculated = useCallback((s: number) => {
+    setHeatmapStreak((prev) => (prev === s ? prev : s));
+  }, []);
 
   // Real-time subscriptions for Daily Practice and Wrong Questions
   useEffect(() => {
@@ -531,7 +536,7 @@ export default function DashboardView({
         exams={exams}
         onStartExam={handleStartExam}
         onViewResult={handleViewResult}
-        onStreakCalculated={(s) => setHeatmapStreak(s)}
+        onStreakCalculated={handleStreakCalculated}
       />
 
       {/* Quick Navigation Glass Cards */}
@@ -624,12 +629,27 @@ export default function DashboardView({
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => handleStartExam(exam)}
-                      className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-sm transition-transform hover:-translate-y-0.5"
-                    >
-                      পরীক্ষা দিন
-                    </button>
+                    {userResults.some((r) => r.examId === exam.id) ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const res = userResults.find((r) => r.examId === exam.id);
+                          if (res) handleViewResult(res);
+                        }}
+                        className="px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-700/80 text-xs font-bold rounded-xl shadow-none flex items-center gap-1.5 transition-colors"
+                        title="ফলাফল দেখতে ক্লিক করুন"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        সাবমিট হয়েছে
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleStartExam(exam)}
+                        className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-xl shadow-sm transition-transform hover:-translate-y-0.5"
+                      >
+                        পরীক্ষা দিন
+                      </button>
+                    )}
                   </div>
                 ))}
 
@@ -693,15 +713,27 @@ export default function DashboardView({
           </div>
         </div>
 
-        {/* 5. Recent Results list Card */}
-        <div id="recent-results-sec" className="lg:col-span-5 space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-lg flex items-center gap-2">
-              <Award className="h-5.5 w-5.5 text-primary" />
-              সাম্প্রতিক পরীক্ষার ফলাফলসমূহ
-            </h3>
-            <span className="text-xs text-slate-400 font-semibold">{userResults.length} টি মোট</span>
-          </div>
+        {/* 5. Right Column: Top 10 Leaderboard Widget & Recent Results */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Top 10 Leaderboard Widget */}
+          <Leaderboard
+            results={results}
+            exams={exams}
+            currentUser={user}
+            limit={10}
+            title="সেরা ১০ মেধাবী শিক্ষার্থী"
+            showTabs={true}
+          />
+
+          {/* Recent Results list Card */}
+          <div id="recent-results-sec" className="space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="font-bold text-lg flex items-center gap-2">
+                <Award className="h-5.5 w-5.5 text-primary" />
+                সাম্প্রতিক পরীক্ষার ফলাফলসমূহ
+              </h3>
+              <span className="text-xs text-slate-400 font-semibold">{userResults.length} টি মোট</span>
+            </div>
 
           <div className="space-y-4">
             {userResults.length === 0 ? (
@@ -748,9 +780,8 @@ export default function DashboardView({
             )}
           </div>
         </div>
-
       </div>
-
     </div>
-  );
+  </div>
+);
 }

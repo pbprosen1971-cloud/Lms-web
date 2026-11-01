@@ -45,6 +45,8 @@ import {
   Bell,
   Zap,
   Award,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import {
   Exam,
@@ -247,6 +249,25 @@ export default function AdminView({
       setIsGeneratingQuestionPdf(false);
       setQuestionPdfProgressText('');
     }
+  };
+
+  // Desktop Sidebar Collapse & Sticky Persistence State
+  const [isAdminSidebarCollapsed, setIsAdminSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('admin_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebarCollapse = () => {
+    setIsAdminSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('admin_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
   };
 
   // Extract existing ministry names for the dropdown
@@ -974,6 +995,7 @@ export default function AdminView({
     const targetExamId = item.examId || item.id || `upcoming-exam-${Date.now()}`;
     const existingExam = exams.find(e => e.id === targetExamId || (e.title && e.title.trim().toLowerCase() === item.title.trim().toLowerCase()));
     const qList = item.questions || existingExam?.questions || [];
+    const nowIso = new Date().toISOString();
     const liveExam: Exam = {
       id: targetExamId,
       title: item.title,
@@ -985,7 +1007,10 @@ export default function AdminView({
       isPublished: true,
       isPremium: !!item.isPremium,
       startTime: item.startTime || undefined,
-      dateCreated: item.examDate || new Date().toISOString().split('T')[0],
+      dateCreated: item.examDate || nowIso.split('T')[0],
+      liveAt: nowIso,
+      liveOrder: 1,
+      sortOrder: 1,
       questions: qList,
     };
 
@@ -1003,6 +1028,9 @@ export default function AdminView({
       await updateUpcomingExamInFirestore(targetExamId, {
         status: 'live',
         isPublished: true,
+        liveAt: nowIso,
+        liveOrder: 1,
+        sortOrder: 1,
         questions: qList,
         totalQuestions: qList.length,
         totalMarks: qList.length,
@@ -2057,66 +2085,154 @@ export default function AdminView({
       </div>
 
       {/* Admin Sidebar Navigation tabs */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 mt-8 items-start">
         
-        {/* 1. Left Col (3-Cols) Tabs Selector */}
-        <div className="lg:col-span-3 flex flex-col gap-2 print:hidden">
+        {/* 1. Left Col Tabs Selector (Desktop Sticky & Minimizable Bar) */}
+        <div
+          className={`print:hidden flex flex-col gap-2 transition-all duration-300 lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overflow-x-hidden ${
+            isAdminSidebarCollapsed ? 'lg:col-span-1' : 'lg:col-span-3'
+          }`}
+        >
+          {/* Desktop-only Minimize / Expand Control Header */}
+          <div className="hidden lg:flex items-center justify-between pb-2 mb-1 border-b border-slate-200/80 dark:border-slate-800">
+            {!isAdminSidebarCollapsed && (
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                এডমিন মেনু
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={toggleSidebarCollapse}
+              className={`p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer flex items-center justify-center ${
+                isAdminSidebarCollapsed ? 'w-full py-2 shadow-2xs' : ''
+              }`}
+              title={isAdminSidebarCollapsed ? 'মেনু বড় করুন (সব লেখা দেখুন)' : 'মেনু ছোট করুন (শুধু আইকন রাখুন)'}
+              aria-label={isAdminSidebarCollapsed ? 'Expand Admin Sidebar' : 'Minimize Admin Sidebar'}
+            >
+              {isAdminSidebarCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white px-1">
+                  <span>মেনু ছোট করুন</span>
+                  <ChevronLeft className="h-4 w-4" />
+                </div>
+              )}
+            </button>
+          </div>
+
+          {/* TAB 1: Analytics */}
           <button
+            type="button"
             onClick={() => { setActiveTab('analytics'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="ড্যাশবোর্ড এনালাইটিক্স"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'analytics'
                 ? 'bg-primary text-white shadow-md shadow-primary/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <LayoutDashboard className="h-4.5 w-4.5" /> ড্যাশবোর্ড এনালাইটিক্স
+            <LayoutDashboard className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              ড্যাশবোর্ড এনালাইটিক্স
+            </span>
           </button>
 
+          {/* TAB 2: Students */}
           <button
+            type="button"
             onClick={() => { setActiveTab('students'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="শিক্ষার্থী ব্যবস্থাপনা"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'students'
                 ? 'bg-primary text-white shadow-md shadow-primary/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <Users className="h-4.5 w-4.5" /> শিক্ষার্থী ব্যবস্থাপনা
+            <Users className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              শিক্ষার্থী ব্যবস্থাপনা
+            </span>
           </button>
 
+          {/* TAB 3: Results */}
           <button
+            type="button"
             onClick={() => { setActiveTab('results'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="এক্সাম রেজাল্ট শিট"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'results'
                 ? 'bg-primary text-white shadow-md shadow-primary/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <FileText className="h-4.5 w-4.5" /> এক্সাম রেজাল্ট শিট
+            <FileText className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              এক্সাম রেজাল্ট শিট
+            </span>
           </button>
 
+          {/* TAB 4: Job Results Management */}
           <button
+            type="button"
             onClick={() => { setActiveTab('job_results'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="চাকরি পরীক্ষা ফলাফল ম্যানেজমেন্ট"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'job_results'
                 ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <Award className="h-4.5 w-4.5 text-amber-400" /> চাকরি পরীক্ষা ফলাফল ম্যানেজমেন্ট
+            <Award className="h-4.5 w-4.5 shrink-0 text-amber-400" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              চাকরি পরীক্ষা ফলাফল ম্যানেজমেন্ট
+            </span>
           </button>
 
+          {/* TAB 5: Questions & Bank Control */}
           <button
+            type="button"
             onClick={() => { setActiveTab('questions'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between gap-2.5 transition-all ${
+            title="কোশ্চেন ব্যাংক ও হোম পেজ ব্যাংক নিয়ন্ত্রণ"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer relative ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-between'
+            } ${
               activeTab === 'questions'
                 ? 'bg-primary text-white shadow-md shadow-primary/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <span className="flex items-center gap-2">
-              <BookOpen className="h-4.5 w-4.5" /> কোশ্চেন ব্যাংক ও হোম পেজ ব্যাংক নিয়ন্ত্রণ
-            </span>
-            {ministryBanks && ministryBanks.length > 0 && (
+            <div className="flex items-center gap-2.5 truncate">
+              <div className="relative shrink-0 flex items-center justify-center">
+                <BookOpen className="h-4.5 w-4.5 shrink-0" />
+                {ministryBanks && ministryBanks.length > 0 && isAdminSidebarCollapsed && (
+                  <span className="hidden lg:flex absolute -top-1.5 -right-2 text-[9px] font-black px-1 py-0.2 rounded-full bg-amber-500 text-white shadow-xs">
+                    {toBengaliDigits(ministryBanks.length)}
+                  </span>
+                )}
+              </div>
+              <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+                কোশ্চেন ব্যাংক ও হোম পেজ ব্যাংক নিয়ন্ত্রণ
+              </span>
+            </div>
+            {ministryBanks && ministryBanks.length > 0 && !isAdminSidebarCollapsed && (
               <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
                 activeTab === 'questions' ? 'bg-white/20 text-white' : 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
               }`}>
@@ -2125,119 +2241,223 @@ export default function AdminView({
             )}
           </button>
 
+          {/* TAB 6: Question Management */}
           <button
+            type="button"
             onClick={() => { setActiveTab('question_management'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="📝 প্রশ্ন ও বিষয় ব্যবস্থাপনা"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'question_management'
                 ? 'bg-gradient-to-r from-indigo-600 to-primary text-white shadow-md shadow-indigo-600/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <ListPlus className="h-4.5 w-4.5 text-indigo-500" /> 📝 প্রশ্ন ও বিষয় ব্যবস্থাপনা
+            <ListPlus className="h-4.5 w-4.5 shrink-0 text-indigo-500" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              📝 প্রশ্ন ও বিষয় ব্যবস্থাপনা
+            </span>
           </button>
 
+          {/* TAB 7: Upcoming Exams */}
           <button
+            type="button"
             onClick={() => { setActiveTab('upcoming_exams'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="আপকামিং পরীক্ষা (Upcoming)"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'upcoming_exams'
                 ? 'bg-primary text-white shadow-md shadow-primary/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <Clock className="h-4.5 w-4.5" /> আপকামিং পরীক্ষা (Upcoming)
+            <Clock className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              আপকামিং পরীক্ষা (Upcoming)
+            </span>
           </button>
 
+          {/* TAB 8: Live & Archived Exams */}
           <button
+            type="button"
             onClick={() => { setActiveTab('live_archived_exams'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="চলমান ও আর্কাইভ পরীক্ষা নিয়ন্ত্রণ"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'live_archived_exams'
                 ? 'bg-primary text-white shadow-md shadow-primary/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <Layers className="h-4.5 w-4.5" /> চলমান ও আর্কাইভ পরীক্ষা নিয়ন্ত্রণ
+            <Layers className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              চলমান ও আর্কাইভ পরীক্ষা নিয়ন্ত্রণ
+            </span>
           </button>
 
+          {/* TAB 9: Google Sheets */}
           <button
+            type="button"
             onClick={() => { setActiveTab('google_sheets'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="SheetsSync (Google Sheets)"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'google_sheets'
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-emerald-800 dark:text-emerald-300'
             }`}
           >
-            <FileSpreadsheet className="h-4.5 w-4.5" /> SheetsSync (Google Sheets)
+            <FileSpreadsheet className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              SheetsSync (Google Sheets)
+            </span>
           </button>
 
+          {/* TAB 10: CSV Diagnostics */}
           <button
+            type="button"
             onClick={() => { setActiveTab('csv_diagnostics'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="🔍 CSV ও বিষয় ডায়াগনস্টিক"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'csv_diagnostics'
                 ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-emerald-800 dark:text-emerald-300'
             }`}
           >
-            <Zap className="h-4.5 w-4.5 text-amber-400" /> 🔍 CSV ও বিষয় ডায়াগনস্টিক
+            <Zap className="h-4.5 w-4.5 shrink-0 text-amber-400" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              🔍 CSV ও বিষয় ডায়াগনস্টিক
+            </span>
           </button>
 
+          {/* TAB 11: Referral Leaderboard */}
           <button
+            type="button"
             onClick={() => { setActiveTab('referral_leaderboard'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="রেফারেল লিডারবোর্ড"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'referral_leaderboard'
                 ? 'bg-amber-600 text-white shadow-md shadow-amber-600/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <Trophy className="h-4.5 w-4.5" /> রেফারেল লিডারবোর্ড
+            <Trophy className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              রেফারেল লিডারবোর্ড
+            </span>
           </button>
 
+          {/* TAB 12: Study Materials */}
           <button
+            type="button"
             onClick={() => { setActiveTab('study_materials'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="📚 স্টাডি ম্যাটেরিয়াল (PDF)"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'study_materials'
                 ? 'bg-[#38B262] text-white shadow-md shadow-[#38B262]/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <BookOpen className="h-4.5 w-4.5" /> 📚 স্টাডি ম্যাটেরিয়াল (PDF)
+            <BookOpen className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              📚 স্টাডি ম্যাটেরিয়াল (PDF)
+            </span>
           </button>
 
+          {/* TAB 13: Payments */}
           <button
+            type="button"
             onClick={() => { setActiveTab('payments'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="💳 পেমেন্ট ও মেম্বারশিপ"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'payments'
                 ? 'bg-amber-500 text-white shadow-md shadow-amber-500/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <CreditCard className="h-4.5 w-4.5" /> 💳 পেমেন্ট ও মেম্বারশিপ
+            <CreditCard className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              💳 পেমেন্ট ও মেম্বারশিপ
+            </span>
           </button>
 
+          {/* TAB 14: Notifications */}
           <button
+            type="button"
             onClick={() => { setActiveTab('notifications'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="📢 পুশ নোটিফিকেশন ও নোটিশ"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'notifications'
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <Bell className="h-4.5 w-4.5" /> 📢 পুশ নোটিফিকেশন ও নোটিশ
+            <Bell className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              📢 পুশ নোটিফিকেশন ও নোটিশ
+            </span>
           </button>
 
+          {/* TAB 15: Settings */}
           <button
+            type="button"
             onClick={() => { setActiveTab('settings'); setSearchQuery(''); }}
-            className={`w-full p-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 transition-all ${
+            title="প্লাটফর্ম সেটিংস"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
               activeTab === 'settings'
                 ? 'bg-primary text-white shadow-md shadow-primary/25'
                 : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
             }`}
           >
-            <Settings className="h-4.5 w-4.5" /> প্লাটফর্ম সেটিংস
+            <Settings className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              প্লাটফর্ম সেটিংস
+            </span>
           </button>
         </div>
 
-        {/* 2. Right Col (9-Cols) Dynamic Content Panel */}
-        <div className="lg:col-span-9 bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-6 sm:p-8 shadow-sm">
+        {/* 2. Right Col Dynamic Content Panel */}
+        <div
+          className={`transition-all duration-300 ${
+            isAdminSidebarCollapsed ? 'lg:col-span-11' : 'lg:col-span-9'
+          } bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-2xl p-6 sm:p-8 shadow-sm`}
+        >
           
           {/* TAB 1: DASHBOARD ANALYTICS */}
           {activeTab === 'analytics' && (

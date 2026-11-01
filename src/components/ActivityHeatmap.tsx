@@ -321,9 +321,11 @@ export default function ActivityHeatmap({
     };
   }, [last30Days]);
 
-  // Sync calculated streak to parent if provided
+  // Sync calculated streak to parent if provided (guarded against re-render loop)
+  const lastReportedStreakRef = React.useRef<number | null>(null);
   React.useEffect(() => {
-    if (onStreakCalculated) {
+    if (onStreakCalculated && lastReportedStreakRef.current !== stats.currentStreak) {
+      lastReportedStreakRef.current = stats.currentStreak;
       onStreakCalculated(stats.currentStreak);
     }
   }, [stats.currentStreak, onStreakCalculated]);

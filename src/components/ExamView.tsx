@@ -60,8 +60,42 @@ export default function ExamView({ exam, user, onExamSubmit, setView }: ExamView
     return list;
   }, [firestoreQuestions, exam]);
 
+  // Check if current user has already submitted this live exam
+  const currentUid = user?.id || user?.uid;
+  const currentEmail = user?.email?.toLowerCase().trim();
+
+  const isAlreadySubmitted = useMemo(() => {
+    const isLive = exam.status === 'live' || exam.status === 'archive' || !!(exam as any).isLiveExam;
+    if (!isLive) return false;
+
+    if (currentUid && localStorage.getItem(`medha_submitted_${currentUid}_${exam.id}`) === 'true') {
+      return true;
+    }
+    try {
+      const browserSubs = JSON.parse(localStorage.getItem('medha_submitted_exam_ids') || '[]');
+      if (Array.isArray(browserSubs) && browserSubs.includes(exam.id)) {
+        return true;
+      }
+    } catch (e) {}
+
+    try {
+      const savedResults = JSON.parse(localStorage.getItem('exam_results_sheet') || '[]');
+      if (Array.isArray(savedResults)) {
+        const found = savedResults.some(
+          (r: any) =>
+            (r.userId === currentUid || r.studentId === currentUid || (currentEmail && r.studentEmail?.toLowerCase().trim() === currentEmail)) &&
+            r.examId === exam.id
+        );
+        if (found) return true;
+      }
+    } catch (e) {}
+
+    return false;
+  }, [exam.id, exam.status, currentUid, currentEmail]);
+
   // Start the Live countdown timer
   useEffect(() => {
+    if (isAlreadySubmitted) return;
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -77,7 +111,7 @@ export default function ExamView({ exam, user, onExamSubmit, setView }: ExamView
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [questionsList, answers]);
+  }, [questionsList, answers, isAlreadySubmitted]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -152,6 +186,30 @@ export default function ExamView({ exam, user, onExamSubmit, setView }: ExamView
     const percentage = totalMarks > 0 ? Math.round((score / totalMarks) * 100) : 0;
     const currentUid = user?.id || user?.uid || 'guest';
 
+    const answeredTotal = correctCount + wrongCount;
+    const accuracy = answeredTotal > 0 ? Number(((correctCount / answeredTotal) * 100).toFixed(1)) : percentage;
+
+    const isLive = exam.status === 'live' || exam.status === 'archive' || !!(exam as any).isLiveExam;
+
+    // Check existing submissions for this user & exam to accurately stamp attemptNumber & isFirstAttempt
+    let attemptNum = 1;
+    try {
+      const savedResults = JSON.parse(localStorage.getItem('exam_results_sheet') || '[]');
+      if (Array.isArray(savedResults)) {
+        const prevAttempts = savedResults.filter(
+          (r: any) =>
+            (r.userId === currentUid || r.studentId === currentUid || (user?.email && r.studentEmail === user.email)) &&
+            r.examId === exam.id
+        );
+        attemptNum = prevAttempts.length + 1;
+        if (isLive && prevAttempts.length > 0) {
+          console.warn("Blocked duplicate attempt on live exam.");
+          setView('result');
+          return;
+        }
+      }
+    } catch (e) {}
+
     const resultRecord: ExamResult = {
       id: 'res-' + Date.now(),
       examId: exam.id,
@@ -175,13 +233,32 @@ export default function ExamView({ exam, user, onExamSubmit, setView }: ExamView
       subjectPerformance: subjectPerformance,
       questions: questionsList,
       userAnswers: answers,
+      isFirstAttempt: attemptNum === 1,
+      attemptNumber: attemptNum,
+      isLiveExam: isLive,
+      accuracy: accuracy,
+      examDate: exam.startDate || (exam as any).examDate || new Date().toISOString().split('T')[0],
+      examType: exam.isPremium ? 'premium' : 'free',
     };
 
-    // Client-side cache for question review resilience
+    // Client-side cache for question review resilience and one-time live exam tracking
     try {
       localStorage.setItem(`medha_exam_answers_${resultRecord.id}`, JSON.stringify(answers));
       localStorage.setItem(`medha_exam_answers_${resultRecord.examId}`, JSON.stringify(answers));
       localStorage.setItem(`medha_exam_questions_${resultRecord.examId}`, JSON.stringify(questionsList));
+      if (currentUid) {
+        localStorage.setItem(`medha_submitted_${currentUid}_${resultRecord.examId}`, 'true');
+        const prevSubList = JSON.parse(localStorage.getItem(`medha_submitted_exams_${currentUid}`) || '[]');
+        if (!prevSubList.includes(resultRecord.examId)) {
+          prevSubList.push(resultRecord.examId);
+          localStorage.setItem(`medha_submitted_exams_${currentUid}`, JSON.stringify(prevSubList));
+        }
+      }
+      const browserSubs = JSON.parse(localStorage.getItem('medha_submitted_exam_ids') || '[]');
+      if (!browserSubs.includes(resultRecord.examId)) {
+        browserSubs.push(resultRecord.examId);
+        localStorage.setItem('medha_submitted_exam_ids', JSON.stringify(browserSubs));
+      }
     } catch (e) {}
 
     onExamSubmit(resultRecord);
@@ -212,6 +289,44 @@ export default function ExamView({ exam, user, onExamSubmit, setView }: ExamView
 
   // OMR numbers labels
   const optionLabels = ['ক', 'খ', 'গ', 'ঘ'];
+
+  if (isAlreadySubmitted) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-6">
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-8 sm:p-10 shadow-lg space-y-5">
+          <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto shadow-inner">
+            <CheckCircle className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <span className="inline-block px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-full">
+              সাবমিট হয়েছে
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+              আপনি ইতিমধ্যে এই পরীক্ষাটি দিয়েছেন
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+              মেধা নীতিমালার আলোকে একজন শিক্ষার্থী প্রতিটি লাইভ পরীক্ষায় শুধুমাত্র একবার অংশগ্রহণ করতে পারেন। আপনার পূর্ববর্তী ফলাফল ও সমাধান শিট সিস্টেমে সংরক্ষিত রয়েছে।
+            </p>
+          </div>
+
+          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={() => setView('result')}
+              className="w-full sm:w-auto px-6 py-2.5 bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-xl shadow-md transition-colors"
+            >
+              ফলাফল ও সমাধান দেখুন
+            </button>
+            <button
+              onClick={() => setView('home')}
+              className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-sm font-bold rounded-xl transition-colors"
+            >
+              হোম পেজে ফিরে যান
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 bg-brand-bg dark:bg-slate-900 text-slate-800 dark:text-slate-100 theme-transition">

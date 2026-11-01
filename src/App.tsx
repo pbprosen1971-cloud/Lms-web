@@ -549,7 +549,7 @@ export default function App() {
       if (raw === 'GK' || raw === 'সাধারণ জ্ঞান') {
         const isIntl = !!(exam.title && (exam.title.includes('বিশ্ব') || exam.title.includes('আন্তর্জাতিক') || exam.title.toLowerCase().includes('international')));
         const newSubject = isIntl ? 'আন্তর্জাতিক সাধারন জ্ঞান' : 'বাংলাদেশ বিষয়াবলি -GK';
-        const updated: Exam = {
+        return {
           ...exam,
           subject: newSubject,
           questions: (exam.questions || []).map(q => ({
@@ -557,8 +557,6 @@ export default function App() {
             subject: (q.subject === 'GK' || q.subject === 'সাধারণ জ্ঞান') ? newSubject : (q.subject || newSubject)
           }))
         };
-        saveExamToFirestore(updated, exam.createdBy || 'system-admin').catch(() => {});
-        return updated;
       }
       return exam;
     };
@@ -954,6 +952,52 @@ export default function App() {
   };
 
   const handleExamSubmit = async (newResult: ExamResult) => {
+    // 1. Guard against duplicate live exam submissions to preserve leaderboard merit integrity
+    const isLive = newResult.isLiveExam !== false;
+    if (isLive) {
+      const alreadySubmitted = results.some((r) => {
+        if (r.examId !== newResult.examId) return false;
+        const matchesUser =
+          (newResult.userId && (r.userId === newResult.userId || r.studentId === newResult.userId)) ||
+          (newResult.studentEmail && r.studentEmail?.toLowerCase().trim() === newResult.studentEmail.toLowerCase().trim());
+        return matchesUser;
+      });
+
+      if (alreadySubmitted) {
+        console.warn("Blocked duplicate live exam submission for examId:", newResult.examId);
+        const existing = results.find((r) => {
+          if (r.examId !== newResult.examId) return false;
+          return (
+            (newResult.userId && (r.userId === newResult.userId || r.studentId === newResult.userId)) ||
+            (newResult.studentEmail && r.studentEmail?.toLowerCase().trim() === newResult.studentEmail.toLowerCase().trim())
+          );
+        });
+        if (existing) {
+          setSelectedResult(existing);
+        }
+        return;
+      }
+    }
+
+    // 2. Record synchronous submission markers in localStorage
+    if (newResult.userId) {
+      try {
+        localStorage.setItem(`medha_submitted_${newResult.userId}_${newResult.examId}`, 'true');
+        const prevSubs = JSON.parse(localStorage.getItem(`medha_submitted_exams_${newResult.userId}`) || '[]');
+        if (!prevSubs.includes(newResult.examId)) {
+          prevSubs.push(newResult.examId);
+          localStorage.setItem(`medha_submitted_exams_${newResult.userId}`, JSON.stringify(prevSubs));
+        }
+      } catch (e) {}
+    }
+    try {
+      const browserSubs = JSON.parse(localStorage.getItem('medha_submitted_exam_ids') || '[]');
+      if (!browserSubs.includes(newResult.examId)) {
+        browserSubs.push(newResult.examId);
+        localStorage.setItem('medha_submitted_exam_ids', JSON.stringify(browserSubs));
+      }
+    } catch (e) {}
+
     const updated = [newResult, ...results];
     setResults(updated);
     setSelectedResult(newResult);
@@ -1054,7 +1098,7 @@ export default function App() {
       return;
     }
 
-    setCurrentView(matchedView);
+    setCurrentView((prev) => (prev === matchedView ? prev : matchedView));
   }, [location.pathname, location.search, user, selectedExam, selectedResult, exams, navigate]);
 
   // Automatically scroll to the top or designated section on every page/view or route change
@@ -1142,10 +1186,12 @@ export default function App() {
             isLoadingExams={isExamsLoading}
             setView={setView}
             setSelectedExam={setSelectedExam}
+            setSelectedResult={setSelectedResult}
             user={user}
             onUpdateUser={handleUpdateUser}
             ministryBanks={ministryBanks}
             upcomingExamSettings={upcomingExamSettings}
+            results={results}
           />
         );
       case 'login':
@@ -1217,9 +1263,11 @@ export default function App() {
             isLoadingExams={isExamsLoading}
             setView={setView}
             setSelectedExam={setSelectedExam}
+            setSelectedResult={setSelectedResult}
             user={user}
             ministryBanks={ministryBanks}
             upcomingExamSettings={upcomingExamSettings}
+            results={results}
           />
         );
       case 'result':
@@ -1231,9 +1279,11 @@ export default function App() {
             isLoadingExams={isExamsLoading}
             setView={setView}
             setSelectedExam={setSelectedExam}
+            setSelectedResult={setSelectedResult}
             user={user}
             ministryBanks={ministryBanks}
             upcomingExamSettings={upcomingExamSettings}
+            results={results}
           />
         );
       case 'profile':

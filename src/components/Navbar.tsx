@@ -67,10 +67,32 @@ export default function Navbar({
   const dropdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    let latestList: any[] = [];
+    const updateCount = (list: any[]) => {
+      try {
+        const raw = localStorage.getItem('medha_read_notifications');
+        const readIds: string[] = raw ? JSON.parse(raw) : [];
+        const unread = list.filter((item) => item.id && !readIds.includes(item.id)).length;
+        setNotifCount(unread);
+      } catch {
+        setNotifCount(list.length);
+      }
+    };
+
     const unsub = subscribeToNotifications((list) => {
-      setNotifCount(list.length);
+      latestList = list;
+      updateCount(list);
     });
-    return () => unsub();
+
+    const handleReadUpdate = () => {
+      updateCount(latestList);
+    };
+
+    window.addEventListener('medha_notifications_read_updated', handleReadUpdate);
+    return () => {
+      unsub();
+      window.removeEventListener('medha_notifications_read_updated', handleReadUpdate);
+    };
   }, []);
 
   const isAdminUser =
