@@ -23,7 +23,7 @@ interface TermsAndConditionsViewProps {
 
 export default function TermsAndConditionsView({ setView }: TermsAndConditionsViewProps) {
   useEffect(() => {
-    document.title = 'Terms & Conditions — Medha Exam';
+    document.title = 'ব্যবহারের শর্তাবলী ও নিয়ম — Medha Exam';
     window.scrollTo(0, 0);
   }, []);
 

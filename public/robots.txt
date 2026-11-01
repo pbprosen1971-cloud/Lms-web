@@ -9,6 +9,7 @@ Disallow: /profile
 Disallow: /dashboard
 Disallow: /referral
 Disallow: /wrong-questions
+Disallow: /daily-practice
 Disallow: /delete-account
 Disallow: /exam
 Disallow: /result
@@ -70,6 +71,7 @@ Disallow: /profile
 Disallow: /dashboard
 Disallow: /referral
 Disallow: /wrong-questions
+Disallow: /daily-practice
 Disallow: /delete-account
 Disallow: /exam
 Disallow: /result
@@ -83,6 +85,7 @@ Disallow: /profile
 Disallow: /dashboard
 Disallow: /referral
 Disallow: /wrong-questions
+Disallow: /daily-practice
 Disallow: /delete-account
 Disallow: /exam
 Disallow: /result

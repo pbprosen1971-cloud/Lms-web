@@ -18,8 +18,8 @@ export const DEFAULT_OG_IMAGE = `${BASE_SITE_URL}/og-image.png`;
 
 export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
   home: {
-    title: 'Medha Exam – সরকারি চাকরির MCQ ও অনলাইন মডেল টেস্ট',
-    description: 'Medha Exam-এ BCS, সরকারি চাকরি ও নিয়োগ পরীক্ষার প্রস্তুতি নিন অনলাইন MCQ, বিষয়ভিত্তিক কুইজ, মডেল টেস্ট, ফলাফল বিশ্লেষণ এবং ব্যাখ্যাসহ প্রশ্নের মাধ্যমে।',
+    title: 'Medha Exam – সরকারি চাকরির অনলাইন মডেল টেস্ট',
+    description: 'Medha Exam-এ সরকারি চাকরি ও বিসিএস পরীক্ষার সেরা প্রস্তুতি নিন লাইভ মডেল টেস্ট এবং ব্যাখ্যাসহ প্রশ্ন সমাধানের মাধ্যমে।',
     keywords: 'মেধা এক্সাম, Medha Exam, Job Exam Portal, বিসিএস প্রস্তুতি, BCS Model Test, সরকারি চাকরি পরীক্ষা, ব্যাংক জব মডেল টেস্ট, প্রাইমারি শিক্ষক নিয়োগ পরীক্ষা, BCS Preliminary Exam, লাইভ পরীক্ষা, রেজাল্ট ও মেধাতালিকা',
     canonicalPath: '/',
     ogType: 'website',
@@ -28,15 +28,15 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       'url': `${BASE_SITE_URL}/`,
-      'name': 'Medha Exam – সরকারি চাকরির MCQ ও অনলাইন মডেল টেস্ট',
+      'name': 'Medha Exam – সরকারি চাকরির অনলাইন মডেল টেস্ট',
       'alternateName': ['মেধা এক্সাম', 'Medha Exam', 'Job Exam Portal'],
-      'description': 'Medha Exam-এ BCS, সরকারি চাকরি ও নিয়োগ পরীক্ষার প্রস্তুতি নিন অনলাইন MCQ, বিষয়ভিত্তিক কুইজ, মডেল টেস্ট, ফলাফল বিশ্লেষণ এবং ব্যাখ্যাসহ প্রশ্নের মাধ্যমে।',
+      'description': 'Medha Exam-এ সরকারি চাকরি ও বিসিএস পরীক্ষার সেরা প্রস্তুতি নিন লাইভ মডেল টেস্ট এবং ব্যাখ্যাসহ প্রশ্ন সমাধানের মাধ্যমে।',
       'inLanguage': 'bn'
     }
   },
   'live-exam': {
-    title: 'চলমান ও আসন্ন লাইভ মডেল টেস্ট | BCS ও সরকারি চাকরি — Medha Exam',
-    description: 'মেধা এক্সামের রিয়েল-টাইম লাইভ মডেল টেস্ট ও কুইজে অংশ নিন। বিসিএস, ব্যাংক জব, প্রাইমারি ও মন্ত্রণালয় নিয়োগ পরীক্ষার সময়োপযোগী অনলাইন পরীক্ষা ও তাৎক্ষণিক মেধা তালিকা।',
+    title: 'লাইভ মডেল টেস্ট ও মেধা তালিকা — Medha Exam',
+    description: 'বিসিএস ও নিয়োগ পরীক্ষার রিয়েল-টাইম লাইভ মডেল টেস্টে অংশ নিয়ে তাৎক্ষণিক রেজাল্ট এবং জাতীয় মেরিট পজিশন জানুন।',
     keywords: 'লাইভ পরীক্ষা, লাইভ মডেল টেস্ট, বিসিএস লাইভ এক্সাম, BCS live model test, সরকারি চাকরি লাইভ পরীক্ষা, জব মডেল টেস্ট, অনলাইন কুইজ, Medha Exam live',
     canonicalPath: '/live-exam',
     ogType: 'website',
@@ -44,9 +44,9 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     structuredData: {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
-      'name': 'চলমান ও আসন্ন লাইভ মডেল টেস্ট - Medha Exam',
+      'name': 'লাইভ মডেল টেস্ট ও মেধা তালিকা — Medha Exam',
       'url': `${BASE_SITE_URL}/live-exam`,
-      'description': 'মেধা এক্সামের রিয়েল-টাইম লাইভ মডেল টেস্ট ও নিয়োগ পরীক্ষার অনলাইন প্রশ্ন ও তাৎক্ষণিক মেরিট পজিশন।',
+      'description': 'বিসিএস ও নিয়োগ পরীক্ষার রিয়েল-টাইম লাইভ মডেল টেস্টে অংশ নিয়ে তাৎক্ষণিক রেজাল্ট এবং জাতীয় মেরিট পজিশন জানুন।',
       'about': {
         '@type': 'EducationalOccupationalCredential',
         'credentialCategory': 'Government Job Preparation Exam'
@@ -61,8 +61,8 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     }
   },
   'job-questionbank': {
-    title: 'মন্ত্রণালয় ও দপ্তরভিত্তিক প্রশ্ন ব্যাংক | বিগত নিয়োগ পরীক্ষার প্রশ্ন ও সমাধান — Medha Exam',
-    description: 'বিভিন্ন মন্ত্রণালয়, অধিদপ্তর ও স্বায়ত্তশাসিত প্রতিষ্ঠানের বিগত সরকারি চাকরির নিয়োগ পরীক্ষার প্রশ্ন ব্যাংক, সঠিক উত্তর ও বিশদ সমাধান অনুশীলন করুন মেধা এক্সামে।',
+    title: 'মন্ত্রণালয়ভিত্তিক বিগত প্রশ্ন সমাধান — Medha Exam',
+    description: 'সরকারি বিভিন্ন মন্ত্রণালয় ও অধিদপ্তরের বিগত নিয়োগ পরীক্ষার প্রশ্নব্যাংক এবং ব্যাখ্যাসহ নির্ভুল সমাধান অনুশীলন করুন।',
     keywords: 'প্রশ্নব্যাংক, মন্ত্রণালয় প্রশ্ন ব্যাংক, সরকারি চাকরি প্রশ্ন সমাধান, বিগত সালের প্রশ্ন, Job Question Bank, Ministry Question Bank Bangladesh, বিসিএস প্রশ্ন ব্যাংক',
     canonicalPath: '/job-questionbank',
     ogType: 'website',
@@ -70,9 +70,9 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     structuredData: {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
-      'name': 'মন্ত্রণালয় ও দপ্তরভিত্তিক প্রশ্ন ব্যাংক - Medha Exam',
+      'name': 'মন্ত্রণালয়ভিত্তিক বিগত প্রশ্ন সমাধান — Medha Exam',
       'url': `${BASE_SITE_URL}/job-questionbank`,
-      'description': 'বিভিন্ন মন্ত্রণালয়, অধিদপ্তর ও স্বায়ত্তশাসিত প্রতিষ্ঠানের বিগত নিয়োগ পরীক্ষার প্রশ্ন ব্যাংক, সঠিক উত্তর ও বিশদ সমাধান।',
+      'description': 'সরকারি বিভিন্ন মন্ত্রণালয় ও অধিদপ্তরের বিগত নিয়োগ পরীক্ষার প্রশ্নব্যাংক এবং ব্যাখ্যাসহ নির্ভুল সমাধান অনুশীলন করুন।',
       'hasPart': [
         {
           '@type': 'LearningResource',
@@ -83,8 +83,8 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     }
   },
   'study-materials': {
-    title: 'স্টাডি ম্যাটেরিয়ালস ও লেকচার শিট | বিসিএস ও চাকরি প্রস্তুতি — Medha Exam',
-    description: 'বিসিএস, প্রাথমিক শিক্ষক নিয়োগ ও সরকারি ব্যাংকের প্রস্তুতিমূলক বিষয়ভিত্তিক পিডিএফ, লেকচার শিট, হ্যান্ডনোট ও স্টাডি ম্যাটেরিয়ালস সংগ্রহ ও ডাউনলোড করুন।',
+    title: 'বিসিএস লেকচার শিট ও স্টাডি ম্যাটেরিয়ালস — Medha Exam',
+    description: 'বিসিএস ও সরকারি চাকরির প্রস্তুতিমূলক বিষয়ভিত্তিক লেকচার শিট, হ্যান্ডনোট এবং পিডিএফ সহজে ডাউনলোড করুন।',
     keywords: 'স্টাডি ম্যাটেরিয়ালস, বিসিএস লেকচার শিট, চাকরি প্রস্তুতি পিডিএফ, প্রাইমারি শিক্ষক নিয়োগ শিট, ব্যাংক প্রস্তুতি নোট, Medha Exam Study Materials',
     canonicalPath: '/study-materials',
     ogType: 'website',
@@ -92,14 +92,14 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     structuredData: {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
-      'name': 'স্টাডি ম্যাটেরিয়ালস ও লেকচার শিট - Medha Exam',
+      'name': 'বিসিএস লেকচার শিট ও স্টাডি ম্যাটেরিয়ালস — Medha Exam',
       'url': `${BASE_SITE_URL}/study-materials`,
-      'description': 'সরকারি চাকরির পরীক্ষার প্রস্তুতিমূলক লেকচার শিট ও স্টাডি ম্যাটেরিয়ালস।'
+      'description': 'বিসিএস ও সরকারি চাকরির প্রস্তুতিমূলক বিষয়ভিত্তিক লেকচার শিট, হ্যান্ডনোট এবং পিডিএফ সহজে ডাউনলোড করুন।'
     }
   },
   'job-result': {
-    title: 'চাকরি পরীক্ষার ফলাফল  | সরকারি চাকরির রেজাল্ট – Medha Exam',
-    description: 'Medha Exam থেকে বিভিন্ন সরকারি চাকরির পরীক্ষার ফলাফল দেখুন। পরীক্ষার শিরোনাম নির্বাচন করে আপনার রোল নম্বর দিয়ে সহজেই ফলাফল যাচাই করুন।',
+    title: 'সরকারি চাকরি পরীক্ষার ফলাফল — Medha Exam',
+    description: 'সকল সরকারি ও ব্যাংক নিয়োগ পরীক্ষার সর্বশেষ ফলাফল রোল নম্বর দিয়ে সহজে ও দ্রুত সার্চ করে দেখুন।',
     keywords: 'চাকরি পরীক্ষার ফলাফল, সরকারি চাকরির রেজাল্ট, নিয়োগ পরীক্ষার রেজাল্ট, job exam result bangladesh, bcs result, রোল নম্বর দিয়ে রেজাল্ট যাচাই, Medha Exam Job Results',
     canonicalPath: '/all-job-result',
     ogType: 'website',
@@ -107,14 +107,14 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     structuredData: {
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
-      'name': 'চাকরি পরীক্ষার ফলাফল  | সরকারি চাকরির রেজাল্ট – Medha Exam',
+      'name': 'সরকারি চাকরি পরীক্ষার ফলাফল — Medha Exam',
       'url': `${BASE_SITE_URL}/all-job-result`,
-      'description': 'Medha Exam থেকে বিভিন্ন সরকারি চাকরির পরীক্ষার ফলাফল দেখুন। পরীক্ষার শিরোনাম নির্বাচন করে আপনার রোল নম্বর দিয়ে সহজেই ফলাফল যাচাই করুন।'
+      'description': 'সকল সরকারি ও ব্যাংক নিয়োগ পরীক্ষার সর্বশেষ ফলাফল রোল নম্বর দিয়ে সহজে ও দ্রুত সার্চ করে দেখুন।'
     }
   },
   'age-calculator': {
-    title: 'চাকরির বয়স ক্যালকুলেটর | বিসিএস ও সরকারি চাকরির বয়স হিসাব — Medha Exam',
-    description: 'সরকারি চাকরি ও ব্যাংক নিয়োগ সার্কুলারের নির্ধারিত তারিখ অনুযায়ী নির্ভুল বয়স হিসাব করুন। আপনার বয়স কত বছর, মাস ও দিন তা নিমেষেই গণনা করুন মেধা এক্সামে।',
+    title: 'চাকরির বয়স ক্যালকুলেটর ও হিসাব — Medha Exam',
+    description: 'সরকারি চাকরির নিয়োগ সার্কুলার অনুযায়ী আপনার বয়স কত বছর, মাস ও দিন তা নিমেষেই নির্ভুলভাবে গণনা করুন।',
     keywords: 'চাকরির বয়স ক্যালকুলেটর, সরকারি চাকরির বয়স গণনা, সার্কুলার বয়স ক্যালকুলেটর, BCS age calculator, job age calculator bangladesh, মেধা এক্সাম বয়স ক্যালকুলেটর',
     canonicalPath: '/age-calculator',
     ogType: 'website',
@@ -122,11 +122,11 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     structuredData: {
       '@context': 'https://schema.org',
       '@type': 'WebApplication',
-      'name': 'চাকরির বয়স ক্যালকুলেটর - Medha Exam',
+      'name': 'চাকরির বয়স ক্যালকুলেটর ও হিসাব — Medha Exam',
       'url': `${BASE_SITE_URL}/age-calculator`,
       'applicationCategory': 'UtilityApplication',
       'operatingSystem': 'All',
-      'description': 'সরকারি চাকরি ও ব্যাংক নিয়োগ সার্কুলারের নির্ধারিত তারিখ অনুযায়ী নির্ভুল বয়স হিসাব করার অনলাইন ক্যালকুলেটর।',
+      'description': 'সরকারি চাকরির নিয়োগ সার্কুলার অনুযায়ী আপনার বয়স কত বছর, মাস ও দিন তা নিমেষেই নির্ভুলভাবে গণনা করুন।',
       'offers': {
         '@type': 'Offer',
         'price': '0',
@@ -135,8 +135,8 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     }
   },
   'daily-practice': {
-    title: 'দৈনিক প্র্যাকটিস ও কুইজ প্রস্তুতি — Medha Exam',
-    description: 'প্রতিদিন বিষয়ভিত্তিক প্রশ্ন প্র্যাকটিস ও স্পেশাল কুইজ অনুশীলনের মাধ্যমে বিসিএস ও সরকারি চাকরি পরীক্ষার পূর্ণ প্রস্তুতি নিশ্চিত করুন।',
+    title: 'দৈনিক প্র্যাকটিস ও কুইজ — Medha Exam',
+    description: 'প্রতিদিন বিষয়ভিত্তিক প্রশ্ন প্র্যাকটিস ও স্পেশাল কুইজ অনুশীলনের মাধ্যমে চাকরি পরীক্ষার প্রস্তুতি নিন।',
     keywords: 'দৈনিক প্র্যাকটিস, জব কুইজ, সাধারণ জ্ঞান অনুশীলন, বিসিএস প্র্যাকটিস, Daily Job Practice',
     canonicalPath: '/daily-practice',
     ogType: 'website',
@@ -151,8 +151,8 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     ogImage: DEFAULT_OG_IMAGE,
   },
   faq: {
-    title: 'সচরাচর জিজ্ঞাসিত প্রশ্নাবলী (FAQ) — Medha Exam',
-    description: 'মেধা এক্সামে লাইভ মডেল টেস্ট দেওয়া, রেজাল্ট শিট, মেধা তালিকা ও একাউন্ট ব্যবহার সম্পর্কিত সাধারণ প্রশ্নের উত্তর বিস্তারিত জানুন।',
+    title: 'সাধারণ জিজ্ঞাসা ও FAQ — Medha Exam',
+    description: 'মেধা এক্সামে লাইভ পরীক্ষা দেওয়া, রেজাল্ট যাচাই ও একাউন্ট ব্যবহার সম্পর্কিত প্রয়োজনীয় তথ্যাবলী জানুন।',
     keywords: 'মেধা এক্সাম এফএকিউ, Medha Exam FAQ, পরীক্ষা নিয়মাবলী, রেজাল্ট দেখার নিয়ম, হেল্প সেন্টার',
     canonicalPath: '/faq',
     ogType: 'website',
@@ -189,16 +189,16 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     }
   },
   'terms-and-conditions': {
-    title: 'ব্যবহারের শর্তাবলী ও নিয়মাবলী (Terms & Conditions) — Medha Exam',
-    description: 'মেধা এক্সাম (medhaexam.site) পোর্টাল ব্যবহারের নিয়মাবলী, পরীক্ষার শর্তাবলী, পেমেন্ট ও মেম্বারশিপ সংক্রান্ত আইনি শর্তাবলী বিস্তারিত জানুন।',
+    title: 'ব্যবহারের শর্তাবলী ও নিয়ম — Medha Exam',
+    description: 'মেধা এক্সাম প্ল্যাটফর্মের ব্যবহারবিধি, পরীক্ষার নীতিমালা এবং সেবাসমূহ গ্রহণের আইনি শর্তাবলী বিস্তারিত জানুন।',
     keywords: 'Terms and conditions, ব্যবহারের শর্তাবলী, মেধা এক্সাম নিয়মাবলী',
     canonicalPath: '/terms-and-conditions',
     ogType: 'website',
     ogImage: DEFAULT_OG_IMAGE,
   },
   'privacy-policy': {
-    title: 'গোপনীয়তা নীতিমালা (Privacy Policy) — Medha Exam',
-    description: 'মেধা এক্সাম ব্যবহারকারীদের ব্যক্তিগত তথ্য সুরক্ষা, নিরাপত্তা, কুকিজ ও ডেটা সংরক্ষণ নীতিমালা সম্পর্কে স্পষ্ট ধারণা নিন।',
+    title: 'গোপনীয়তা নীতিমালা ও সুরক্ষা — Medha Exam',
+    description: 'মেধা এক্সাম ব্যবহারকারীদের ব্যক্তিগত তথ্যের নিরাপত্তা ও ডেটা সংরক্ষণ সংক্রান্ত নীতিমালা জানুন।',
     keywords: 'Privacy policy, গোপনীয়তা নীতিমালা, মেধা এক্সাম ডেটা পলিসি',
     canonicalPath: '/privacy-policy',
     ogType: 'website',

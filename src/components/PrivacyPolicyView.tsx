@@ -25,7 +25,7 @@ interface PrivacyPolicyViewProps {
 
 export default function PrivacyPolicyView({ setView }: PrivacyPolicyViewProps) {
   useEffect(() => {
-    document.title = 'Privacy Policy — Medha Exam';
+    document.title = 'গোপনীয়তা নীতিমালা ও সুরক্ষা — Medha Exam';
     window.scrollTo(0, 0);
   }, []);
 

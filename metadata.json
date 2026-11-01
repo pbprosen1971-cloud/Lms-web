@@ -1,6 +1,6 @@
 {
   "name": "Medha Exam",
-  "description": "Medha Exam-এ BCS, সরকারি চাকরি ও নিয়োগ পরীক্ষার প্রস্তুতি নিন অনলাইন MCQ, বিষয়ভিত্তিক কুইজ, মডেল টেস্ট, ফলাফল বিশ্লেষণ এবং ব্যাখ্যাসহ প্রশ্নের মাধ্যমে।",
+  "description": "Medha Exam-এ সরকারি চাকরি ও বিসিএস পরীক্ষার সেরা প্রস্তুতি নিন লাইভ মডেল টেস্ট এবং ব্যাখ্যাসহ প্রশ্ন সমাধানের মাধ্যমে।",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

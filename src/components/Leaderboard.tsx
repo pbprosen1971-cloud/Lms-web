@@ -221,13 +221,13 @@ export default function Leaderboard({
         ) : (
           <>
             {/* Top 3 Podium (2nd Left, 1st Center Elevated, 3rd Right) */}
-            <div className="relative pt-8 pb-0 px-3 sm:px-6 bg-gradient-to-b from-[#141a2e] via-[#182038] to-[#121728] dark:from-[#0c111e] dark:via-[#111728] dark:to-[#0d1220] text-white overflow-hidden border-b border-slate-800">
+            <div className="relative pt-8 pb-0 px-2 sm:px-6 bg-gradient-to-b from-[#141a2e] via-[#182038] to-[#12182c] dark:from-[#0c111e] dark:via-[#111728] dark:to-[#0d1220] text-white overflow-hidden border-b border-slate-800">
               {/* Ambient Background Glows */}
               <div className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 w-80 h-44 bg-amber-500/15 rounded-full blur-3xl" />
               <div className="pointer-events-none absolute top-10 left-4 w-36 h-36 bg-cyan-500/10 rounded-full blur-2xl" />
               <div className="pointer-events-none absolute top-10 right-4 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl" />
 
-              <div className="grid grid-cols-3 gap-2 sm:gap-3.5 items-end max-w-lg mx-auto relative z-10">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-3.5 items-end max-w-lg mx-auto relative z-10">
                 {/* 2nd Place - Left Pedestal */}
                 {second ? (
                   <div className="flex flex-col items-center text-center">
@@ -248,11 +248,14 @@ export default function Leaderboard({
                     </div>
 
                     {/* Pedestal Box */}
-                    <div className={`w-full pt-4 pb-4 px-1.5 sm:px-2 rounded-t-2xl sm:rounded-t-3xl bg-[#1e2742]/90 dark:bg-[#151c32]/95 border-t border-x border-cyan-400/30 backdrop-blur-sm flex flex-col items-center justify-between min-h-[145px] sm:min-h-[165px] ${
+                    <div className={`w-full pt-4 pb-4 px-1 sm:px-2 rounded-t-2xl sm:rounded-t-3xl bg-[#1e2742]/90 dark:bg-[#151c32]/95 border-t border-x border-cyan-400/30 backdrop-blur-sm flex flex-col items-center justify-between min-h-[145px] sm:min-h-[165px] ${
                       second.isCurrentUser ? 'ring-2 ring-emerald-400' : ''
                     }`}>
-                      <div className="w-full">
-                        <h4 className="font-bold text-xs sm:text-sm text-white truncate max-w-full px-1">
+                      <div className="w-full flex flex-col items-center">
+                        <h4
+                          title={second.name}
+                          className="font-bold text-[11px] sm:text-xs md:text-sm text-white line-clamp-2 break-words leading-tight text-center w-full px-0.5"
+                        >
                           {second.name}
                         </h4>
                         {second.isCurrentUser && (
@@ -305,13 +308,15 @@ export default function Leaderboard({
                     </div>
 
                     {/* Pedestal Box */}
-                    <div className={`w-full pt-5 pb-5 px-1.5 sm:px-2 rounded-t-2xl sm:rounded-t-3xl bg-gradient-to-b from-[#2a365c] via-[#212b4a] to-[#182038] dark:from-[#1e2744] dark:via-[#161e36] dark:to-[#12182c] border-t-2 border-x border-amber-400/60 shadow-2xl backdrop-blur-md flex flex-col items-center justify-between min-h-[175px] sm:min-h-[200px] ${
+                    <div className={`w-full pt-5 pb-5 px-1 sm:px-2 rounded-t-2xl sm:rounded-t-3xl bg-gradient-to-b from-[#2a365c] via-[#212b4a] to-[#182038] dark:from-[#1e2744] dark:via-[#161e36] dark:to-[#12182c] border-t-2 border-x border-amber-400/60 shadow-2xl backdrop-blur-md flex flex-col items-center justify-between min-h-[175px] sm:min-h-[200px] ${
                       first.isCurrentUser ? 'ring-2 ring-emerald-400' : ''
                     }`}>
-                      <div className="w-full">
-                        <h4 className="font-black text-sm sm:text-base text-white truncate max-w-full px-1 flex items-center justify-center gap-1">
+                      <div className="w-full flex flex-col items-center">
+                        <h4
+                          title={first.name}
+                          className="font-black text-xs sm:text-sm md:text-base text-white line-clamp-2 break-words leading-tight text-center w-full px-0.5"
+                        >
                           <span>{first.name}</span>
-                          <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                         </h4>
                         {first.isCurrentUser && (
                           <span className="inline-block px-1.5 py-0.2 text-[9px] font-bold rounded bg-emerald-600 text-white mt-0.5">
@@ -358,11 +363,14 @@ export default function Leaderboard({
                     </div>
 
                     {/* Pedestal Box */}
-                    <div className={`w-full pt-4 pb-4 px-1.5 sm:px-2 rounded-t-2xl sm:rounded-t-3xl bg-[#1e2742]/90 dark:bg-[#151c32]/95 border-t border-x border-emerald-400/30 backdrop-blur-sm flex flex-col items-center justify-between min-h-[145px] sm:min-h-[165px] ${
+                    <div className={`w-full pt-4 pb-4 px-1 sm:px-2 rounded-t-2xl sm:rounded-t-3xl bg-[#1e2742]/90 dark:bg-[#151c32]/95 border-t border-x border-emerald-400/30 backdrop-blur-sm flex flex-col items-center justify-between min-h-[145px] sm:min-h-[165px] ${
                       third.isCurrentUser ? 'ring-2 ring-emerald-400' : ''
                     }`}>
-                      <div className="w-full">
-                        <h4 className="font-bold text-xs sm:text-sm text-white truncate max-w-full px-1">
+                      <div className="w-full flex flex-col items-center">
+                        <h4
+                          title={third.name}
+                          className="font-bold text-[11px] sm:text-xs md:text-sm text-white line-clamp-2 break-words leading-tight text-center w-full px-0.5"
+                        >
                           {third.name}
                         </h4>
                         {third.isCurrentUser && (

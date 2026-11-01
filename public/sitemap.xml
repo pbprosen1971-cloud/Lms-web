@@ -3,7 +3,7 @@
   <!-- Homepage -->
   <url>
     <loc>https://medhaexam.site/</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
@@ -11,7 +11,7 @@
   <!-- Live Exam -->
   <url>
     <loc>https://medhaexam.site/live-exam</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
@@ -19,15 +19,15 @@
   <!-- Job Question Bank -->
   <url>
     <loc>https://medhaexam.site/job-questionbank</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
 
-  <!-- All Job Results (নতুন প্রকাশিত চাকরির ফলাফল পোর্টাল) -->
+  <!-- All Job Results -->
   <url>
     <loc>https://medhaexam.site/all-job-result</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
@@ -35,23 +35,15 @@
   <!-- Study Materials & Lecture Sheets -->
   <url>
     <loc>https://medhaexam.site/study-materials</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <!-- Daily Practice & Quizzes -->
-  <url>
-    <loc>https://medhaexam.site/daily-practice</loc>
-    <lastmod>2026-10-30</lastmod>
-    <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
 
   <!-- Job Age Calculator -->
   <url>
     <loc>https://medhaexam.site/age-calculator</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -59,24 +51,24 @@
   <!-- FAQ -->
   <url>
     <loc>https://medhaexam.site/faq</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.7</priority>
   </url>
 
   <!-- Terms and Conditions -->
   <url>
     <loc>https://medhaexam.site/terms-and-conditions</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
+    <priority>0.5</priority>
   </url>
 
   <!-- Privacy Policy -->
   <url>
     <loc>https://medhaexam.site/privacy-policy</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-01</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
+    <priority>0.5</priority>
   </url>
 </urlset>
