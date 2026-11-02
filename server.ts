@@ -1348,7 +1348,6 @@ async function startServer() {
     '/live-exam',
     '/job-questionbank',
     '/age-calculator',
-    '/daily-practice',
     '/faq',
     '/terms-and-conditions',
     '/privacy-policy'
@@ -1364,11 +1363,13 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Explicit route check for pre-rendered static HTML
+    // Explicit route check for pre-rendered static HTML with self-declared canonical header
     SEO_STATIC_ROUTES.forEach((r) => {
-      app.get(r, (_req, res, next) => {
+      app.get([r, `${r}/`], (_req, res, next) => {
         const staticFile = path.join(distPath, r.replace(/^\//, ''), "index.html");
         if (fs.existsSync(staticFile)) {
+          res.setHeader("Link", `<https://medhaexam.site${r}>; rel="canonical"`);
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
           return res.sendFile(staticFile);
         }
         next();
@@ -1376,7 +1377,11 @@ async function startServer() {
     });
 
     app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
+    app.get("*", (req, res) => {
+      const cleanPath = req.path.replace(/\/+$/, '') || '/';
+      const canonicalUrl = cleanPath === '/' ? 'https://medhaexam.site/' : `https://medhaexam.site${cleanPath}`;
+      res.setHeader("Link", `<${canonicalUrl}>; rel="canonical"`);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

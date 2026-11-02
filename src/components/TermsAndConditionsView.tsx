@@ -187,8 +187,13 @@ export default function TermsAndConditionsView({ setView }: TermsAndConditionsVi
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">যোগাযোগ ও সহায়তা</h2>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
             শর্তাবলী সংক্রান্ত যেকোনো প্রশ্ন বা ব্যাখ্যার জন্য আমাদের সাথে যোগাযোগ করতে পারেন:{' '}
-            <a href="mailto:pbprosen1971@gmail.com" className="text-primary font-bold underline">
-              pbprosen1971@gmail.com
+            <a 
+              href="https://wa.me/8801873423847" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-primary font-bold underline"
+            >
+              WhatsApp 01873-423847
             </a>{' '}
             অথবা{' '}
             <a href="mailto:support@medhaexam.com" className="text-primary font-bold underline">

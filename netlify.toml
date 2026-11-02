@@ -15,6 +15,60 @@
     Content-Type = "text/plain; charset=UTF-8"
     Cache-Control = "public, max-age=0, must-revalidate"
 
+[[headers]]
+  for = "/"
+  [headers.values]
+    Link = '<https://medhaexam.site/>; rel="canonical"'
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/live-exam"
+  [headers.values]
+    Link = '<https://medhaexam.site/live-exam>; rel="canonical"'
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/job-questionbank"
+  [headers.values]
+    Link = '<https://medhaexam.site/job-questionbank>; rel="canonical"'
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/all-job-result"
+  [headers.values]
+    Link = '<https://medhaexam.site/all-job-result>; rel="canonical"'
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/study-materials"
+  [headers.values]
+    Link = '<https://medhaexam.site/study-materials>; rel="canonical"'
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/age-calculator"
+  [headers.values]
+    Link = '<https://medhaexam.site/age-calculator>; rel="canonical"'
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/faq"
+  [headers.values]
+    Link = '<https://medhaexam.site/faq>; rel="canonical"'
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/terms-and-conditions"
+  [headers.values]
+    Link = '<https://medhaexam.site/terms-and-conditions>; rel="canonical"'
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/privacy-policy"
+  [headers.values]
+    Link = '<https://medhaexam.site/privacy-policy>; rel="canonical"'
+    Cache-Control = "public, max-age=0, must-revalidate"
+
 [[redirects]]
   from = "/api/cloudinary-sign"
   to = "/.netlify/functions/cloudinary-sign"
