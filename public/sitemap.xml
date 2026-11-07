@@ -35,9 +35,17 @@
   <!-- Study Materials & Lecture Sheets -->
   <url>
     <loc>https://medhaexam.site/study-materials</loc>
-    <lastmod>2026-11-01</lastmod>
+    <lastmod>2026-11-06</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
+  </url>
+
+  <!-- Articles & Exam Preparation Guidelines -->
+  <url>
+    <loc>https://medhaexam.site/articles</loc>
+    <lastmod>2026-11-06</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
   </url>
 
   <!-- Job Age Calculator -->

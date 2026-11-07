@@ -463,6 +463,7 @@ export interface JobExamResult {
   publishedAt?: string;
   createdBy?: string;
   notes?: string;
+  postName?: string; // পদের নাম (Designation / Post Name)
 }
 
 export interface JobExamResultSummary {
@@ -474,6 +475,8 @@ export interface JobExamResultSummary {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
+  notes?: string;
+  postName?: string; // পদের নাম (Designation / Post Name)
 }
 
 export interface JobResultCheckResponse {
@@ -484,6 +487,29 @@ export interface JobResultCheckResponse {
   searchedRoll: string;
   message?: string;
 }
+
+// ==========================================
+// ARTICLES / আর্টিকেল সিস্টেম
+// ==========================================
+export interface Article {
+  id: string;
+  title: string;
+  slug: string;
+  shortDescription: string;
+  content: string; // Markdown / Rich formatted text
+  bannerImage?: string;
+  category?: string;
+  tags?: string[];
+  status: 'draft' | 'published';
+  authorId: string;
+  authorName: string;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  readingTimeMinutes?: number;
+  viewsCount?: number;
+}
+
 
 
 

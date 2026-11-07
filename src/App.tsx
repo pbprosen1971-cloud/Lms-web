@@ -24,6 +24,10 @@ import SubmissionSuccessAnimation from './components/SubmissionSuccessAnimation'
 import PrivacyPolicyView from './components/PrivacyPolicyView';
 import TermsAndConditionsView from './components/TermsAndConditionsView';
 import DeleteAccountView from './components/DeleteAccountView';
+import AboutUsView from './components/AboutUsView';
+import ContactUsView from './components/ContactUsView';
+import ArticlesView from './components/ArticlesView';
+import ArticleDetailView from './components/ArticleDetailView';
 import NotificationPromptBanner from './components/NotificationPromptBanner';
 import FaqSection from './components/FaqSection';
 import { applySEO } from './utils/seo';
@@ -61,7 +65,11 @@ import {
   startFirestoreRealtimeSheetsSync
 } from './services/googleSheetsService';
 import { isGoogleConnected } from './lib/googleAuth';
-import { saveMinistryQuestionBankToFirestore, deleteMinistryQuestionBankFromFirestore } from './services/questionBankService';
+import {
+  saveMinistryQuestionBankToFirestore,
+  deleteMinistryQuestionBankFromFirestore,
+  sortMinistryQuestionBanks,
+} from './services/questionBankService';
 
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, deleteDoc, getDocFromServer, onSnapshot, collection } from 'firebase/firestore';
@@ -78,8 +86,6 @@ async function testConnection() {
 testConnection();
 
 const ADMIN_EMAILS = [
-  'medha@admin.com',
-  'admin@medha.com',
   'pbprosen1971@gmail.com',
   'prosenjit@medha.com',
 ];
@@ -91,7 +97,7 @@ const isAdminEmailAddress = (email?: string | null): boolean => {
 
 const isUserAdminAccount = (u?: UserProfile | null): boolean => {
   if (!u) return false;
-  return u.role === 'admin' || isAdminEmailAddress(u.email);
+  return isAdminEmailAddress(u.email);
 };
 
 const pathToView = (pathname: string): string => {
@@ -109,16 +115,20 @@ const pathToView = (pathname: string): string => {
   if (p === '/daily-practice' || p === '/dailypractice' || p === '/daily') return 'daily-practice';
   if (p === '/wrong-questions' || p === '/wrong-question' || p === '/wrongquestions') return 'wrong-questions';
   if (p === '/study-materials' || p === '/study-material' || p === '/materials' || p === '/studymaterials') return 'study-materials';
+  if (p === '/articles' || p === '/article' || p === '/all-articles') return 'articles';
+  if (p.startsWith('/article/')) return 'article-detail';
   if (p === '/age-calculator' || p === '/agecalculator') return 'age-calculator';
   if (p === '/referral') return 'referral';
   if (p === '/privacy-policy' || p === '/privacy') return 'privacy-policy';
   if (p === '/terms-and-conditions' || p === '/terms') return 'terms-and-conditions';
   if (p === '/delete-account' || p === '/deleteaccount') return 'delete-account';
+  if (p === '/about' || p === '/about-us' || p === '/aboutus') return 'about-us';
+  if (p === '/contact' || p === '/contact-us' || p === '/contactus' || p === '/contract-us') return 'contact-us';
   if (p === '/faq' || p === '/faqs') return 'faq';
   return 'home';
 };
 
-const viewToPath = (view: string): string => {
+const viewToPath = (view: string, slug?: string): string => {
   switch (view) {
     case 'live-exam':
       return '/live-exam';
@@ -146,6 +156,10 @@ const viewToPath = (view: string): string => {
       return '/wrong-questions';
     case 'study-materials':
       return '/study-materials';
+    case 'articles':
+      return '/articles';
+    case 'article-detail':
+      return slug ? `/article/${slug}` : '/articles';
     case 'age-calculator':
       return '/age-calculator';
     case 'referral':
@@ -156,6 +170,10 @@ const viewToPath = (view: string): string => {
       return '/terms-and-conditions';
     case 'delete-account':
       return '/delete-account';
+    case 'about-us':
+      return '/about-us';
+    case 'contact-us':
+      return '/contact-us';
     case 'faq':
       return '/faq';
     case 'home':
@@ -212,6 +230,8 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (parsed && isAdminEmailAddress(parsed.email)) {
           parsed.role = 'admin';
+        } else if (parsed && parsed.role === 'admin' && !isAdminEmailAddress(parsed.email)) {
+          parsed.role = 'student';
         }
         return parsed;
       }
@@ -228,6 +248,15 @@ export default function App() {
   // Selection states
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
+  const [selectedArticleSlug, setSelectedArticleSlug] = useState<string>(() => {
+    try {
+      const p = window.location.pathname;
+      if (p.startsWith('/article/')) {
+        return decodeURIComponent(p.replace(/^\/article\//, '')).replace(/\/$/, '');
+      }
+    } catch {}
+    return '';
+  });
 
   // Subtle Success Animation on Firestore Submission
   const [showSubmitSuccess, setShowSubmitSuccess] = useState<boolean>(false);
@@ -665,7 +694,7 @@ export default function App() {
         const parsed = JSON.parse(savedBanks);
         if (Array.isArray(parsed)) {
           const filtered = parsed.filter(b => !KNOWN_PURGED_MINISTRY_IDS.includes(b.id));
-          setMinistryBanks(filtered);
+          setMinistryBanks(sortMinistryQuestionBanks(filtered));
         }
       } catch (e) {}
     }
@@ -680,8 +709,9 @@ export default function App() {
         }
       });
 
-      setMinistryBanks(firestoreBanks);
-      localStorage.setItem('ministry_question_banks', JSON.stringify(firestoreBanks));
+      const sortedBanks = sortMinistryQuestionBanks(firestoreBanks);
+      setMinistryBanks(sortedBanks);
+      localStorage.setItem('ministry_question_banks', JSON.stringify(sortedBanks));
       localStorage.setItem('ministry_banks_seeded', 'true');
     }, (err) => {
       console.warn("Could not listen to /ministryQuestionBanks in Firestore:", err);
@@ -926,8 +956,9 @@ export default function App() {
       } else {
         updated = [newBank, ...prev];
       }
-      localStorage.setItem('ministry_question_banks', JSON.stringify(updated));
-      return updated;
+      const sorted = sortMinistryQuestionBanks(updated);
+      localStorage.setItem('ministry_question_banks', JSON.stringify(sorted));
+      return sorted;
     });
 
     try {
@@ -938,6 +969,7 @@ export default function App() {
   };
 
   const handleDeleteMinistryBank = async (bankId: string) => {
+    const targetBank = ministryBanks.find((b) => b.id === bankId);
     setMinistryBanks(prev => {
       const updated = prev.filter(b => b.id !== bankId);
       localStorage.setItem('ministry_question_banks', JSON.stringify(updated));
@@ -945,7 +977,12 @@ export default function App() {
     });
 
     try {
-      await deleteMinistryQuestionBankFromFirestore(bankId);
+      await deleteMinistryQuestionBankFromFirestore(
+        bankId,
+        targetBank?.title,
+        targetBank?.ministryName,
+        targetBank?.questions?.map((q) => q.text)
+      );
     } catch (err) {
       console.warn("Failed to delete ministry bank from Firestore:", err);
     }
@@ -1098,6 +1135,13 @@ export default function App() {
       return;
     }
 
+    if (location.pathname.startsWith('/article/')) {
+      const slugFromUrl = decodeURIComponent(location.pathname.replace(/^\/article\//, '')).replace(/\/$/, '');
+      if (slugFromUrl) {
+        setSelectedArticleSlug(slugFromUrl);
+      }
+    }
+
     setCurrentView((prev) => (prev === matchedView ? prev : matchedView));
   }, [location.pathname, location.search, user, selectedExam, selectedResult, exams, navigate]);
 
@@ -1153,9 +1197,12 @@ export default function App() {
     applySEO(currentView || location.pathname);
   }, [currentView, location.pathname]);
 
-  const setView = (nextView: string) => {
+  const setView = (nextView: string, customSlug?: string) => {
     setCurrentView(nextView);
-    const targetPath = viewToPath(nextView);
+    if (customSlug) {
+      setSelectedArticleSlug(customSlug);
+    }
+    const targetPath = viewToPath(nextView, customSlug || selectedArticleSlug);
     if (location.pathname !== targetPath) {
       if (nextView === 'register') {
         const storedRef = localStorage.getItem('pending_referral_code');
@@ -1240,6 +1287,35 @@ export default function App() {
       case 'study-materials':
         return (
           <StudyMaterialsView user={user} setView={setView} />
+        );
+      case 'articles':
+        return (
+          <ArticlesView
+            onSelectArticle={(slug) => {
+              setSelectedArticleSlug(slug);
+              setCurrentView('article-detail');
+              navigate(`/article/${slug}`);
+              window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+            }}
+            setView={setView}
+          />
+        );
+      case 'article-detail':
+        return (
+          <ArticleDetailView
+            slug={selectedArticleSlug}
+            onBack={() => {
+              setCurrentView('articles');
+              navigate('/articles');
+              window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+            }}
+            onSelectRelatedArticle={(slug) => {
+              setSelectedArticleSlug(slug);
+              navigate(`/article/${slug}`);
+              window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+            }}
+            setView={setView}
+          />
         );
       case 'age-calculator':
         return (
@@ -1379,6 +1455,10 @@ export default function App() {
         return <TermsAndConditionsView setView={setView} />;
       case 'delete-account':
         return <DeleteAccountView user={user} setView={setView} onLogout={handleLogout} />;
+      case 'about-us':
+        return <AboutUsView setView={setView} />;
+      case 'contact-us':
+        return <ContactUsView setView={setView} />;
       case 'faq':
         return <FaqSection isStandAlone={true} setView={setView} />;
       default:

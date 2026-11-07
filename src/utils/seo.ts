@@ -212,6 +212,22 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     ogType: 'website',
     ogImage: DEFAULT_OG_IMAGE,
   },
+  'about-us': {
+    title: 'About Us (আমাদের সম্পর্কে) — Medha Exam',
+    description: 'মেধা এক্সাম প্ল্যাটফর্মের লক্ষ্য, উদ্দেশ্য এবং বিসিএস ও সরকারি চাকরি প্রার্থীদের প্রস্তুতি সহায়িকা সম্পর্কে জানুন।',
+    keywords: 'About Us, আমাদের সম্পর্কে, মেধা এক্সাম পরিচিতি',
+    canonicalPath: '/about-us',
+    ogType: 'website',
+    ogImage: DEFAULT_OG_IMAGE,
+  },
+  'contact-us': {
+    title: 'Contact Us (যোগাযোগ) — Medha Exam',
+    description: 'মেধা এক্সামের সাথে যোগাযোগ, হেল্পলাইন নম্বর, ইমেইল এবং অফিসিয়াল সোশ্যাল মিডিয়া সাপোর্ট চ্যানেল।',
+    keywords: 'Contact Us, যোগাযোগ, হেল্পলাইন, কাস্টমার সাপোর্ট',
+    canonicalPath: '/contact-us',
+    ogType: 'website',
+    ogImage: DEFAULT_OG_IMAGE,
+  },
   login: {
     title: 'লগইন করুন | মেধা এক্সাম একাউন্ট — Medha Exam',
     description: 'আপনার মেধা এক্সাম অ্যাকাউন্টে লগইন করে বিসিএস, ব্যাংক ও সরকারি চাকরি পরীক্ষার লাইভ মডেল টেস্টে অংশগ্রহণ করুন।',
@@ -275,7 +291,22 @@ export const SEO_PAGE_CONFIGS: Record<string, PageSEOConfig> = {
     canonicalPath: '/admin',
     ogType: 'website',
     ogImage: DEFAULT_OG_IMAGE,
-  }
+  },
+  articles: {
+    title: 'আর্টিকেল ও গাইডলাইন — বিসিএস ও সরকারি চাকরির প্রস্তুতি | Medha Exam',
+    description: 'বিসিএস, ব্যাংক ও সরকারি চাকরি পরীক্ষার সফল প্রস্তুতি, বিষয়ভিত্তিক শর্টকাট, পড়ার রুটিন ও ক্যারিয়ার গাইডলাইন বিষয়ক দরকারি আর্টিকেল পড়ুন।',
+    keywords: 'আর্টিকেল, বিসিএস প্রস্তুতি টিপস, সরকারি চাকরি গাইডলাইন, বিসিএস বুক লিস্ট, পড়ার নিয়মাবলী, Medha Exam articles',
+    canonicalPath: '/articles',
+    ogType: 'website',
+    ogImage: DEFAULT_OG_IMAGE,
+    structuredData: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      'name': 'আর্টিকেল ও গাইডলাইন — বিসিএস ও সরকারি চাকরির প্রস্তুতি | Medha Exam',
+      'url': `${BASE_SITE_URL}/articles`,
+      'description': 'বিসিএস, ব্যাংক ও সরকারি চাকরি পরীক্ষার সফল প্রস্তুতি, বিষয়ভিত্তিক শর্টকাট, পড়ার রুটিন ও ক্যারিয়ার গাইডলাইন বিষয়ক দরকারি আর্টিকেল পড়ুন।',
+    },
+  },
 };
 
 /**
@@ -313,6 +344,18 @@ export function normalizeViewKey(input: string): string {
 
   if (clean === '/registration' || clean === 'registration' || clean === '/register' || clean === 'register') {
     return 'register';
+  }
+
+  if (clean === '/articles' || clean === 'articles' || clean === '/article' || clean.startsWith('/article/')) {
+    return 'articles';
+  }
+
+  if (clean === '/about' || clean === '/about-us' || clean === 'about' || clean === 'about-us') {
+    return 'about-us';
+  }
+
+  if (clean === '/contact' || clean === '/contact-us' || clean === 'contact' || clean === 'contact-us' || clean === '/contract-us') {
+    return 'contact-us';
   }
 
   // Remove leading slash if any

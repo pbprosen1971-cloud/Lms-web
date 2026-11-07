@@ -6,133 +6,188 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Users Collection
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email in ['pbprosen1971@gmail.com', 'prosenjit@medha.com']
+      );
+    }
+
+    // 1. Users Collection: Protect PII (names, emails, phone numbers)
     match /users/{userId} {
-      allow read, write: if true;
+      // Individual user can get their own doc; admin can inspect any user
+      allow get: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // Admin can list users (for admin panel user management)
+      allow list: if isAdmin();
+      // User can create or update their own profile; Admin has full access
+      allow create: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
     }
 
-    // Exams Collection (legacy and general)
+    // 2. Exams Collections (Upcoming, Live, and Question Content)
     match /exams/{examId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Dedicated /exam collection (Upcoming Exam / Exam Schedule)
     match /exam/{examId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Dedicated /Exam collection (Actual Exam Content) and nested questions
     match /Exam/{examId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
 
       match /questions/{questionId} {
-        allow read, write: if true;
+        allow read: if true;
+        allow write: if isAdmin();
       }
     }
 
-    // Questions Collection
     match /questions/{questionId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Results Collection
-    match /results/{resultId} {
-      allow read, write: if true;
-    }
-
-    // Payments Collection
-    match /payments/{paymentId} {
-      allow read, write: if true;
-    }
-
-    // Manual Payment Requests Collection
-    match /paymentRequests/{requestId} {
-      allow read, write: if true;
-    }
-
-    // Ministry Question Banks Collection
+    // 3. Question Banks (Ministry & Standalone)
     match /ministryQuestionBanks/{bankId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Dedicated QuestionBank Collection (Standalone Admin Question Repository)
     match /QuestionBank/{questionId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Site Settings Collection (e.g. siteSettings/upcomingExam, siteSettings/bannerNotice)
+    // 4. Site Settings (Upcoming exam countdown, notices, deletion registry)
     match /siteSettings/{settingId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Push Notification Device Tokens
-    match /fcmTokens/{tokenId} {
-      allow read, write: if true;
+    // 5. Results & Leaderboards
+    match /results/{resultId} {
+      // Results are readable for national merit leaderboard and test solutions
+      allow read: if true;
+      // Authenticated students can submit their own exam results
+      allow create: if isAuthenticated();
+      // Only admins can alter or delete test results
+      allow update, delete: if isAdmin();
     }
 
-    // Broadcast Notifications Collection
-    match /notifications/{notificationId} {
-      allow read, write: if true;
+    // 6. Payments & Manual Payment Requests: Private Financial Data
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.userId || 
+        request.auth.uid == resource.data.uid || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid || 
+        request.resource.data.uid == request.auth.uid
+      );
+      allow update, delete: if isAdmin();
     }
 
-    // Referrals Collection
-    match /referrals/{referralId} {
-      allow read, write: if true;
+    match /paymentRequests/{requestId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.userId || 
+        request.auth.uid == resource.data.uid || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid || 
+        request.resource.data.uid == request.auth.uid
+      );
+      allow update, delete: if isAdmin();
     }
 
-    // Study Materials Collection (PDF resources metadata)
+    // 7. Study Materials (PDF Resources)
     match /studyMaterials/{materialId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Material Access History Collection
     match /materialAccess/{accessId} {
-      allow read, write: if true;
-    }
-
-    // Daily Practice Sessions & Results (Scoped to authenticated user's ID)
-    match /dailyPractice/{practiceId} {
-      allow get: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow list: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.userId || isAdmin()
+      );
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
-    // Wrong Questions (Personal to each user, scoped to request.auth.uid)
+    // 8. Daily Practice Sessions & Results (Scoped to owner)
+    match /dailyPractice/{practiceId} {
+      allow get: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // 9. Wrong Questions (Personal to each user)
     match /wrongQuestions/{userId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read, write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
 
       match /questions/{questionId} {
-        allow get, list: if isAuthenticated() && request.auth.uid == userId;
-        allow create: if isAuthenticated() && request.auth.uid == userId && (request.resource.data.userId == request.auth.uid || !('userId' in request.resource.data));
-        allow update: if isAuthenticated() && request.auth.uid == userId;
-        allow delete: if isAuthenticated() && request.auth.uid == userId;
+        allow get, list: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+        allow create: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+        allow update, delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       }
     }
 
-    // Account Deletion Requests (Google Play & Public Web Compliance)
+    // 10. Referrals System
+    match /referrals/{referralId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.referrerId || 
+        request.auth.uid == resource.data.referredUserId || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // 11. Push Notifications
+    match /fcmTokens/{tokenId} {
+      allow create, update: if true;
+      allow read, delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 12. Account Deletion Requests (Google Play & Privacy Compliance)
     match /accountDeletionRequests/{requestId} {
       allow create: if true;
-      allow read, write: if isAuthenticated();
+      allow read, update, delete: if isAdmin();
     }
 
-    // Job Examination Results Collection (চাকরি পরীক্ষার ফলাফল)
+    // 13. Job Examination Results (চাকরি পরীক্ষার ফলাফল)
     match /jobresult/{resultId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isAdmin();
 
       match /rolls/{rollNumber} {
-        allow read, write: if true;
+        allow read: if true;
+        allow write: if isAdmin();
       }
     }
 
-    // Default catch-all rule: Deny all unmatched collections
+    // 14. Articles & Editorial Content (আর্টিকেল ও গাইডলাইন)
+    match /articles/{articleId} {
+      // Public can read published articles; admin can read all (including drafts)
+      allow read: if resource == null || resource.data.status == 'published' || isAdmin();
+      // Only authenticated admins can create, update, or delete articles
+      allow write: if isAdmin();
+    }
+
+    // Default Catch-All: Block any unspecified paths
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
-
-
-

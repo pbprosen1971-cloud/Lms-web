@@ -47,6 +47,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState('');
   const [institution, setInstitution] = useState('');
   const [error, setError] = useState('');
@@ -242,32 +244,44 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
   }, [isDarkMode]);
 
   // Helper to translate Firebase auth errors to beautiful Bengali
-  const getBengaliErrorMessage = (errCode: string): string => {
-    switch (errCode) {
-      case 'auth/email-already-in-use':
-        return 'এই ইমেইলটি ইতিমধ্যে নিবন্ধিত রয়েছে। দয়া করে অন্য ইমেইল ব্যবহার করুন।';
-      case 'auth/invalid-email':
-        return 'দয়া করে একটি সঠিক ইমেইল ঠিকানা প্রদান করুন।';
-      case 'auth/weak-password':
-        return 'পাসওয়ার্ডটি অত্যন্ত দুর্বল। এটি কমপক্ষে ৬ অক্ষরের হতে হবে।';
-      case 'auth/wrong-password':
-      case 'auth/invalid-credential':
-        return 'ভুল ইমেইল অথবা পাসওয়ার্ড প্রদান করা হয়েছে। দয়া করে সঠিক তথ্য দিন।';
-      case 'auth/user-not-found':
-        return 'এই ইমেইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি।';
-      case 'auth/popup-closed-by-user':
-        return 'Google লগইন উইন্ডোটি বন্ধ করা হয়েছে। আবার চেষ্টা করুন।';
-      case 'auth/unauthorized-domain':
-        return 'এই ওয়েবসাইট ডোমেইনটি ফায়ারবেসে অনুমোদিত (Authorized) নয়। দয়া করে ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।';
-      case 'auth/popup-blocked':
-        return 'ব্রাউজারে Google লগইন পপ-আপ ব্লক করা রয়েছে। পপ-আপ অ্যালাউ করে আবার চেষ্টা করুন।';
-      case 'auth/operation-not-allowed':
-        return 'ফায়ারবেস অথেন্টিকেশন কনফিগারেশন প্রক্রিয়াধীন রয়েছে।';
-      case 'quick-login-password-mismatch':
-        return 'এই অ্যাকাউন্টটি ইতিমধ্যে ভিন্ন পাসওয়ার্ড দিয়ে তৈরি করা আছে। দয়া করে সঠিক পাসওয়ার্ড ব্যবহার করে সাধারণ লগইন ফরম দিয়ে প্রবেশ করুন।';
-      default:
-        return 'একটি অপ্রত্যাশিত সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।';
+  const getBengaliErrorMessage = (errInput: unknown): string => {
+    const raw = typeof errInput === 'string' ? errInput : (errInput as any)?.code || (errInput as any)?.message || '';
+    const str = String(raw).toLowerCase();
+
+    if (str.includes('email-already-in-use')) {
+      return 'এই ইমেইলটি ইতিমধ্যে নিবন্ধিত রয়েছে। দয়া করে অন্য ইমেইল ব্যবহার করুন বা লগইন করুন।';
     }
+    if (str.includes('invalid-email')) {
+      return 'দয়া করে একটি সঠিক ইমেইল ঠিকানা প্রদান করুন।';
+    }
+    if (str.includes('weak-password')) {
+      return 'পাসওয়ার্ডটি অত্যন্ত দুর্বল। এটি কমপক্ষে ৬ অক্ষরের হতে হবে।';
+    }
+    if (str.includes('wrong-password') || str.includes('invalid-credential') || str.includes('invalid-login-credentials')) {
+      return 'ভুল ইমেইল অথবা পাসওয়ার্ড প্রদান করা হয়েছে। আপনি যদি পাসওয়ার্ড সেট না করে থাকেন, তবে নিচে "Google দিয়ে লগইন" করুন অথবা "পাসওয়ার্ড ভুলে গেছেন?" চাপুন।';
+    }
+    if (str.includes('user-not-found')) {
+      return 'এই ইমেইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে রেজিস্ট্রেশন করুন।';
+    }
+    if (str.includes('user-disabled')) {
+      return 'এই অ্যাকাউন্টটি নিষ্ক্রিয় করা হয়েছে। সহায়তার জন্য অ্যাডমিনের সাথে যোগাযোগ করুন।';
+    }
+    if (str.includes('too-many-requests')) {
+      return 'বারবার ভুল চেষ্টার কারণে অ্যাকাউন্ট সাময়িকভাবে লক রয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।';
+    }
+    if (str.includes('popup-closed-by-user') || str.includes('cancelled-popup-request')) {
+      return 'Google লগইন উইন্ডোটি বন্ধ করা হয়েছে। আবার চেষ্টা করুন।';
+    }
+    if (str.includes('unauthorized-domain')) {
+      return 'এই ওয়েবসাইট ডোমেইনটি ফায়ারবেসে অনুমোদিত (Authorized) নয়। দয়া করে ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।';
+    }
+    if (str.includes('popup-blocked')) {
+      return 'ব্রাউজারে Google লগইন পপ-আপ ব্লক করা রয়েছে। পপ-আপ অ্যালাউ করে আবার চেষ্টা করুন।';
+    }
+    if (str.includes('operation-not-allowed')) {
+      return 'ফায়ারবেস অথেন্টিকেশন কনফিগারেশন প্রক্রিয়াধীন রয়েছে।';
+    }
+    return 'ভুল ইমেইল অথবা পাসওয়ার্ড প্রদান করা হয়েছে। দয়া করে সঠিক তথ্য দিন।';
   };
 
   // Handle standard login and registration via Firebase
@@ -291,6 +305,12 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
     if (password.length < 6) {
       setError('পাসওয়ার্ডটি অত্যন্ত দুর্বল। এটি কমপক্ষে ৬ অক্ষরের হতে হবে।');
+      setLoading(false);
+      return;
+    }
+
+    if (isRegistering && password !== confirmPassword) {
+      setError('পাসওয়ার্ড এবং পাসওয়ার্ড নিশ্চিতকরণ মেলেনি। দয়া করে উভয় ফিল্ডে একই পাসওয়ার্ড দিন।');
       setLoading(false);
       return;
     }
@@ -354,12 +374,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
     try {
       const lowerEmail = email.toLowerCase().trim();
       const isAdminEmail =
-        lowerEmail === 'medha@admin.com' ||
-        lowerEmail === 'admin@medha.com' ||
         lowerEmail === 'pbprosen1971@gmail.com' ||
         lowerEmail === 'prosenjit@medha.com';
-      const isSpecialAdmin = lowerEmail === 'medha@admin.com' || lowerEmail === 'admin@medha.com';
-      const isSpecialStudent = lowerEmail === 'student@medha.com';
 
       if (isRegistering) {
         const trimmedName = name.trim();
@@ -467,90 +483,10 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         setLoading(false);
         return;
       } else {
-        // 1. Authenticating with Firebase Auth
-        let userCredential: any = null;
-        if (isSpecialAdmin) {
-          const tryPasswords = [password, '777031', 'admin123', '123456'].filter((p, i, a) => a.indexOf(p) === i && !!p);
-          for (const p of tryPasswords) {
-            try {
-              userCredential = await signInWithEmailAndPassword(auth, email, p);
-              if (userCredential?.user) break;
-            } catch (e) {}
-          }
-          if (!userCredential) {
-            try {
-              userCredential = await createUserWithEmailAndPassword(auth, email, password || '777031');
-            } catch (signUpErr) {}
-          }
-        } else if (isSpecialStudent) {
-          const tryPasswords = [password, 'student123', '123456'].filter((p, i, a) => a.indexOf(p) === i && !!p);
-          for (const p of tryPasswords) {
-            try {
-              userCredential = await signInWithEmailAndPassword(auth, email, p);
-              if (userCredential?.user) break;
-            } catch (e) {}
-          }
-          if (!userCredential) {
-            try {
-              userCredential = await createUserWithEmailAndPassword(auth, email, password || 'student123');
-            } catch (signUpErr) {}
-          }
-        }
-
-        // If standard login
-        if (!userCredential && !isSpecialAdmin) {
-          try {
-            userCredential = await signInWithEmailAndPassword(auth, email, password);
-          } catch (signInErr: any) {
-            if (signInErr?.code !== 'auth/operation-not-allowed' && !signInErr?.message?.includes('operation-not-allowed')) {
-              throw signInErr;
-            }
-          }
-        }
-
-        const firebaseUser = userCredential?.user;
+        // 1. Authenticating securely with Firebase Auth
+        const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        const firebaseUser = userCredential.user;
         const nowIso = new Date().toISOString();
-
-        // If admin login failed via cloud Firebase Auth, but user typed admin credentials (e.g. medha@admin.com / 777031)
-        if (isSpecialAdmin && !firebaseUser) {
-          const fallbackUid = '2JDRuYTnWuXwQFVAefh1GP1gWcy1';
-          const adminProfile: UserProfile = {
-            id: fallbackUid,
-            uid: fallbackUid,
-            studentId: fallbackUid,
-            name: 'Prosenjit',
-            fullName: 'Prosenjit',
-            email: 'medha@admin.com',
-            phone: '০১৪৫৪৪৫৪৫',
-            photoURL: '',
-            avatar: '',
-            role: 'admin',
-            accountStatus: 'active',
-            createdAt: '2026-08-05T17:05:59.331Z',
-            registrationDate: '2026-08-05T17:05:59.331Z',
-            lastLogin: nowIso,
-            institution: 'ঢাকা কলেজ',
-            batch: 'ঢাকা কলেজ',
-            joinedDate: '2026-08-05',
-            earnedCertificates: [],
-            isPremium: true,
-            isPremiumDate: '2026-08-05',
-            isPremiumExpiryDate: '2099-12-31',
-            inPremiumDate: '2026-08-05',
-            inPremiumExpiryDate: '2099-12-31',
-          };
-
-          try {
-            await setDoc(doc(db, 'users', fallbackUid), adminProfile, { merge: true });
-          } catch (e) {
-            console.warn("Firestore save for fallback admin:", e);
-          }
-
-          localStorage.setItem('active_user_session', JSON.stringify(adminProfile));
-          onLoginSuccess(adminProfile);
-          setView('admin');
-          return;
-        }
 
         // 2. If email is not verified (and NOT admin), block access and show verification screen
         if (firebaseUser && !firebaseUser.emailVerified && !isAdminEmail) {
@@ -569,7 +505,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           return;
         }
 
-        const uid = firebaseUser ? firebaseUser.uid : (isAdminEmail ? '2JDRuYTnWuXwQFVAefh1GP1gWcy1' : 'user_' + btoa(email.toLowerCase().trim()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20));
+        const uid = firebaseUser.uid;
 
         // 3. Fetch User Profile from Firestore
         let profile: UserProfile | null = null;
@@ -589,20 +525,13 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         if (profile) {
           profile.lastLogin = nowIso;
           profile.uid = uid;
-          profile.fullName = profile.fullName || profile.name || (isAdminEmail ? 'Prosenjit' : 'শিক্ষার্থী');
+          profile.fullName = profile.fullName || profile.name || (isAdminEmail ? 'Admin' : 'শিক্ষার্থী');
           profile.photoURL = profile.photoURL || profile.avatar || '';
           profile.accountStatus = profile.accountStatus || 'active';
           profile.createdAt = profile.createdAt || nowIso;
 
           if (isAdminEmail) {
             profile.role = 'admin';
-            profile.name = 'Prosenjit';
-            profile.fullName = 'Prosenjit';
-            profile.phone = '০১৪৫৪৪৫৪৫';
-            profile.institution = 'ঢাকা কলেজ';
-            profile.batch = 'ঢাকা কলেজ';
-            profile.studentId = '2JDRuYTnWuXwQFVAefh1GP1gWcy1';
-            profile.registrationDate = '2026-08-05T17:05:59.331Z';
             profile.isPremium = true;
           } else if (profile.role === 'admin' && !isAdminEmail) {
             profile.role = 'student';
@@ -614,30 +543,30 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           }
         } else {
           const defaultStudentName = firebaseUser?.displayName || name || (email ? email.split('@')[0] : 'ইউজার');
-          const displayName = isAdminEmail ? 'Prosenjit' : defaultStudentName;
+          const displayName = isAdminEmail ? 'Admin' : defaultStudentName;
           profile = {
             id: uid,
             uid: uid,
-            studentId: isAdminEmail ? '2JDRuYTnWuXwQFVAefh1GP1gWcy1' : uid,
+            studentId: uid,
             name: displayName,
             fullName: displayName,
             email: firebaseUser?.email || email,
-            phone: isAdminEmail ? '০১৪৫৪৪৫৪৫' : '',
+            phone: '',
             photoURL: firebaseUser?.photoURL || '',
             avatar: firebaseUser?.photoURL || '',
             role: isAdminEmail ? 'admin' : 'student',
             accountStatus: 'active',
-            createdAt: isAdminEmail ? '2026-08-05T17:05:59.331Z' : nowIso,
-            registrationDate: isAdminEmail ? '2026-08-05T17:05:59.331Z' : nowIso,
+            createdAt: nowIso,
+            registrationDate: nowIso,
             lastLogin: nowIso,
-            institution: isAdminEmail ? 'ঢাকা কলেজ' : '',
-            batch: isAdminEmail ? 'ঢাকা কলেজ' : '',
-            joinedDate: isAdminEmail ? '2026-08-05' : new Date().toLocaleDateString('bn-BD'),
+            institution: '',
+            batch: '',
+            joinedDate: new Date().toLocaleDateString('bn-BD'),
             earnedCertificates: [],
             isPremium: isAdminEmail ? true : false,
-            isPremiumDate: isAdminEmail ? '2026-08-05' : '',
+            isPremiumDate: isAdminEmail ? nowIso : '',
             isPremiumExpiryDate: isAdminEmail ? '2099-12-31' : '',
-            inPremiumDate: isAdminEmail ? '2026-08-05' : '',
+            inPremiumDate: isAdminEmail ? nowIso : '',
             inPremiumExpiryDate: isAdminEmail ? '2099-12-31' : '',
           };
           try {
@@ -656,39 +585,37 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         setView(profile.role === 'admin' ? 'admin' : 'home');
       }
     } catch (err: any) {
-      console.error('Firebase Auth Error:', err);
+      console.warn('Firebase Auth Login notice:', err?.code || err?.message);
       if (err?.code === 'auth/operation-not-allowed' || err?.message?.includes('operation-not-allowed')) {
         const lowerEmail = email.toLowerCase().trim();
         const isAdmin =
-          lowerEmail === 'medha@admin.com' ||
-          lowerEmail === 'admin@medha.com' ||
           lowerEmail === 'pbprosen1971@gmail.com' ||
           lowerEmail === 'prosenjit@medha.com';
         const nowIso = new Date().toISOString();
-        const fallbackUid = isAdmin ? '2JDRuYTnWuXwQFVAefh1GP1gWcy1' : 'user_' + btoa(lowerEmail).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+        const fallbackUid = 'user_' + btoa(lowerEmail).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
         const fallbackProfile: UserProfile = {
           id: fallbackUid,
           uid: fallbackUid,
           studentId: fallbackUid,
-          name: isAdmin ? 'Prosenjit' : (name || lowerEmail.split('@')[0]),
-          fullName: isAdmin ? 'Prosenjit' : (name || lowerEmail.split('@')[0]),
+          name: isAdmin ? 'Admin' : (name || lowerEmail.split('@')[0]),
+          fullName: isAdmin ? 'Admin' : (name || lowerEmail.split('@')[0]),
           email: lowerEmail,
-          phone: isAdmin ? '০১৪৫৪৪৫৪৫' : '',
+          phone: '',
           photoURL: '',
           avatar: '',
           role: isAdmin ? 'admin' : 'student',
           accountStatus: 'active',
-          createdAt: isAdmin ? '2026-08-05T17:05:59.331Z' : nowIso,
-          registrationDate: isAdmin ? '2026-08-05T17:05:59.331Z' : nowIso,
+          createdAt: nowIso,
+          registrationDate: nowIso,
           lastLogin: nowIso,
-          institution: isAdmin ? 'ঢাকা কলেজ' : '',
-          batch: isAdmin ? 'ঢাকা কলেজ' : '',
-          joinedDate: isAdmin ? '2026-08-05' : new Date().toLocaleDateString('bn-BD'),
+          institution: '',
+          batch: '',
+          joinedDate: new Date().toLocaleDateString('bn-BD'),
           earnedCertificates: [],
           isPremium: isAdmin ? true : false,
-          isPremiumDate: isAdmin ? '2026-08-05' : '',
+          isPremiumDate: isAdmin ? nowIso : '',
           isPremiumExpiryDate: isAdmin ? '2099-12-31' : '',
-          inPremiumDate: isAdmin ? '2026-08-05' : '',
+          inPremiumDate: isAdmin ? nowIso : '',
           inPremiumExpiryDate: isAdmin ? '2099-12-31' : '',
         };
         try {
@@ -699,7 +626,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         setView(isAdmin ? 'admin' : 'home');
         return;
       }
-      setError(getBengaliErrorMessage(err.code || err.message));
+      setError(getBengaliErrorMessage(err));
       if (widgetIdRef.current !== null && window.grecaptcha) {
         try {
           window.grecaptcha.reset(widgetIdRef.current);
@@ -875,8 +802,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         setForgotEmail('');
       }, 3000);
     } catch (err: any) {
-      console.error('Forgot Password Error:', err);
-      setError(getBengaliErrorMessage(err.code || err.message));
+      console.warn('Forgot Password note:', err?.code || err?.message);
+      setError(getBengaliErrorMessage(err));
     }
   };
 
@@ -985,6 +912,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                 onClick={() => {
                   setIsRegistering(false);
                   setError('');
+                  setConfirmPassword('');
                 }}
                 className={`relative flex-1 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer z-10 ${
                   !isRegistering
@@ -1007,6 +935,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                 onClick={() => {
                   setIsRegistering(true);
                   setError('');
+                  setConfirmPassword('');
                 }}
                 className={`relative flex-1 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer z-10 ${
                   isRegistering
@@ -1094,7 +1023,9 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                   >
                     {/* Name field */}
                     <div className="space-y-1.5 pt-0.5">
-                      <label className="text-xs font-bold text-slate-600 dark:text-slate-300">নাম</label>
+                      <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                        নাম <span className="text-rose-500 font-bold">*</span>
+                      </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                           <User className="h-4.5 w-4.5" />
@@ -1159,7 +1090,9 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
 
               {/* Email Address */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">ইমেইল ঠিকানা</label>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  ইমেইল ঠিকানা <span className="text-rose-500 font-bold">*</span>
+                </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                     <Mail className="h-4.5 w-4.5" />
@@ -1178,7 +1111,9 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
               {/* Password */}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-300">পাসওয়ার্ড</label>
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                    পাসওয়ার্ড <span className="text-rose-500 font-bold">*</span>
+                  </label>
                   {!isRegistering && (
                     <button
                       type="button"
@@ -1216,6 +1151,41 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
                   </button>
                 </div>
               </div>
+
+              {/* Confirm Password (পাসওয়ার্ড নিশ্চিত করুন) */}
+              {isRegistering && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                    পাসওয়ার্ড নিশ্চিত করুন <span className="text-rose-500 font-bold">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="h-4.5 w-4.5" />
+                    </div>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required={isRegistering}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-type Password"
+                      className="block w-full pl-10 pr-10 py-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none transition-colors"
+                      title={showConfirmPassword ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4.5 w-4.5" />
+                      ) : (
+                        <Eye className="h-4.5 w-4.5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Google reCAPTCHA v2 / Human Verification Widget */}
               <div className="pt-2 pb-1 space-y-1.5">

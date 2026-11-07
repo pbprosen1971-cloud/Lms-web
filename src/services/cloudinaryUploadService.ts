@@ -6,7 +6,7 @@
  */
 
 import { auth } from '../lib/firebase';
-import { resizeAndCompressTo512 } from '../utils/imageOptimizer';
+import { resizeAndCompressTo512, resizeAndCompressBanner } from '../utils/imageOptimizer';
 
 export interface CloudinarySignResponse {
   success: boolean;
@@ -30,6 +30,9 @@ export interface CloudinaryUploadResult {
 
 export interface UploadOptions {
   onProgress?: (percentage: number) => void;
+  preserveAspectRatio?: boolean;
+  maxWidth?: number;
+  maxHeight?: number;
 }
 
 /**
@@ -80,15 +83,25 @@ export async function uploadImageToCloudinary(
     throw new Error('Cloudinary কনফিগারেশন অসম্পূর্ণ। দয়া করে পরিবেশ ভেরিয়েবলসমূহ চেক করুন।');
   }
 
-  // 4. Ensure image is compressed to exactly 512x512 pixels before reaching the server
+  // 4. Client-side compression before sending to network
   let payloadBlob = blob;
   try {
-    const compressed = await resizeAndCompressTo512(blob, {
-      targetWidth: 512,
-      targetHeight: 512,
-      quality: 0.85,
-    });
-    payloadBlob = compressed.blob;
+    if (options?.preserveAspectRatio) {
+      const bannerCompressed = await resizeAndCompressBanner(
+        blob,
+        options.maxWidth || 1280,
+        options.maxHeight || 720,
+        0.85
+      );
+      payloadBlob = bannerCompressed.blob;
+    } else {
+      const compressed = await resizeAndCompressTo512(blob, {
+        targetWidth: 512,
+        targetHeight: 512,
+        quality: 0.85,
+      });
+      payloadBlob = compressed.blob;
+    }
   } catch (compErr) {
     console.warn('Pre-upload client compression warning (fallback to original blob):', compErr);
   }

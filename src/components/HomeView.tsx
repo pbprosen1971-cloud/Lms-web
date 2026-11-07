@@ -63,7 +63,11 @@ import ModernNoticeTicker from './ModernNoticeTicker';
 import FaqSection from './FaqSection';
 import { detectQuestionSubject } from '../lib/subjectClassifier';
 import QuestionBankPdfModal from './QuestionBankPdfModal';
-import { normalizeMinistryName, getMinistryComparisonKey } from '../services/questionBankService';
+import {
+  normalizeMinistryName,
+  getMinistryComparisonKey,
+  sortMinistryQuestionBanks,
+} from '../services/questionBankService';
 import { ExamGridSkeleton, Skeleton } from './SkeletonLoader';
 import Leaderboard from './Leaderboard';
 
@@ -229,7 +233,8 @@ export default function HomeView({
 
   const publishedMinistryBanks = useMemo(() => {
     const raw = Array.isArray(ministryBanks) ? ministryBanks : INITIAL_MINISTRY_BANKS;
-    return raw.filter(b => b.isPublished !== false && !KNOWN_PURGED_MINISTRY_IDS.includes(b.id));
+    const list = raw.filter(b => b.isPublished !== false && !KNOWN_PURGED_MINISTRY_IDS.includes(b.id));
+    return sortMinistryQuestionBanks(list);
   }, [ministryBanks]);
 
   const existingMinistryFilters = useMemo(() => {
@@ -258,7 +263,7 @@ export default function HomeView({
         (b.examHeldDate && b.examHeldDate.toLowerCase().includes(q))
       );
     }
-    return list;
+    return sortMinistryQuestionBanks(list);
   }, [publishedMinistryBanks, selectedMinistryFilter, ministrySearchQuery]);
 
   const handleStartMinistryExam = (bank: MinistryQuestionBank) => {

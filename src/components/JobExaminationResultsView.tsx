@@ -286,6 +286,12 @@ export default function JobExaminationResultsView({
                     <h3 className="text-base sm:text-lg font-black text-white line-clamp-2 group-hover:text-emerald-300 transition-colors">
                       {latestResult.examTitle}
                     </h3>
+                    {(latestResult.postName || (latestResult as any).notes) && (
+                      <div className="text-xs font-bold text-emerald-300 flex items-center gap-1">
+                        <span className="text-emerald-400">পদ:</span>
+                        <span>{latestResult.postName || (latestResult as any).notes}</span>
+                      </div>
+                    )}
                     <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5 text-emerald-400" />
@@ -344,6 +350,13 @@ export default function JobExaminationResultsView({
                   {selectedResult.examTitle}
                 </h2>
 
+                {(selectedResult.postName || (selectedResult as any).notes) && (
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs sm:text-sm font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 rounded-xl w-fit border border-emerald-200 dark:border-emerald-800">
+                    <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">পদের নাম:</span>
+                    <span>{selectedResult.postName || (selectedResult as any).notes}</span>
+                  </div>
+                )}
+
                 <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                   মোট উত্তীর্ণ হয়েছেন: <strong className="text-emerald-600 dark:text-emerald-400">{toBengaliDigits(selectedResult.totalQualified)} জন</strong>। নিচে আপনার রোল নম্বর দিয়ে ফলাফল চেক করুন।
                 </p>
@@ -399,7 +412,7 @@ export default function JobExaminationResultsView({
                         id="roll-search-input"
                         type="text"
                         required
-                        placeholder="যেমন: 383883 অথবা ৩৮৩৮৮৩"
+                        placeholder="আপনার Admit Roll টাইপ করুন"
                         value={inputRollNumber}
                         onChange={(e) => {
                           setInputRollNumber(e.target.value);
@@ -506,6 +519,11 @@ export default function JobExaminationResultsView({
                         <p className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white mt-0.5 line-clamp-1">
                           {searchOutcome.examTitle || selectedResult.examTitle}
                         </p>
+                        {(selectedResult.postName || (selectedResult as any).notes) && (
+                          <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 line-clamp-1">
+                            পদ: {selectedResult.postName || (selectedResult as any).notes}
+                          </p>
+                        )}
                       </div>
 
                       <div className="bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-2xl border border-emerald-200/60 dark:border-emerald-800/40">
@@ -564,6 +582,11 @@ export default function JobExaminationResultsView({
                         <p className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white mt-0.5 line-clamp-1">
                           {searchOutcome.examTitle || selectedResult.examTitle}
                         </p>
+                        {(selectedResult.postName || (selectedResult as any).notes) && (
+                          <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 line-clamp-1">
+                            পদ: {selectedResult.postName || (selectedResult as any).notes}
+                          </p>
+                        )}
                       </div>
 
                       <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -714,6 +737,13 @@ export default function JobExaminationResultsView({
                       <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-2">
                         {item.examTitle}
                       </h3>
+
+                      {(item.postName || item.notes) && (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-xl w-fit border border-emerald-200 dark:border-emerald-800">
+                          <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">পদ:</span>
+                          <span className="line-clamp-1">{item.postName || item.notes}</span>
+                        </div>
+                      )}
 
                       {/* Qualified Stat Box */}
                       <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 flex items-center justify-between">

@@ -199,6 +199,8 @@ export function subscribeToPublishedJobResults(
               createdAt: data.createdAt || '',
               updatedAt: data.updatedAt || '',
               publishedAt: data.publishedAt || data.updatedAt || '',
+              notes: data.notes || '',
+              postName: data.postName || data.notes || '',
             });
           }
         });
@@ -257,6 +259,7 @@ export function subscribeToAllJobResultsForAdmin(
               publishedAt: data.publishedAt || '',
               createdBy: data.createdBy || '',
               notes: data.notes || '',
+              postName: data.postName || data.notes || '',
             });
           }
         });
@@ -315,8 +318,9 @@ export async function saveJobResultToFirestore(
       resultData.status === 'published'
         ? resultData.publishedAt || nowIso
         : resultData.publishedAt || '',
-    createdBy: resultData.createdBy || currentUserEmail || 'admin@medha.com',
-    notes: resultData.notes?.trim() || '',
+    createdBy: resultData.createdBy || currentUserEmail || 'pbprosen1971@gmail.com',
+    notes: resultData.notes?.trim() || resultData.postName?.trim() || '',
+    postName: resultData.postName?.trim() || resultData.notes?.trim() || '',
   };
 
   try {

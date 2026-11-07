@@ -206,3 +206,67 @@ export async function optimizeProfileImage(file: File): Promise<OptimizedImageRe
     compressionRatio: Math.max(0, ratio),
   };
 }
+
+/**
+ * Resizes and compresses an image preserving aspect ratio (e.g., for article banners or rich content).
+ * Constrains dimensions to maximum bounding box (e.g., 1280x720) while preserving aspect ratio.
+ */
+export async function resizeAndCompressBanner(
+  source: File | Blob | string,
+  maxWidth = 1280,
+  maxHeight = 720,
+  quality = 0.85
+): Promise<{ blob: Blob; width: number; height: number; sizeBytes: number; format: string }> {
+  const img = await loadImageElement(source);
+  const srcW = img.naturalWidth || img.width;
+  const srcH = img.naturalHeight || img.height;
+
+  if (!srcW || !srcH) {
+    throw new Error('ছবির সঠিক রেজ্যুলেশন শনাক্ত করা যায়নি।');
+  }
+
+  // Calculate scaled dimensions preserving aspect ratio
+  let targetW = srcW;
+  let targetH = srcH;
+  if (targetW > maxWidth || targetH > maxHeight) {
+    const ratio = Math.min(maxWidth / targetW, maxHeight / targetH);
+    targetW = Math.round(targetW * ratio);
+    targetH = Math.round(targetH * ratio);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('ক্যানভাস ইনিশিয়ালাইজ করতে ব্যর্থ হয়েছে।');
+  }
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, targetW, targetH);
+
+  const targetFormat = 'image/jpeg';
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => {
+        if (!b) {
+          reject(new Error('ক্যানভাস থেকে সংকুচিত ছবি তৈরি করতে ব্যর্থ হয়েছে।'));
+          return;
+        }
+        resolve(b);
+      },
+      targetFormat,
+      quality
+    );
+  });
+
+  return {
+    blob,
+    width: targetW,
+    height: targetH,
+    sizeBytes: blob.size,
+    format: targetFormat,
+  };
+}
+

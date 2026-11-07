@@ -56,6 +56,8 @@ import {
   saveMinistryQuestionBankBundle,
   saveMinistryQuestionBankToFirestore,
   deleteMinistryQuestionBankFromFirestore,
+  deleteQuestionsByMinistry,
+  sortMinistryQuestionBanks,
   updateMinistryQuestionBankInFirestore,
   updateMinistryBankDuration,
   toggleMinistryBankPublishStatus,
@@ -205,10 +207,65 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
     return () => unsub();
   }, []);
 
+  // Security Printing Press & orphaned questions cleanup state
+  const [isCleaningSecurityPress, setIsCleaningSecurityPress] = useState(false);
+  const [cleanedOrphanedOnce, setCleanedOrphanedOnce] = useState(false);
+
+  // Identify questions in QuestionBank belonging to "সিকিউরিটি প্রিন্টিং প্রেস"
+  const securityPressQuestions = useMemo(() => {
+    return questions.filter((q) => (q.ministry || '').trim().includes('সিকিউরিটি প্রিন্টিং প্রেস'));
+  }, [questions]);
+
+  // Auto-cleanup orphaned questions for "সিকিউরিটি প্রিন্টিং প্রেস" if no active ministry bank exists
+  useEffect(() => {
+    if (cleanedOrphanedOnce || loading) return;
+    const hasActiveBank = ministryBanks.some((b) =>
+      (b.ministryName || '').trim().includes('সিকিউরিটি প্রিন্টিং প্রেস')
+    );
+    const count = questions.filter((q) =>
+      (q.ministry || '').trim().includes('সিকিউরিটি প্রিন্টিং প্রেস')
+    ).length;
+
+    if (count > 0 && !hasActiveBank) {
+      setCleanedOrphanedOnce(true);
+      setIsCleaningSecurityPress(true);
+      deleteQuestionsByMinistry('সিকিউরিটি প্রিন্টিং প্রেস')
+        .then((deleted) => {
+          if (deleted > 0) {
+            setSuccessMsg(
+              `✅ ফায়ারস্টোর থেকে পূর্বে ডিলিট করা "সিকিউরিটি প্রিন্টিং প্রেস"-এর অবশিষ্ট ${toBengaliDigits(deleted)}টি প্রশ্ন স্থায়ীভাবে মুছে ফেলা হয়েছে! এখন ফ্রেশ CSV আপলোড করলে কোনো "পূর্বে সংরক্ষিত" স্ট্যাটাস আসবে না।`
+            );
+          }
+        })
+        .catch((err) => {
+          console.warn('Auto cleanup orphaned questions failed:', err);
+        })
+        .finally(() => {
+          setIsCleaningSecurityPress(false);
+        });
+    }
+  }, [questions, ministryBanks, loading, cleanedOrphanedOnce]);
+
+  // Handler for manual purge of ministry questions
+  const handlePurgeMinistryQuestions = async (targetMinistry: string) => {
+    if (!targetMinistry) return;
+    setIsCleaningSecurityPress(true);
+    try {
+      const count = await deleteQuestionsByMinistry(targetMinistry);
+      setSuccessMsg(
+        `✅ ফায়ারস্টোর থেকে "${targetMinistry}"-এর সকল ${toBengaliDigits(count)}টি প্রশ্ন QuestionBank থেকে স্থায়ীভাবে সম্পূর্ণ মুছে ফেলা হয়েছে!`
+      );
+    } catch (err: any) {
+      setErrorMsg('প্রশ্ন মুছতে সমস্যা হয়েছে: ' + (err?.message || ''));
+    } finally {
+      setIsCleaningSecurityPress(false);
+    }
+  };
+
   // Auto-dismiss alerts
   useEffect(() => {
     if (successMsg) {
-      const timer = setTimeout(() => setSuccessMsg(null), 6000);
+      const timer = setTimeout(() => setSuccessMsg(null), 8000);
       return () => clearTimeout(timer);
     }
   }, [successMsg]);
@@ -275,7 +332,7 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
 
   // Filtered Home Question Banks
   const filteredHomeBanks = useMemo(() => {
-    return (ministryBanks || []).filter((bank) => {
+    const list = (ministryBanks || []).filter((bank) => {
       if (
         homeBanksMinistryFilter !== 'all' &&
         getMinistryComparisonKey(bank.ministryName) !== getMinistryComparisonKey(homeBanksMinistryFilter)
@@ -293,6 +350,7 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
       }
       return true;
     });
+    return sortMinistryQuestionBanks(list);
   }, [ministryBanks, homeBanksSearch, homeBanksMinistryFilter]);
 
   const uniqueSubjects = useMemo(() => {
@@ -488,15 +546,22 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
     try {
       const bankId = bankToDelete.id;
       const bankTitle = bankToDelete.title;
+      const ministryName = bankToDelete.ministryName;
+      const questionTexts = (bankToDelete.questions || []).map((q) => q.text);
 
-      await deleteMinistryQuestionBankFromFirestore(bankId, bankTitle);
+      const res = await deleteMinistryQuestionBankFromFirestore(
+        bankId,
+        bankTitle,
+        ministryName,
+        questionTexts
+      );
 
       if (onDeleteMinistryBank) {
         onDeleteMinistryBank(bankId);
       }
 
       setSuccessMsg(
-        `✅ "${bankTitle}" প্রশ্ন ব্যাংকটি ফায়ারস্টোর ডাটাবেস এবং হোম পেজ থেকে স্থায়ীভাবে সম্পূর্ণ মুছে ফেলা হয়েছে।`
+        `✅ "${bankTitle}" প্রশ্ন ব্যাংকটি ফায়ারস্টোর ডাটাবেস, হোম পেজ এবং এর অধীনস্থ ${toBengaliDigits(res.deletedQuestionsCount)}টি প্রশ্ন QuestionBank থেকে স্থায়ীভাবে সম্পূর্ণ মুছে ফেলা হয়েছে।`
       );
       setBankToDelete(null);
     } catch (err: any) {
@@ -811,7 +876,12 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
 
     const updatedRows = csvParseResult.rows.map((r) => {
       if (r.id === editingCsvRow.id) {
-        const norm = normalizeCorrectAnswer(csvEditFormData.correctAnswerRaw || 'A');
+        const norm = normalizeCorrectAnswer(csvEditFormData.correctAnswerRaw || 'A', {
+          optionA: csvEditFormData.optionA,
+          optionB: csvEditFormData.optionB,
+          optionC: csvEditFormData.optionC,
+          optionD: csvEditFormData.optionD,
+        });
         return {
           ...r,
           ...csvEditFormData,
@@ -888,7 +958,12 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
       // Trigger callback to update App.tsx ministryBanks state immediately
       if (onSaveMinistryBank) {
         const formattedQuestions: MinistryBankQuestion[] = csvParseResult.rows.map((r, idx) => {
-          const norm = normalizeCorrectAnswer(r.correctAnswerRaw);
+          const norm = normalizeCorrectAnswer(r.correctAnswerRaw, {
+            optionA: r.optionA,
+            optionB: r.optionB,
+            optionC: r.optionC,
+            optionD: r.optionD,
+          });
           const letter = norm.letter;
           const correctIdx = letter === 'A' ? 0 : letter === 'B' ? 1 : letter === 'C' ? 2 : 3;
           return {
@@ -1546,6 +1621,32 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
             </div>
           </div>
 
+          {/* Security Printing Press / Orphaned Questions Alert & 1-Click Purge */}
+          {securityPressQuestions.length > 0 && (
+            <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h5 className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                    ফায়ারস্টোর ডাটাবেসে "সিকিউরিটি প্রিন্টিং প্রেস"-এর {toBengaliDigits(securityPressQuestions.length)}টি প্রশ্ন সংরক্ষিত রয়েছে
+                  </h5>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
+                    পূর্বের প্রশ্ন ব্যাংক ডিলিট হওয়ার কারণে এগুলো ডাটাবেসে ছিল। নতুন করে ফ্রেশ CSV আপলোড করার জন্য ডাটাবেস থেকে এই পুরনো প্রশ্নগুলো মুছে ফেলতে নিচের বাটনে ক্লিক করুন।
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isCleaningSecurityPress}
+                onClick={() => handlePurgeMinistryQuestions('সিকিউরিটি প্রিন্টিং প্রেস')}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer"
+              >
+                {isCleaningSecurityPress ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                <span>ডাটাবেস থেকে প্রশ্নগুলো মুছুন</span>
+              </button>
+            </div>
+          )}
+
           <form onSubmit={handleManualAddSubmit} className="space-y-6">
             {/* Step 1: Ministry Selection */}
             <div className="space-y-1.5">
@@ -1918,16 +2019,28 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
                               </td>
                               <td className="p-2.5 text-center">
                                 {row.isValid ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                    <Check className="h-3 w-3" />
-                                    <span>সঠিক</span>
-                                  </span>
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                      <Check className="h-3 w-3" />
+                                      <span>সঠিক</span>
+                                    </span>
+                                    {row.isDuplicateInDb && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" title="এই প্রশ্নটি ইতিপূর্বে QuestionBank-এ সংরক্ষিত রয়েছে (আপলোড করতে কোনো সমস্যা নেই)">
+                                        পূর্বে সংরক্ষিত
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : (
-                                  <div className="space-y-0.5">
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800" title={row.errors.join('\n')}>
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
                                       <AlertCircle className="h-3 w-3" />
                                       <span>ত্রুটি</span>
                                     </span>
+                                    {row.errors.map((err, ei) => (
+                                      <span key={ei} className="text-[10px] text-rose-600 dark:text-rose-400 font-medium leading-tight max-w-[140px] text-center">
+                                        {err}
+                                      </span>
+                                    ))}
                                   </div>
                                 )}
                               </td>
@@ -2307,6 +2420,23 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
                   title="ফিল্টার ক্লিয়ার করুন"
                 >
                   <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              {filterMinistry !== 'all' && filteredQuestions.length > 0 && (
+                <button
+                  type="button"
+                  disabled={isCleaningSecurityPress}
+                  onClick={() => {
+                    if (window.confirm(`আপনি কি নিশ্চিত যে "${filterMinistry}"-এর সকল ${toBengaliDigits(filteredQuestions.length)}টি প্রশ্ন ফায়ারস্টোর থেকে সম্পূর্ণ মুছে ফেলতে চান?`)) {
+                      handlePurgeMinistryQuestions(filterMinistry);
+                    }
+                  }}
+                  className="px-3 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold shrink-0 transition-colors flex items-center gap-1 cursor-pointer"
+                  title={`${filterMinistry} এর সকল প্রশ্ন ফায়ারস্টোর থেকে ডিলিট করুন`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>এই মন্ত্রণালয়ের সব প্রশ্ন মুছুন</span>
                 </button>
               )}
             </div>
@@ -3149,7 +3279,7 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
             </div>
 
             <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center leading-relaxed">
-              এই প্রশ্ন ব্যাংকটি ফায়ারস্টোর ডাটাবেসের <code className="text-rose-600 dark:text-rose-400 font-mono">/ministryQuestionBanks/{bankToDelete.id}</code> ডকুমেন্ট এবং হোম পেজ থেকে চিরতরে মুছে ফেলা হবে।
+              এই প্রশ্ন ব্যাংকটি ফায়ারস্টোর ডাটাবেসের <code className="text-rose-600 dark:text-rose-400 font-mono">/ministryQuestionBanks/{bankToDelete.id}</code> ডকুমেন্ট, হোম পেজ এবং এর অধীনস্থ সকল প্রশ্ন <code className="text-rose-600 dark:text-rose-400 font-mono">/QuestionBank</code> থেকে চিরতরে সম্পূর্ণ মুছে ফেলা হবে।
             </p>
 
             <div className="flex items-center justify-center gap-3 pt-2">

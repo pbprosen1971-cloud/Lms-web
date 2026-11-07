@@ -22,7 +22,8 @@ import {
   GraduationCap,
   Calculator,
   Gift,
-  Award
+  Award,
+  Newspaper
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import MedhaLogo from './MedhaLogo';
@@ -116,6 +117,7 @@ export default function Navbar({
     { label: 'প্রশ্নব্যাংক', view: 'job-questionbank', path: '/job-questionbank', href: '/job-questionbank', icon: BookOpen },
     { label: 'চাকরি পরীক্ষার ফলাফল', view: 'job-result', path: '/all-job-result', href: '/all-job-result', icon: Award },
     { label: 'স্টাডি ম্যাটেরিয়াল', view: 'study-materials', path: '/study-materials', href: '/study-materials', icon: GraduationCap },
+    { label: 'আর্টিকেল', view: 'articles', path: '/articles', href: '/articles', icon: Newspaper },
     { label: 'বয়স ক্যালকুলেটর', view: 'age-calculator', path: '/age-calculator', href: '/age-calculator', icon: Calculator },
     { label: 'রেফারেল', view: 'referral', path: '/referral', href: '/referral', icon: Gift },
     ...(user ? [{ label: 'ড্যাশবোর্ড', view: 'dashboard', path: '/dashboard', href: '/dashboard', icon: LayoutDashboard }] : []),

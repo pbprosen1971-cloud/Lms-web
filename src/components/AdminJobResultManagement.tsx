@@ -59,6 +59,7 @@ export default function AdminJobResultManagement({
   const [formExamDate, setFormExamDate] = useState<string>('');
   const [formStatus, setFormStatus] = useState<'published' | 'unpublished'>('published');
   const [formNotes, setFormNotes] = useState<string>('');
+  const [formPostName, setFormPostName] = useState<string>('');
 
   // CSV Parsing State
   const [csvFileName, setCsvFileName] = useState<string>('');
@@ -72,6 +73,7 @@ export default function AdminJobResultManagement({
   const [editDate, setEditDate] = useState<string>('');
   const [editStatus, setEditStatus] = useState<'published' | 'unpublished'>('published');
   const [editNotes, setEditNotes] = useState<string>('');
+  const [editPostName, setEditPostName] = useState<string>('');
   const [editCsvParseData, setEditCsvParseData] = useState<CsvParseResult | null>(null);
   const [editCsvFileName, setEditCsvFileName] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
@@ -253,13 +255,15 @@ export default function AdminJobResultManagement({
 
     setIsSubmitting(true);
     try {
+      const designation = (formPostName || formNotes).trim();
       await saveJobResultToFirestore(
         {
           examTitle: formExamTitle.trim(),
           examDate: formExamDate.trim(),
           rollNumbers: csvParseData.rollNumbers,
           status: formStatus,
-          notes: formNotes.trim(),
+          notes: designation,
+          postName: designation,
         },
         currentUserEmail
       );
@@ -275,6 +279,7 @@ export default function AdminJobResultManagement({
       setFormExamDate('');
       setFormStatus('published');
       setFormNotes('');
+      setFormPostName('');
       setCsvFileName('');
       setCsvParseData(null);
       setShowAddForm(false);
@@ -293,7 +298,8 @@ export default function AdminJobResultManagement({
     setEditTitle(res.examTitle || '');
     setEditDate(res.examDate || '');
     setEditStatus(res.status || 'published');
-    setEditNotes(res.notes || '');
+    setEditNotes(res.notes || res.postName || '');
+    setEditPostName(res.postName || res.notes || '');
     setEditCsvParseData(null);
     setEditCsvFileName('');
   };
@@ -313,6 +319,8 @@ export default function AdminJobResultManagement({
         ? editCsvParseData.rollNumbers
         : editingResult.rollNumbers;
 
+      const designation = (editPostName || editNotes).trim();
+
       await saveJobResultToFirestore(
         {
           id: editingResult.id,
@@ -320,7 +328,8 @@ export default function AdminJobResultManagement({
           examDate: editDate.trim(),
           rollNumbers: rollsToSave,
           status: editStatus,
-          notes: editNotes.trim(),
+          notes: designation,
+          postName: designation,
           createdAt: editingResult.createdAt,
         },
         currentUserEmail
@@ -687,15 +696,19 @@ export default function AdminJobResultManagement({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  অতিরিক্ত নোট / বিবরণ (ঐচ্ছিক)
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                  <span>পদের নাম (Designation / Post Name)</span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">শিরোনামের নিচে দেখাবে</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="যেমন: লিখিত পরীক্ষার উত্তীর্ণদের তালিকা"
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="যেমন: স্বাস্থ্য সহকারী, অফিস সহকারী, পরিবার পরিকল্পনা সহকারী"
+                  value={formPostName || formNotes}
+                  onChange={(e) => {
+                    setFormPostName(e.target.value);
+                    setFormNotes(e.target.value);
+                  }}
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
                 />
               </div>
             </div>
@@ -969,9 +982,9 @@ export default function AdminJobResultManagement({
                         <div className="font-extrabold text-slate-900 dark:text-white line-clamp-2 max-w-sm">
                           {item.examTitle}
                         </div>
-                        {item.notes && (
-                          <div className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
-                            {item.notes}
+                        {(item.postName || item.notes) && (
+                          <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5 line-clamp-1">
+                            পদ: {item.postName || item.notes}
                           </div>
                         )}
                       </td>
@@ -1096,6 +1109,22 @@ export default function AdminJobResultManagement({
                   required
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  পদের নাম (Designation / Post Name)
+                </label>
+                <input
+                  type="text"
+                  placeholder="যেমন: স্বাস্থ্য সহকারী, অফিস সহকারী, পরিবার পরিকল্পনা সহকারী"
+                  value={editPostName || editNotes}
+                  onChange={(e) => {
+                    setEditPostName(e.target.value);
+                    setEditNotes(e.target.value);
+                  }}
                   className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>

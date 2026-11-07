@@ -113,6 +113,7 @@ import AdminCsvDiagnosticsTab from './AdminCsvDiagnosticsTab';
 import QuestionManagementView from './QuestionManagementView';
 import { AdminQuestionBankView } from './AdminQuestionBankView';
 import AdminJobResultManagement from './AdminJobResultManagement';
+import AdminArticleManagement from './AdminArticleManagement';
 
 const formatBanglaDateTime = (dateTimeStr: string) => {
   if (!dateTimeStr) return '';
@@ -177,7 +178,7 @@ export default function AdminView({
   upcomingExamSettings,
   onSaveUpcomingExamSettings,
 }: AdminViewProps) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'question_management' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications' | 'csv_diagnostics' | 'job_results'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'question_management' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications' | 'csv_diagnostics' | 'job_results' | 'articles'>('analytics');
 
   // Ministry Question Bank Admin Form State
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
@@ -2430,6 +2431,27 @@ export default function AdminView({
             </span>
           </button>
 
+          {/* TAB: Articles Management */}
+          <button
+            type="button"
+            onClick={() => { setActiveTab('articles'); setSearchQuery(''); }}
+            title="📝 আর্টিকেল ম্যানেজমেন্ট"
+            className={`w-full rounded-xl text-xs sm:text-sm font-bold flex items-center transition-all cursor-pointer ${
+              isAdminSidebarCollapsed
+                ? 'p-3 lg:justify-center'
+                : 'p-3.5 gap-2.5 justify-start'
+            } ${
+              activeTab === 'articles'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
+                : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-100'
+            }`}
+          >
+            <BookOpen className="h-4.5 w-4.5 shrink-0" />
+            <span className={`truncate text-left ${isAdminSidebarCollapsed ? 'lg:hidden' : 'inline'}`}>
+              📝 আর্টিকেল ম্যানেজমেন্ট
+            </span>
+          </button>
+
           {/* TAB 15: Settings */}
           <button
             type="button"
@@ -4263,6 +4285,14 @@ export default function AdminView({
               exams={exams}
               onUpdateExam={onUpdateExam}
               currentUser={currentUser}
+            />
+          )}
+
+          {/* TAB: ARTICLE MANAGEMENT */}
+          {activeTab === 'articles' && (
+            <AdminArticleManagement
+              currentUser={currentUser}
+              setView={setView}
             />
           )}
 

@@ -235,14 +235,16 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
                 <Facebook className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
               </a>
               <a
-                href="https://www.facebook.com/prosenjitbiswas47"
+                href="https://t.me/Medhaexam"
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Facebook পেজ / প্রোফাইল"
-                aria-label="Facebook Page 2"
-                className="p-2.5 bg-slate-800/80 text-slate-300 hover:bg-[#1877F2] hover:text-white hover:scale-110 hover:shadow-lg hover:shadow-[#1877F2]/30 active:scale-95 rounded-xl transition-all duration-300 transform border border-slate-700/50 hover:border-transparent flex items-center justify-center group"
+                title="মেধা এক্সাম টেলিগ্রাম চ্যানেল"
+                aria-label="Medha Exam Telegram"
+                className="p-2.5 bg-slate-800/80 text-slate-300 hover:bg-[#229ED9] hover:text-white hover:scale-110 hover:shadow-lg hover:shadow-[#229ED9]/30 active:scale-95 rounded-xl transition-all duration-300 transform border border-slate-700/50 hover:border-transparent flex items-center justify-center group"
               >
-                <Facebook className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
+                <svg className="w-4 h-4 fill-current transition-transform duration-300 group-hover:scale-110" viewBox="0 0 24 24">
+                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.121l-6.871 4.326-2.962-.924c-.643-.204-.657-.643.136-.953l11.57-4.458c.538-.196 1.006.128.832.943z" />
+                </svg>
               </a>
               <a
                 href="https://wa.me/message/CMBTDT2F7TBNB1"
@@ -283,6 +285,9 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
                 <a href="/study-materials" onClick={(e) => { e.preventDefault(); setView('study-materials'); }} className="hover:text-primary transition-colors duration-200 block">📚 স্টাডি ম্যাটেরিয়ালস</a>
               </li>
               <li>
+                <a href="/articles" onClick={(e) => { e.preventDefault(); setView('articles'); }} className="hover:text-emerald-400 text-slate-300 font-medium transition-colors duration-200 block">📰 আর্টিকেল ও গাইডলাইন</a>
+              </li>
+              <li>
                 <a href="/live-exam" onClick={(e) => { e.preventDefault(); setView('live-exam'); }} className="hover:text-primary transition-colors duration-200 block">🎯 লাইভ মডেল টেস্ট</a>
               </li>
               <li>
@@ -312,37 +317,31 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
               <li>
                 <button onClick={() => setView('referral')} className="hover:text-amber-400 text-amber-400/90 font-medium transition-colors duration-200 text-left">🎁 রেফারেল প্রোগ্রাম</button>
               </li>
-              <li>
-                <a href="/faq" onClick={(e) => { e.preventDefault(); setView('faq'); }} className="hover:text-emerald-400 text-slate-300 font-medium transition-colors duration-200 block">❓ সাধারণ প্রশ্নোত্তর (FAQ)</a>
-              </li>
-              <li>
-                <a href="/privacy-policy" onClick={(e) => { e.preventDefault(); setView('privacy-policy'); }} className="hover:text-primary transition-colors duration-200 block">🔒 Privacy Policy</a>
-              </li>
-              <li>
-                <a href="/terms-and-conditions" onClick={(e) => { e.preventDefault(); setView('terms-and-conditions'); }} className="hover:text-primary transition-colors duration-200 block">📜 Terms &amp; Conditions</a>
-              </li>
-              <li>
-                <a href="/delete-account" onClick={(e) => { e.preventDefault(); setView('delete-account'); }} className="hover:text-rose-400 transition-colors duration-200 block">🗑️ Delete Account</a>
-              </li>
             </ul>
           </div>
 
-          {/* Live Exams Links */}
+          {/* আমাদের তথ্য */}
           <div>
-            <h3 className="text-white font-semibold text-sm tracking-wider uppercase mb-4">লাইভ এক্সামসমূহ</h3>
+            <h3 className="text-white font-semibold text-sm tracking-wider uppercase mb-4">আমাদের তথ্য</h3>
             <ul className="space-y-2.5 text-sm">
-              {liveExams.map((exam) => (
-                <li key={exam.id}>
-                  <button
-                    onClick={() => handleExamClick(exam)}
-                    className="hover:text-primary text-slate-400 transition-colors duration-200 text-left line-clamp-1 flex items-center gap-1.5"
-                    title={exam.title}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                    <span>{exam.title}</span>
-                  </button>
-                </li>
-              ))}
+              <li>
+                <a href="/about-us" onClick={(e) => { e.preventDefault(); setView('about-us'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">About Us</a>
+              </li>
+              <li>
+                <a href="/contact-us" onClick={(e) => { e.preventDefault(); setView('contact-us'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">Contact Us</a>
+              </li>
+              <li>
+                <a href="/faq" onClick={(e) => { e.preventDefault(); setView('faq'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">সাধারণ প্রশ্নোত্তর (FAQ)</a>
+              </li>
+              <li>
+                <a href="/privacy-policy" onClick={(e) => { e.preventDefault(); setView('privacy-policy'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">Privacy Policy</a>
+              </li>
+              <li>
+                <a href="/terms-and-conditions" onClick={(e) => { e.preventDefault(); setView('terms-and-conditions'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">Terms &amp; Conditions</a>
+              </li>
+              <li>
+                <a href="/delete-account" onClick={(e) => { e.preventDefault(); setView('delete-account'); }} className="hover:text-rose-400 transition-colors duration-200 block text-slate-300">Delete Account</a>
+              </li>
             </ul>
           </div>
 

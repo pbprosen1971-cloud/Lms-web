@@ -6,6 +6,8 @@
 import {
   collection,
   doc,
+  getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -136,28 +138,171 @@ export const COMMON_SUBJECTS = [
 ];
 
 /**
- * Normalizes user answer input into canonical A/B/C/D letter and Bengali label
+ * Normalizes user answer input into canonical A/B/C/D letter and Bengali label.
+ * Supports:
+ * - Direct letters: 'A', 'B', 'C', 'D' (case-insensitive)
+ * - Bengali letters: 'ক', 'খ', 'গ', 'ঘ'
+ * - Digits / Bengali numbers: '1', '2', '3', '4' / '১', '২', '৩', '৪'
+ * - Formatted strings: 'A.', '(A)', 'A)', 'Option A', 'Option 1', 'OptionA', 'Ans: A', 'ক.', '(ক)', 'ক)'
+ * - Option Text Matching: If user writes the actual option text in the answer column (e.g. "বাঘ")
  */
-export function normalizeCorrectAnswer(val: any): {
+export function normalizeCorrectAnswer(
+  val: any,
+  optionsContext?: { optionA?: string; optionB?: string; optionC?: string; optionD?: string }
+): {
   valid: boolean;
   letter: 'A' | 'B' | 'C' | 'D';
   bengaliLetter: 'ক' | 'খ' | 'গ' | 'ঘ';
   index: number;
 } {
-  const str = String(val || '').trim();
-  const lower = str.toLowerCase();
+  if (val === undefined || val === null) {
+    return { valid: false, letter: 'A', bengaliLetter: 'ক', index: 0 };
+  }
 
-  if (lower === 'a' || lower === 'option a' || lower === 'optione_a' || lower === '1' || str === 'ক' || str === '১') {
+  // Clean string: remove BOM, zero-width chars, spaces
+  let str = String(val)
+    .replace(/^[\uFEFF\uFFFE\u00EF\u00BB\u00BF]+/, '')
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    .trim();
+
+  if (!str) {
+    return { valid: false, letter: 'A', bengaliLetter: 'ক', index: 0 };
+  }
+
+  // Strip prefix words like "Ans:", "Answer:", "সঠিক উত্তর:", "উত্তর:"
+  let cleaned = str
+    .replace(/^(ans|answer|সঠিক উত্তর|উত্তর)\s*[:：\-\.]*\s*/i, '')
+    .replace(/^[\(\[\{\<"']+|[\)\]\}\>"'\.\,\:\-]+$/g, '')
+    .trim();
+
+  const lower = cleaned.toLowerCase();
+
+  // Check Option A / ক / 1 / ১
+  if (
+    lower === 'a' ||
+    lower === 'option a' ||
+    lower === 'optiona' ||
+    lower === 'option_a' ||
+    lower === 'option-a' ||
+    lower === 'opt a' ||
+    lower === 'opt-a' ||
+    lower === 'opta' ||
+    lower === 'optione_a' ||
+    lower === '1' ||
+    lower === 'option 1' ||
+    lower === 'option1' ||
+    cleaned === 'ক' ||
+    cleaned === 'অপশন ক' ||
+    cleaned === 'অপশনক' ||
+    cleaned === 'অপশন ১' ||
+    cleaned === 'অপশন১' ||
+    cleaned === '১'
+  ) {
     return { valid: true, letter: 'A', bengaliLetter: 'ক', index: 0 };
   }
-  if (lower === 'b' || lower === 'option b' || lower === 'optione_b' || lower === '2' || str === 'খ' || str === '২') {
+
+  // Check Option B / খ / 2 / ২
+  if (
+    lower === 'b' ||
+    lower === 'option b' ||
+    lower === 'optionb' ||
+    lower === 'option_b' ||
+    lower === 'option-b' ||
+    lower === 'opt b' ||
+    lower === 'opt-b' ||
+    lower === 'optb' ||
+    lower === 'optione_b' ||
+    lower === '2' ||
+    lower === 'option 2' ||
+    lower === 'option2' ||
+    cleaned === 'খ' ||
+    cleaned === 'অপশন খ' ||
+    cleaned === 'অপশনখ' ||
+    cleaned === 'অপশন ২' ||
+    cleaned === 'অপশন২' ||
+    cleaned === '২'
+  ) {
     return { valid: true, letter: 'B', bengaliLetter: 'খ', index: 1 };
   }
-  if (lower === 'c' || lower === 'option c' || lower === 'optione_c' || lower === '3' || str === 'গ' || str === '৩') {
+
+  // Check Option C / গ / 3 / ৩
+  if (
+    lower === 'c' ||
+    lower === 'option c' ||
+    lower === 'optionc' ||
+    lower === 'option_c' ||
+    lower === 'option-c' ||
+    lower === 'opt c' ||
+    lower === 'opt-c' ||
+    lower === 'optc' ||
+    lower === 'optione_c' ||
+    lower === '3' ||
+    lower === 'option 3' ||
+    lower === 'option3' ||
+    cleaned === 'গ' ||
+    cleaned === 'অপশন গ' ||
+    cleaned === 'অপশনগ' ||
+    cleaned === 'অপশন ৩' ||
+    cleaned === 'অপশন৩' ||
+    cleaned === '৩'
+  ) {
     return { valid: true, letter: 'C', bengaliLetter: 'গ', index: 2 };
   }
-  if (lower === 'd' || lower === 'option d' || lower === 'optione_d' || lower === '4' || str === 'ঘ' || str === '৪') {
+
+  // Check Option D / ঘ / 4 / ৪
+  if (
+    lower === 'd' ||
+    lower === 'option d' ||
+    lower === 'optiond' ||
+    lower === 'option_d' ||
+    lower === 'option-d' ||
+    lower === 'opt d' ||
+    lower === 'opt-d' ||
+    lower === 'optd' ||
+    lower === 'optione_d' ||
+    lower === '4' ||
+    lower === 'option 4' ||
+    lower === 'option4' ||
+    cleaned === 'ঘ' ||
+    cleaned === 'অপশন ঘ' ||
+    cleaned === 'অপশনঘ' ||
+    cleaned === 'অপশন ৪' ||
+    cleaned === 'অপশন৪' ||
+    cleaned === '৪'
+  ) {
     return { valid: true, letter: 'D', bengaliLetter: 'ঘ', index: 3 };
+  }
+
+  // Check against Option Texts if supplied
+  if (optionsContext) {
+    const normClean = cleaned.toLowerCase().replace(/[\s\.\,\-_]/g, '');
+    const cleanA = (optionsContext.optionA || '').trim().toLowerCase().replace(/[\s\.\,\-_]/g, '');
+    const cleanB = (optionsContext.optionB || '').trim().toLowerCase().replace(/[\s\.\,\-_]/g, '');
+    const cleanC = (optionsContext.optionC || '').trim().toLowerCase().replace(/[\s\.\,\-_]/g, '');
+    const cleanD = (optionsContext.optionD || '').trim().toLowerCase().replace(/[\s\.\,\-_]/g, '');
+
+    if (normClean && cleanA && normClean === cleanA) {
+      return { valid: true, letter: 'A', bengaliLetter: 'ক', index: 0 };
+    }
+    if (normClean && cleanB && normClean === cleanB) {
+      return { valid: true, letter: 'B', bengaliLetter: 'খ', index: 1 };
+    }
+    if (normClean && cleanC && normClean === cleanC) {
+      return { valid: true, letter: 'C', bengaliLetter: 'গ', index: 2 };
+    }
+    if (normClean && cleanD && normClean === cleanD) {
+      return { valid: true, letter: 'D', bengaliLetter: 'ঘ', index: 3 };
+    }
+  }
+
+  // Try extracting standalone letter from string (e.g. "উত্তর (ক)")
+  const letterMatch = cleaned.match(/(?:^|\b|\s|\()([A-Da-dক-ঘ1-4১-৪])(?:\)|\.|\b|\s|$)/);
+  if (letterMatch) {
+    const l = letterMatch[1].toLowerCase();
+    if (l === 'a' || l === 'ক' || l === '1' || l === '১') return { valid: true, letter: 'A', bengaliLetter: 'ক', index: 0 };
+    if (l === 'b' || l === 'খ' || l === '2' || l === '২') return { valid: true, letter: 'B', bengaliLetter: 'খ', index: 1 };
+    if (l === 'c' || l === 'গ' || l === '3' || l === '৩') return { valid: true, letter: 'C', bengaliLetter: 'গ', index: 2 };
+    if (l === 'd' || l === 'ঘ' || l === '4' || l === '৪') return { valid: true, letter: 'D', bengaliLetter: 'ঘ', index: 3 };
   }
 
   return { valid: false, letter: 'A', bengaliLetter: 'ক', index: 0 };
@@ -373,13 +518,30 @@ export async function deleteQuestionBankItem(id: string): Promise<void> {
 }
 
 /**
- * Standard RFC 4180 CSV parser supporting multiline cells, escaped quotes, and Bengali UTF-8
+ * /**
+ * Detect delimiter by analyzing the first line (comma, semicolon, tab).
+ */
+export function detectCsvDelimiter(text: string): string {
+  const firstLine = text.split(/\r?\n/)[0] || '';
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semicolonCount = (firstLine.match(/;/g) || []).length;
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+
+  if (semicolonCount > commaCount && semicolonCount > tabCount) return ';';
+  if (tabCount > commaCount && tabCount > semicolonCount) return '\t';
+  return ',';
+}
+
+/**
+ * Standard RFC 4180 CSV parser supporting multiline cells, escaped quotes,
+ * auto-detected delimiter (comma, semicolon, tab), and Bengali UTF-8
  */
 export function parseRawCsvText(csvText: string): string[][] {
-  let cleanText = csvText;
-  if (cleanText.charCodeAt(0) === 0xFEFF) {
-    cleanText = cleanText.slice(1);
-  }
+  let cleanText = csvText
+    .replace(/^[\uFEFF\uFFFE\u00EF\u00BB\u00BF]+/, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+  const delimiter = detectCsvDelimiter(cleanText);
 
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -404,19 +566,19 @@ export function parseRawCsvText(csvText: string): string[][] {
     } else {
       if (char === '"') {
         inQuotes = true;
-      } else if (char === ',') {
-        currentRow.push(currentField);
+      } else if (char === delimiter) {
+        currentRow.push(currentField.trim());
         currentField = '';
       } else if (char === '\r') {
         if (nextChar === '\n') {
           i++;
         }
-        currentRow.push(currentField);
+        currentRow.push(currentField.trim());
         rows.push(currentRow);
         currentRow = [];
         currentField = '';
       } else if (char === '\n') {
-        currentRow.push(currentField);
+        currentRow.push(currentField.trim());
         rows.push(currentRow);
         currentRow = [];
         currentField = '';
@@ -427,7 +589,7 @@ export function parseRawCsvText(csvText: string): string[][] {
   }
 
   if (currentField !== '' || currentRow.length > 0) {
-    currentRow.push(currentField);
+    currentRow.push(currentField.trim());
     rows.push(currentRow);
   }
 
@@ -435,13 +597,14 @@ export function parseRawCsvText(csvText: string): string[][] {
 }
 
 /**
- * Validates a single QuestionBank CSV row according to prompt requirements:
- * - Ministry/Department empty check
- * - Subject empty check
+ * Validates a single QuestionBank CSV row:
+ * - Ministry/Department empty check (with form fallback)
+ * - Subject empty check (with form fallback)
  * - Question empty check
  * - Option A, B, C, D empty check
- * - Correct Answer valid check (A/B/C/D or ক/খ/গ/ঘ or 1/2/3/4)
- * - Duplicate question check in CSV or DB
+ * - Correct Answer valid check (A/B/C/D, ক/খ/গ/ঘ, 1/2/3/4, or matching option text)
+ * - Duplicate in CSV check
+ * - Duplicate in DB check (informational warning flag, does NOT block validity)
  */
 export function validateQuestionBankRow(
   row: Omit<QuestionBankCsvRow, 'isValid' | 'errors' | 'isDuplicateInCsv' | 'isDuplicateInDb'>,
@@ -480,8 +643,13 @@ export function validateQuestionBankRow(
     errors.push('Option D ফাঁকা রাখা যাবে না');
   }
 
-  // 5. Correct Answer check
-  const norm = normalizeCorrectAnswer(row.correctAnswerRaw);
+  // 5. Correct Answer check (with option text matching context)
+  const norm = normalizeCorrectAnswer(row.correctAnswerRaw, {
+    optionA: row.optionA,
+    optionB: row.optionB,
+    optionC: row.optionC,
+    optionD: row.optionD,
+  });
   if (!row.correctAnswerRaw || !norm.valid) {
     errors.push('সঠিক উত্তর অবশ্যই A, B, C, D অথবা ক, খ, গ, ঘ হতে হবে');
   }
@@ -497,13 +665,13 @@ export function validateQuestionBankRow(
   }
 
   // 7. Duplicate check in existing QuestionBank
+  // Note: Existing in DB is tracked as an informational flag (isDuplicateInDb),
+  // but does NOT invalidate the row from being imported or updated.
   let isDuplicateInDb = false;
   if (qClean && existingQuestions.length > 0) {
     const dbMatch = existingQuestions.some((eq) => (eq.question || '').trim().toLowerCase() === qClean);
     if (dbMatch) {
       isDuplicateInDb = true;
-      // Mark as notice/duplicate warning or error
-      errors.push('এই প্রশ্নটি ইতিপূর্বে QuestionBank-এ সংরক্ষিত রয়েছে (Already in DB)');
     }
   }
 
@@ -522,7 +690,7 @@ export function revalidateQuestionBankRows(
   rows: QuestionBankCsvRow[],
   existingQuestions: QuestionBankItem[] = []
 ): { rows: QuestionBankCsvRow[]; validCount: number; invalidCount: number } {
-  const allQuestionTexts = rows.map((r) => r.question);
+  const allQuestionTexts = rows.map((r) => (r.question || '').trim());
 
   let validCount = 0;
   let invalidCount = 0;
@@ -543,7 +711,12 @@ export function revalidateQuestionBankRows(
       invalidCount++;
     }
 
-    const norm = normalizeCorrectAnswer(row.correctAnswerRaw);
+    const norm = normalizeCorrectAnswer(row.correctAnswerRaw, {
+      optionA: row.optionA,
+      optionB: row.optionB,
+      optionC: row.optionC,
+      optionD: row.optionD,
+    });
 
     return {
       ...row,
@@ -561,13 +734,27 @@ export function revalidateQuestionBankRows(
 }
 
 /**
- * Header index finder supporting flexible Bengali and English names
+ * Cleans a header name by removing whitespace, quotes, dashes, and underscores
+ */
+function cleanHeaderName(name: string): string {
+  return (name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^[\uFEFF\uFFFE\u00EF\u00BB\u00BF]+/, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/["'’]/g, '')
+    .replace(/[\s\-_/\\.:,]+/g, '');
+}
+
+/**
+ * Header index finder supporting flexible Bengali and English names,
+ * tolerant to spaces, punctuation, underscores, and BOM.
  */
 function findColumnIndex(headers: string[], names: string[]): number {
-  const lowerNames = names.map((n) => n.trim().toLowerCase());
+  const cleanTargetNames = names.map(cleanHeaderName);
   for (let i = 0; i < headers.length; i++) {
-    const h = (headers[i] || '').trim().toLowerCase();
-    if (lowerNames.includes(h)) return i;
+    const cleanH = cleanHeaderName(headers[i]);
+    if (cleanTargetNames.includes(cleanH)) return i;
   }
   return -1;
 }
@@ -625,6 +812,7 @@ export function parseQuestionBankCsvText(
     'মন্ত্রণালয়',
     'মন্ত্রণালয়',
     'দপ্তর',
+    'অধিদপ্তর',
     'প্রতিষ্ঠান',
   ]);
   const colSubject = findColumnIndex(headerRow, [
@@ -640,55 +828,101 @@ export function parseQuestionBankCsvText(
     'question',
     'question text',
     'questiontext',
+    'questions',
+    'question name',
     'প্রশ্ন',
     'প্রশ্ন বিবরণ',
     'প্রশ্নসমূহ',
+    'প্রশ্ন নং',
   ]);
   const colOptA = findColumnIndex(headerRow, [
     'option a',
     'optiona',
+    'option_a',
+    'opt a',
+    'opta',
     'a',
+    'option 1',
+    'option1',
+    'opt 1',
+    'opt1',
     'অপশন এ',
     'অপশন ক',
+    'অপশনক',
     'অপশন ১',
     'ক',
   ]);
   const colOptB = findColumnIndex(headerRow, [
     'option b',
     'optionb',
+    'option_b',
+    'opt b',
+    'optb',
     'b',
+    'option 2',
+    'option2',
+    'opt 2',
+    'opt2',
     'অপশন বি',
     'অপশন খ',
+    'অপশনখ',
     'অপশন ২',
     'খ',
   ]);
   const colOptC = findColumnIndex(headerRow, [
     'option c',
     'optionc',
+    'option_c',
+    'opt c',
+    'optc',
     'c',
+    'option 3',
+    'option3',
+    'opt 3',
+    'opt3',
     'অপশন সি',
     'অপশন গ',
+    'অপশনগ',
     'অপশন ৩',
     'গ',
   ]);
   const colOptD = findColumnIndex(headerRow, [
     'option d',
     'optiond',
+    'option_d',
+    'opt d',
+    'optd',
     'd',
+    'option 4',
+    'option4',
+    'opt 4',
+    'opt4',
     'অপশন ডি',
     'অপশন ঘ',
+    'অপশনঘ',
     'অপশন ৪',
     'ঘ',
   ]);
   const colCorrect = findColumnIndex(headerRow, [
     'correct answer',
     'correctanswer',
+    'correct_answer',
+    'correct',
     'answer',
+    'ans',
+    'right answer',
+    'rightanswer',
+    'correct option',
+    'correctoption',
     'সঠিক উত্তর',
+    'সঠিকউত্তর',
     'উত্তর',
   ]);
   const colExpl = findColumnIndex(headerRow, [
     'explanation',
+    'explanations',
+    'expl',
+    'note',
     'ব্যাখ্যা',
     'সমাধান',
     'উত্তর ব্যাখ্যা',
@@ -737,15 +971,13 @@ export function parseQuestionBankCsvText(
   let invalidCount = 0;
 
   const rows: QuestionBankCsvRow[] = dataRows.map((row, idx) => {
-    const ministry = (
-      colMinistry !== -1 ? row[colMinistry] || '' : defaultMin
-    ).trim();
+    // If ministry column exists but cell is empty, fallback to defaultMin
+    const rawMin = colMinistry !== -1 ? (row[colMinistry] || '').trim() : '';
+    const ministry = (rawMin || defaultMin).trim();
 
-    const subject = (
-      colSubject !== -1
-        ? row[colSubject] || ''
-        : defaults?.subject || defaultMin || 'সাধারণ প্রস্তুতি'
-    ).trim();
+    // If subject column exists but cell is empty, fallback to defaults
+    const rawSub = colSubject !== -1 ? (row[colSubject] || '').trim() : '';
+    const subject = (rawSub || defaults?.subject || defaultMin || 'সাধারণ প্রস্তুতি').trim();
 
     const question = (row[colQuestion] || '').trim();
     const optionA = (row[colOptA] || '').trim();
@@ -755,14 +987,19 @@ export function parseQuestionBankCsvText(
     const correctAnswerRaw = (row[colCorrect] || '').trim();
     const explanation = colExpl !== -1 ? (row[colExpl] || '').trim() : '';
     const source = (
-      colSource !== -1 ? row[colSource] || '' : defaults?.sourceExam || ''
+      colSource !== -1 && row[colSource]?.trim() ? row[colSource].trim() : defaults?.sourceExam || ''
     ).trim();
     const year = (
-      colYear !== -1 ? row[colYear] || '' : defaults?.year || ''
+      colYear !== -1 && row[colYear]?.trim() ? row[colYear].trim() : defaults?.year || ''
     ).trim();
     const examHeldDate = (defaults?.examHeldDate || '').trim();
 
-    const norm = normalizeCorrectAnswer(correctAnswerRaw);
+    const norm = normalizeCorrectAnswer(correctAnswerRaw, {
+      optionA,
+      optionB,
+      optionC,
+      optionD,
+    });
 
     const valResult = validateQuestionBankRow(
       {
@@ -976,7 +1213,12 @@ export async function saveMinistryQuestionBankBundle(
 
   // 1. Prepare QuestionBank standalone items
   const standaloneItems: NewQuestionBankItem[] = questions.map((q) => {
-    const norm = normalizeCorrectAnswer(q.correctAnswerRaw);
+    const norm = normalizeCorrectAnswer(q.correctAnswerRaw, {
+      optionA: q.optionA,
+      optionB: q.optionB,
+      optionC: q.optionC,
+      optionD: q.optionD,
+    });
     return {
       ministry: bankMeta.ministryName.trim(),
       subject: (bankMeta.subject || bankMeta.ministryName).trim(),
@@ -1003,7 +1245,12 @@ export async function saveMinistryQuestionBankBundle(
 
   // 2. Prepare MinistryQuestionBank document for Homepage
   const formattedQuestions: MinistryBankQuestion[] = questions.map((q, idx) => {
-    const norm = normalizeCorrectAnswer(q.correctAnswerRaw);
+    const norm = normalizeCorrectAnswer(q.correctAnswerRaw, {
+      optionA: q.optionA,
+      optionB: q.optionB,
+      optionC: q.optionC,
+      optionD: q.optionD,
+    });
     const letter = norm.letter;
     const correctIdx = letter === 'A' ? 0 : letter === 'B' ? 1 : letter === 'C' ? 2 : 3;
     return {
@@ -1036,11 +1283,39 @@ export async function saveMinistryQuestionBankBundle(
 
 /**
  * Deletes a MinistryQuestionBank completely from Firestore /ministryQuestionBanks/{bankId}
+ * AND ALSO deletes all associated questions from the /QuestionBank collection,
  * and purges it from localStorage and the Firestore deletion registry.
  */
-export async function deleteMinistryQuestionBankFromFirestore(bankId: string, bankTitle?: string): Promise<void> {
+export async function deleteMinistryQuestionBankFromFirestore(
+  bankId: string,
+  bankTitle?: string,
+  ministryName?: string,
+  questionTexts?: string[]
+): Promise<{ deletedQuestionsCount: number }> {
   const cleanId = (bankId || '').trim();
   const cleanTitle = (bankTitle || '').trim();
+  let targetMinistry = (ministryName || '').trim();
+  let targetQuestions = [...(questionTexts || [])];
+
+  // If ministryName or questionTexts are missing, try fetching the document first to identify questions
+  if (cleanId && (!targetMinistry || targetQuestions.length === 0)) {
+    try {
+      const docSnap = await getDoc(doc(db, 'ministryQuestionBanks', cleanId));
+      if (docSnap.exists()) {
+        const data = docSnap.data() as Partial<MinistryQuestionBank>;
+        if (!targetMinistry && data.ministryName) {
+          targetMinistry = data.ministryName.trim();
+        }
+        if (targetQuestions.length === 0 && Array.isArray(data.questions)) {
+          targetQuestions = data.questions.map((q) => (q.text || '').trim()).filter(Boolean);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch ministryQuestionBanks doc prior to delete:', e);
+    }
+  }
+
+  // 1. Delete from /ministryQuestionBanks/{bankId}
   try {
     if (cleanId) {
       await deleteDoc(doc(db, 'ministryQuestionBanks', cleanId));
@@ -1049,11 +1324,61 @@ export async function deleteMinistryQuestionBankFromFirestore(bankId: string, ba
     console.warn('Failed to delete from Firestore /ministryQuestionBanks:', err);
   }
 
-  // Record in Firestore Deletion Registry so it never re-seeds or reappears
+  // 2. Cascade delete ALL associated standalone items from /QuestionBank collection
+  let deletedQuestionsCount = 0;
+  try {
+    const qbSnapshot = await getDocs(collection(db, COLLECTION_NAME));
+    const toDeleteDocIds: string[] = [];
+
+    const normTitle = cleanTitle.toLowerCase();
+    const normMinistry = targetMinistry.toLowerCase();
+    const qTextSet = new Set(targetQuestions.map((t) => t.trim().toLowerCase()).filter(Boolean));
+
+    qbSnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      const itemSource = (data.source || '').trim().toLowerCase();
+      const itemMinistry = (data.ministry || '').trim().toLowerCase();
+      const itemQuestion = (data.question || '').trim().toLowerCase();
+
+      let isMatch = false;
+      // Match by exact or partial bank title / source
+      if (normTitle && (itemSource === normTitle || (normTitle.length > 3 && itemSource.includes(normTitle)))) {
+        isMatch = true;
+      }
+      // Match by ministry name
+      if (normMinistry && (itemMinistry === normMinistry || (normMinistry.length > 3 && itemMinistry.includes(normMinistry)))) {
+        isMatch = true;
+      }
+      // Match by question text
+      if (qTextSet.size > 0 && qTextSet.has(itemQuestion)) {
+        isMatch = true;
+      }
+
+      if (isMatch) {
+        toDeleteDocIds.push(docSnap.id);
+      }
+    });
+
+    // Delete in chunks of 400 (under Firestore's 500 batch limit)
+    for (let i = 0; i < toDeleteDocIds.length; i += 400) {
+      const chunk = toDeleteDocIds.slice(i, i + 400);
+      const batch = writeBatch(db);
+      chunk.forEach((docId) => {
+        batch.delete(doc(db, COLLECTION_NAME, docId));
+      });
+      await batch.commit();
+      deletedQuestionsCount += chunk.length;
+    }
+  } catch (err) {
+    console.warn('Failed to delete associated items from /QuestionBank:', err);
+  }
+
+  // 3. Record in Firestore Deletion Registry so it never re-seeds or reappears
   try {
     await recordDeletedMinistryBankInRegistry(cleanId, cleanTitle);
   } catch (e) {}
 
+  // 4. Purge from localStorage
   try {
     const raw = localStorage.getItem('ministry_question_banks');
     if (raw) {
@@ -1063,6 +1388,45 @@ export async function deleteMinistryQuestionBankFromFirestore(bankId: string, ba
     }
   } catch (e) {
     console.warn('Failed to remove from localStorage ministry_question_banks:', e);
+  }
+
+  return { deletedQuestionsCount };
+}
+
+/**
+ * Deletes all questions from /QuestionBank matching a specific ministry name.
+ * Useful for purging orphaned questions (e.g. "সিকিউরিটি প্রিন্টিং প্রেস") or resetting a department's questions.
+ */
+export async function deleteQuestionsByMinistry(ministryName: string): Promise<number> {
+  const normTarget = (ministryName || '').trim().toLowerCase();
+  if (!normTarget) return 0;
+
+  try {
+    const qbSnapshot = await getDocs(collection(db, COLLECTION_NAME));
+    const toDeleteDocIds: string[] = [];
+
+    qbSnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      const itemMinistry = (data.ministry || '').trim().toLowerCase();
+      if (itemMinistry === normTarget || (normTarget.length > 3 && itemMinistry.includes(normTarget))) {
+        toDeleteDocIds.push(docSnap.id);
+      }
+    });
+
+    let count = 0;
+    for (let i = 0; i < toDeleteDocIds.length; i += 400) {
+      const chunk = toDeleteDocIds.slice(i, i + 400);
+      const batch = writeBatch(db);
+      chunk.forEach((docId) => {
+        batch.delete(doc(db, COLLECTION_NAME, docId));
+      });
+      await batch.commit();
+      count += chunk.length;
+    }
+    return count;
+  } catch (error) {
+    console.error('Failed to delete questions by ministry:', error);
+    throw error;
   }
 }
 
@@ -1267,4 +1631,141 @@ export function subscribeToCustomMinistries(onUpdate: (ministries: string[]) => 
   } catch (e) {
     return () => {};
   }
+}
+
+/**
+ * Converts any date string (ISO, DD-MM-YYYY, YYYY-MM-DD, Bengali digits, or date string)
+ * into a comparable numeric timestamp (epoch ms).
+ * Returns -1 if unparseable/missing so that items with no date appear after items with dates.
+ */
+export function parseComparableDate(dateStr?: string | null): number {
+  if (!dateStr || typeof dateStr !== 'string') return -1;
+  const str = dateStr.trim();
+  if (!str) return -1;
+
+  // Convert Bengali numerals to standard 0-9
+  const bnToEn: Record<string, string> = {
+    '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+    '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
+  };
+  const normalized = str.replace(/[০-৯]/g, (d) => bnToEn[d] || d).trim();
+
+  // 1. Format: YYYY-MM-DD or YYYY/MM/DD
+  const ymdMatch = normalized.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    const parsed = new Date(year, month, day).getTime();
+    if (!isNaN(parsed)) return parsed;
+  }
+
+  // 2. Format: DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const dmyMatch = normalized.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1;
+    const year = parseInt(dmyMatch[3], 10);
+    const parsed = new Date(year, month, day).getTime();
+    if (!isNaN(parsed)) return parsed;
+  }
+
+  // 3. Direct standard Date parse (covers ISO timestamps, English date strings)
+  const directTimestamp = Date.parse(normalized);
+  if (!isNaN(directTimestamp) && directTimestamp > 0) {
+    return directTimestamp;
+  }
+
+  // 4. Bengali month names (e.g. "৭ নভেম্বর ২০২৬" or "নভেম্বর ২০২৬")
+  const bnMonths: Record<string, number> = {
+    'জানুয়ারি': 0, 'জানুয়ারি': 0,
+    'ফেব্রুয়ারি': 1, 'ফেব্রুয়ারি': 1,
+    'মার্চ': 2,
+    'এপ্রিল': 3,
+    'মে': 4,
+    'জুন': 5,
+    'জুলাই': 6,
+    'আগস্ট': 7,
+    'সেপ্টেম্বর': 8,
+    'অক্টোবর': 9,
+    'নভেম্বর': 10,
+    'ডিসেম্বর': 11,
+  };
+  for (const [mName, mIdx] of Object.entries(bnMonths)) {
+    if (str.includes(mName)) {
+      const yearMatch = normalized.match(/(\d{4})/);
+      const dayMatch = normalized.match(/(\d{1,2})/);
+      const year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+      const day = dayMatch ? parseInt(dayMatch[1], 10) : 1;
+      return new Date(year, mIdx, day).getTime();
+    }
+  }
+
+  // 5. Pure 4-digit year e.g. "2026"
+  const yearOnlyMatch = normalized.match(/\b(\d{4})\b/);
+  if (yearOnlyMatch) {
+    return new Date(parseInt(yearOnlyMatch[1], 10), 0, 1).getTime();
+  }
+
+  return -1;
+}
+
+/**
+ * Extracts numeric upload / creation timestamp from a MinistryQuestionBank
+ */
+export function getBankUploadTimestamp(bank: MinistryQuestionBank): number {
+  if (!bank) return 0;
+
+  // 1. Extract millisecond timestamp from id (e.g. min-bank-1731000000000)
+  const idTimestampMatch = (bank.id || '').match(/\b(\d{10,14})\b/);
+  if (idTimestampMatch) {
+    const ts = parseInt(idTimestampMatch[1], 10);
+    if (!isNaN(ts) && ts > 1000000000) {
+      return ts;
+    }
+  }
+
+  // 2. Check createdAt field if present
+  const anyBank = bank as any;
+  if (anyBank.createdAt) {
+    const ts = parseComparableDate(anyBank.createdAt);
+    if (ts > 0) return ts;
+  }
+
+  // 3. Check dateCreated field
+  if (bank.dateCreated) {
+    const ts = parseComparableDate(bank.dateCreated);
+    if (ts > 0) return ts;
+  }
+
+  return 0;
+}
+
+/**
+ * Sorts Ministry Question Banks according to user specifications:
+ * 1. Most recent exam held date (অনুষ্ঠিত তারিখ যেটা সম্প্রতি) comes first.
+ * 2. If held dates are identical, latest uploaded/created (সর্বশেষ আপলোড করা) comes first.
+ */
+export function sortMinistryQuestionBanks(banks: MinistryQuestionBank[]): MinistryQuestionBank[] {
+  if (!Array.isArray(banks) || banks.length <= 1) return banks || [];
+
+  return [...banks].sort((a, b) => {
+    const dateA = parseComparableDate(a.examHeldDate);
+    const dateB = parseComparableDate(b.examHeldDate);
+
+    // 1. Primary sort: examHeldDate descending (most recent first)
+    if (dateA !== dateB) {
+      return dateB - dateA;
+    }
+
+    // 2. Secondary sort: upload / creation timestamp descending (latest uploaded first)
+    const uploadA = getBankUploadTimestamp(a);
+    const uploadB = getBankUploadTimestamp(b);
+    if (uploadA !== uploadB) {
+      return uploadB - uploadA;
+    }
+
+    // 3. Deterministic fallback by id
+    return (b.id || '').localeCompare(a.id || '');
+  });
 }
