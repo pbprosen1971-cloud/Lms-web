@@ -12,16 +12,17 @@ service cloud.firestore {
       );
     }
 
-    // 1. Users Collection: Protect PII (names, emails, phone numbers)
+    // 1. Users Collection
     match /users/{userId} {
-      // Individual user can get their own doc; admin can inspect any user
-      allow get: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      // Admin can list users (for admin panel user management)
-      allow list: if isAdmin();
-      // User can create or update their own profile; Admin has full access
-      allow create: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow delete: if isAdmin();
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /Users/{userId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
     }
 
     // 2. Exams Collections (Upcoming, Live, and Question Content)
@@ -179,9 +180,12 @@ service cloud.firestore {
 
     // 14. Articles & Editorial Content (আর্টিকেল ও গাইডলাইন)
     match /articles/{articleId} {
-      // Public can read published articles; admin can read all (including drafts)
-      allow read: if resource == null || resource.data.status == 'published' || isAdmin();
-      // Only authenticated admins can create, update, or delete articles
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /Articles/{articleId} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 

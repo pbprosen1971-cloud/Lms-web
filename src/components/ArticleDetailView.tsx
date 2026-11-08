@@ -49,15 +49,16 @@ export default function ArticleDetailView({
     setLoading(true);
 
     async function loadData() {
-      const art = await getArticleBySlug(slug);
-      if (!isMounted) return;
+      try {
+        const art = await getArticleBySlug(slug);
+        if (!isMounted) return;
 
-      setArticle(art);
-      setLoading(false);
+        setArticle(art);
+        setLoading(false);
 
-      if (art) {
-        // Apply dynamic SEO for this specific article
-        const canonical = `/article/${art.slug}`;
+        if (art) {
+          // Apply dynamic SEO for this specific article
+          const canonical = `/article/${art.slug}`;
         const pageTitle = `${art.title} — Medha Exam`;
         const pageDesc = art.shortDescription || art.title;
 
@@ -94,9 +95,15 @@ export default function ArticleDetailView({
           },
         });
       }
+    } catch (err) {
+      console.warn('Failed to load article details:', err);
+      if (!isMounted) return;
+      setArticle(null);
+      setLoading(false);
     }
+  }
 
-    loadData();
+  loadData();
 
     // Fetch related published articles
     const unsub = subscribeToPublishedArticles((all) => {
@@ -323,9 +330,19 @@ export default function ArticleDetailView({
           </div>
 
           {/* End of article notice */}
-          <div className="pt-8 border-t border-slate-200 dark:border-slate-800 text-center space-y-2">
-            <div className="inline-flex items-center justify-center p-2 rounded-full bg-primary/10 text-primary">
-              <Sparkles className="h-5 w-5" />
+          <div className="pt-8 border-t border-slate-200 dark:border-slate-800 text-center space-y-3">
+            <div className="flex justify-center">
+              <a
+                href="https://www.facebook.com/medhaexam"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-extrabold text-xs sm:text-sm shadow-md shadow-[#1877F2]/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+                title="Our Official Facebook Page"
+              >
+                <Facebook className="h-4.5 w-4.5 fill-current" />
+                <span>Our Official Facebook</span>
+                <ExternalLink className="h-3.5 w-3.5 opacity-80" />
+              </a>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               মেধা এক্সাম পরিবারের সাথে থাকার জন্য ধন্যবাদ। নিয়মিত লাইভ মডেল টেস্ট ও প্র্যাকটিস করতে আমাদের সাথেই থাকুন।

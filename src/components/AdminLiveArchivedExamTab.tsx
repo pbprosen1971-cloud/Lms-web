@@ -120,13 +120,7 @@ export const AdminLiveArchivedExamTab: React.FC<AdminLiveArchivedExamTabProps> =
       return exam.status === 'live';
     });
 
-    const sorted = [...list].sort(compareLiveExams);
-    const targetIdx = sorted.findIndex(e => e.id === 'upcoming-exam-1793373735897' || (e.id && e.id.includes('1793373735897')));
-    if (targetIdx > 0) {
-      const [targetExam] = sorted.splice(targetIdx, 1);
-      sorted.unshift(targetExam);
-    }
-    return sorted;
+    return [...list].sort(compareLiveExams);
   }, [exams, now]);
 
   const allArchivedExams = useMemo(() => {

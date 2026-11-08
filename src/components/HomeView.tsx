@@ -866,13 +866,7 @@ export default function HomeView({
     });
 
     // Intelligent sorting: Latest published live exam first at #1 position
-    const sorted = [...list].sort(compareLiveExams);
-    const targetIdx = sorted.findIndex(e => e.id === 'upcoming-exam-1793373735897' || e.id?.includes('1793373735897'));
-    if (targetIdx > 0) {
-      const [targetExam] = sorted.splice(targetIdx, 1);
-      sorted.unshift(targetExam);
-    }
-    return sorted;
+    return [...list].sort(compareLiveExams);
   }, [filteredExams]);
 
   const archiveExams = useMemo(() => {

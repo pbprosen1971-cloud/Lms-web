@@ -389,6 +389,12 @@ export async function saveUpcomingExamScheduleToFirestore(
     totalMarks: Number(examData.totalMarks || examData.questions?.length || 0),
   };
 
+  const nowIso = new Date().toISOString();
+  if (status === 'live') {
+    payload.liveAt = (examData as any).liveAt || nowIso;
+    payload.publishedAt = (examData as any).publishedAt || nowIso;
+  }
+
   if (!isExisting) {
     payload.createdAt = serverTimestamp();
   }
@@ -417,6 +423,10 @@ export async function saveUpcomingExamScheduleToFirestore(
       archiveDate: archiveDate || '',
       updatedAt: serverTimestamp(),
       createdBy: createdBy,
+      ...(status === 'live' && {
+        liveAt: (examData as any).liveAt || nowIso,
+        publishedAt: (examData as any).publishedAt || nowIso,
+      }),
     };
     if (!isExisting) {
       capitalPayload.createdAt = serverTimestamp();
@@ -512,42 +522,76 @@ export async function saveUpcomingExamScheduleToFirestore(
 
 /**
  * Safely extracts the most accurate publication/creation timestamp for an Exam.
- * Evaluates liveAt, ID timestamp (e.g. upcoming-exam-1793373735897), createdAt, updatedAt,
- * examDateTime, startTime, and dateCreated.
+/**
+ * Helper to parse various timestamp representations (Firestore Timestamp, ISO string, milliseconds, seconds)
+ */
+function parseTimestampToMillis(val: any): number {
+  if (!val) return 0;
+  if (typeof val === 'number') {
+    if (val > 1500000000000 && val < 2500000000000) return val;
+    if (val > 1500000000 && val < 2500000000) return val * 1000;
+  }
+  if (typeof val === 'object') {
+    if (typeof val.toMillis === 'function') {
+      return val.toMillis();
+    }
+    if (typeof val.seconds === 'number') {
+      return val.seconds * 1000;
+    }
+  }
+  if (typeof val === 'string') {
+    const t = new Date(val).getTime();
+    if (!isNaN(t) && t > 0) return t;
+  }
+  return 0;
+}
+
+/**
+ * Calculates a comparable numeric timestamp for an exam's publication/live creation.
+ * Evaluates publishedAt, liveAt, ID timestamp (e.g. upcoming-exam-1741432800000),
+ * Firestore createdAt/updatedAt, examDateTime, startTime, and dateCreated.
  */
 export function getExamTimestamp(e: Exam): number {
   if (!e) return 0;
 
-  // 1. Explicit liveAt (when exam went live)
-  if (e.liveAt) {
-    const t = new Date(e.liveAt).getTime();
-    if (!isNaN(t) && t > 0) return t;
+  // 1. Explicit publishedAt / publishDate (সর্বোচ্চ অগ্রাধিকার)
+  const rawPublished = (e as any).publishedAt || (e as any).publishDate;
+  if (rawPublished) {
+    const t = parseTimestampToMillis(rawPublished);
+    if (t > 0) return t;
   }
 
-  // 2. Extract Unix epoch timestamp in milliseconds embedded in ID
-  // e.g. upcoming-exam-1793373735897 has timestamp 1793373735897
+  // 2. Explicit liveAt (when exam went live or was published to live)
+  if (e.liveAt) {
+    const t = parseTimestampToMillis(e.liveAt);
+    if (t > 0) return t;
+  }
+
+  // 3. Extract Unix epoch timestamp in milliseconds embedded in ID
+  // e.g. upcoming-exam-1793373735897 or exam-1741432800000
+  let idTime = 0;
   if (e.id) {
     const idMatch = e.id.match(/\b\d{12,13}\b/);
     if (idMatch) {
       const t = parseInt(idMatch[0], 10);
-      if (t > 1500000000000 && t < 2500000000000) return t;
+      if (t > 1500000000000 && t < 2500000000000) idTime = t;
     }
   }
 
-  // 3. Firestore createdAt / updatedAt
-  const rawCreated = (e as any).createdAt || (e as any).updatedAt;
-  if (rawCreated) {
-    if (typeof rawCreated === 'object' && typeof rawCreated.toMillis === 'function') {
-      return rawCreated.toMillis();
-    }
-    if (typeof rawCreated === 'object' && typeof rawCreated.seconds === 'number') {
-      return rawCreated.seconds * 1000;
-    }
-    const t = new Date(rawCreated).getTime();
-    if (!isNaN(t) && t > 0) return t;
+  // 4. Firestore updatedAt / createdAt
+  let docTime = 0;
+  const rawDoc = (e as any).updatedAt || (e as any).createdAt;
+  if (rawDoc) {
+    docTime = parseTimestampToMillis(rawDoc);
   }
 
-  // 4. Candidate date strings: examDateTime, startTime, startDate, examDate, dateCreated
+  // Highest of ID timestamp and Firestore doc timestamp reflects creation/update moment
+  const createdOrSaved = Math.max(idTime, docTime);
+  if (createdOrSaved > 0) {
+    return createdOrSaved;
+  }
+
+  // 5. Candidate date strings: examDateTime, startTime, startDate, examDate, dateCreated
   const dateCandidates = [
     (e as any).examDateTime,
     e.startTime,
@@ -556,9 +600,9 @@ export function getExamTimestamp(e: Exam): number {
     e.dateCreated
   ];
   for (const cand of dateCandidates) {
-    if (cand && typeof cand === 'string') {
-      const t = new Date(cand).getTime();
-      if (!isNaN(t) && t > 0) return t;
+    if (cand) {
+      const t = parseTimestampToMillis(cand);
+      if (t > 0) return t;
     }
   }
 
@@ -567,31 +611,24 @@ export function getExamTimestamp(e: Exam): number {
 
 /**
  * Compares two Live exams to sort the latest published/added exam first at #1 position.
- * 1. Pinned exams always stay at the very top.
- * 2. Newly published live exam 'upcoming-exam-1793373735897' is prioritized at #1.
- * 3. Latest publication / live / creation timestamp first (newest = rank 1).
- * 4. Custom liveOrder / sortOrder fallback if timestamps are identical.
- * 5. Fallback ID comparison.
+ * 1. Pinned exams (pinned explicitly by admin) stay at the top.
+ * 2. Latest published / live / created timestamp first (সর্বশেষ পাবলিশ করা লাইভ পরীক্ষা সবার আগে শো করবে).
+ * 3. Custom manual order if timestamps are identical.
+ * 4. Fallback ID comparison.
  */
 export function compareLiveExams(a: Exam, b: Exam): number {
-  // 1. Ensure targeted newly published live exam is placed at position #1
-  const isTargetA = a.id === 'upcoming-exam-1793373735897' || (a.id && a.id.includes('1793373735897'));
-  const isTargetB = b.id === 'upcoming-exam-1793373735897' || (b.id && b.id.includes('1793373735897'));
-  if (isTargetA && !isTargetB) return -1;
-  if (!isTargetA && isTargetB) return 1;
-
-  // 2. Pinned exams come next
+  // 1. Pinned exams (pinned explicitly by admin) stay at the top
   if (a.isPinned && !b.isPinned) return -1;
   if (!a.isPinned && b.isPinned) return 1;
 
-  // 3. Newest live / created / published timestamp first (সর্বশেষ যুক্ত করা পরীক্ষা আগে)
+  // 2. Newest live / created / published timestamp first (সর্বশেষ যুক্ত/পাবলিশ করা পরীক্ষা সবার আগে)
   const timeA = getExamTimestamp(a);
   const timeB = getExamTimestamp(b);
   if (timeA !== timeB) {
     return timeB - timeA;
   }
 
-  // 4. Custom manual order if timestamps are identical
+  // 3. Custom manual order if timestamps are identical
   const orderA = typeof a.liveOrder === 'number' ? a.liveOrder : (typeof a.sortOrder === 'number' ? a.sortOrder : Infinity);
   const orderB = typeof b.liveOrder === 'number' ? b.liveOrder : (typeof b.sortOrder === 'number' ? b.sortOrder : Infinity);
   if (orderA !== orderB) {
@@ -674,11 +711,6 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
     });
 
     list.sort(compareLiveExams);
-    const targetIdx = list.findIndex(e => e.id === 'upcoming-exam-1793373735897' || (e.id && e.id.includes('1793373735897')));
-    if (targetIdx > 0) {
-      const [targetExam] = list.splice(targetIdx, 1);
-      list.unshift(targetExam);
-    }
     try {
       localStorage.setItem('cached_medha_exams', JSON.stringify(list));
     } catch (e) {}
@@ -1631,7 +1663,9 @@ export async function updateExamArchiveStatus(
       updatedAt: serverTimestamp(),
     };
     if (status === 'live') {
-      updates.liveAt = new Date().toISOString();
+      const nowIso = new Date().toISOString();
+      updates.liveAt = nowIso;
+      updates.publishedAt = nowIso;
       updates.liveOrder = 1;
       updates.sortOrder = 1;
     }

@@ -225,8 +225,7 @@ export async function getArticleBySlug(slug: string): Promise<Article | null> {
 
     return null;
   } catch (err) {
-    console.error('Error fetching article by slug:', err);
-    handleFirestoreError(err, OperationType.GET, `${ARTICLES_COLLECTION}/${cleanSlug}`);
+    console.warn('Error fetching article by slug:', err);
     return null;
   }
 }

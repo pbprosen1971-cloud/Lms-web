@@ -613,6 +613,41 @@ export default function AdminView({
       setDbLoading(false);
     });
 
+    // Also listen to Users (capitalized) in case documents were stored in /Users
+    const unsubscribeCapitalUsers = onSnapshot(collection(db, 'Users'), (snapshot) => {
+      if (!snapshot.empty) {
+        setFirestoreStudents((prev) => {
+          const map = new Map<string, any>();
+          prev.forEach(u => map.set(u.id || u.uid, u));
+          snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const id = docSnap.id;
+            if (!map.has(id)) {
+              map.set(id, {
+                ...data,
+                id,
+                uid: data.uid || id,
+                name: String(data.fullName || data.name || (data.email ? data.email.split('@')[0] : 'ইউজার')),
+                fullName: String(data.fullName || data.name || (data.email ? data.email.split('@')[0] : 'ইউজার')),
+                email: String(data.email || ''),
+                role: String(data.role || 'student'),
+                accountStatus: String(data.accountStatus || 'active'),
+                createdAt: safeTimestampToString(data.createdAt, ''),
+                lastLogin: safeTimestampToString(data.lastLogin, ''),
+                joinedDate: safeDateOnlyString(data.joinedDate || data.createdAt, new Date().toLocaleDateString('bn-BD')),
+                institution: String(data.institution || ''),
+                phone: String(data.phone || ''),
+                isPremium: !!data.isPremium,
+                isPremiumDate: safeTimestampToString(data.isPremiumDate, ''),
+                isPremiumExpiryDate: safeTimestampToString(data.isPremiumExpiryDate, ''),
+              });
+            }
+          });
+          return Array.from(map.values());
+        });
+      }
+    }, () => {});
+
     // 2. Listen to results collection
     const unsubscribeResults = onSnapshot(collection(db, 'results'), (snapshot) => {
       const list: any[] = [];
@@ -650,6 +685,7 @@ export default function AdminView({
 
     return () => {
       unsubscribeUsers();
+      unsubscribeCapitalUsers();
       unsubscribeResults();
     };
   }, []);
@@ -1649,6 +1685,36 @@ export default function AdminView({
       combined.push(currentUser);
     }
 
+    // Include students who took exams from allResults (Firebase exam submissions)
+    const existingEmails = new Set(combined.map(s => (s.email || '').toLowerCase().trim()).filter(Boolean));
+    const existingIds = new Set(combined.map(s => String(s.uid || s.id || '').trim()).filter(Boolean));
+
+    (allResults || []).forEach(r => {
+      const email = (r.studentEmail || '').toLowerCase().trim();
+      const sId = String(r.userId || r.studentId || '').trim();
+      if (email && existingEmails.has(email)) return;
+      if (sId && existingIds.has(sId) && sId !== 'guest') return;
+
+      if (email || (sId && sId !== 'guest')) {
+        if (email) existingEmails.add(email);
+        if (sId) existingIds.add(sId);
+        combined.push({
+          id: sId || `student-${email}`,
+          uid: sId || `student-${email}`,
+          name: r.studentName || (email ? email.split('@')[0] : 'শিক্ষার্থী'),
+          fullName: r.studentName || (email ? email.split('@')[0] : 'শিক্ষার্থী'),
+          email: email || '',
+          role: 'student',
+          accountStatus: 'active',
+          createdAt: r.submittedAt || '',
+          joinedDate: r.dateTaken || '',
+          institution: '',
+          phone: '',
+          isPremium: false,
+        });
+      }
+    });
+
     return combined.map(stud => {
       const studentExams = allResults.filter(
         r => r.studentEmail?.toLowerCase() === stud.email?.toLowerCase() || r.studentId === stud.id || r.userId === stud.uid || r.userId === stud.id
@@ -2489,7 +2555,7 @@ export default function AdminView({
               {/* Analytics Metric Grid */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl text-center space-y-1 border border-slate-200/60 dark:border-slate-800">
-                  <span className="text-3xl font-extrabold text-primary">{students.length} জন</span>
+                  <span className="text-3xl font-extrabold text-primary">{toBengaliDigits(students.length)} জন</span>
                   <span className="block text-xs text-slate-700 dark:text-slate-300 font-bold uppercase">মোট শিক্ষার্থী (Firebase)</span>
                 </div>
                 <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl text-center space-y-1 border border-slate-200/60 dark:border-slate-800">
@@ -2535,7 +2601,7 @@ export default function AdminView({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="font-bold text-lg text-slate-900 dark:text-white">শিক্ষার্থী তালিকা ও একাউন্ট কন্ট্রোল</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">মোট শিক্ষার্থী: {firestoreStudents.length} জন</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">মোট শিক্ষার্থী: {toBengaliDigits(students.length)} জন</p>
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-3">
