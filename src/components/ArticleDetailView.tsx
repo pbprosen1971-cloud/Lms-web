@@ -23,7 +23,7 @@ import {
 import { Article } from '../types';
 import { getArticleBySlug, subscribeToPublishedArticles } from '../services/articleService';
 import ArticleContentRenderer from './ArticleContentRenderer';
-import { applySEO, BASE_SITE_URL } from '../utils/seo';
+import { applySEO, BASE_SITE_URL, extractFirstArticleImage } from '../utils/seo';
 
 interface ArticleDetailViewProps {
   slug: string;
@@ -58,27 +58,28 @@ export default function ArticleDetailView({
 
         if (art) {
           // Apply dynamic SEO for this specific article
-          const canonical = `/article/${art.slug}`;
-        const pageTitle = `${art.title} — Medha Exam`;
-        const pageDesc = art.shortDescription || art.title;
+          const canonical = `/article/${encodeURIComponent(art.slug)}`;
+          const pageTitle = `${art.title} — Medha Exam`;
+          const pageDesc = art.shortDescription || art.title;
+          const resolvedImage = extractFirstArticleImage(art);
 
-        applySEO('articles', {
-          title: pageTitle,
-          description: pageDesc,
-          canonicalPath: canonical,
-          ogType: 'article',
-          ogImage: art.bannerImage || undefined,
-          structuredData: {
-            '@context': 'https://schema.org',
-            '@type': 'BlogPosting',
-            'mainEntityOfPage': {
-              '@type': 'WebPage',
-              '@id': `${BASE_SITE_URL}${canonical}`,
-            },
-            'headline': art.title,
-            'description': pageDesc,
-            'image': art.bannerImage ? [art.bannerImage] : undefined,
-            'datePublished': art.publishedAt || art.createdAt,
+          applySEO('articles', {
+            title: pageTitle,
+            description: pageDesc,
+            canonicalPath: canonical,
+            ogType: 'article',
+            ogImage: resolvedImage,
+            structuredData: {
+              '@context': 'https://schema.org',
+              '@type': 'BlogPosting',
+              'mainEntityOfPage': {
+                '@type': 'WebPage',
+                '@id': `${BASE_SITE_URL}${canonical}`,
+              },
+              'headline': art.title,
+              'description': pageDesc,
+              'image': resolvedImage ? [resolvedImage] : undefined,
+              'datePublished': art.publishedAt || art.createdAt,
             'dateModified': art.updatedAt || art.publishedAt || art.createdAt,
             'author': {
               '@type': 'Person',
@@ -120,14 +121,19 @@ export default function ArticleDetailView({
     };
   }, [slug]);
 
+  const encodedSlug = encodeURIComponent(slug);
+
   const handleCopyLink = () => {
-    const fullUrl = `${window.location.origin}/article/${slug}`;
+    const fullUrl = `${window.location.origin}/article/${encodedSlug}`;
     navigator.clipboard.writeText(fullUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 3000);
   };
 
-  const currentUrl = typeof window !== 'undefined' ? `${window.location.origin}/article/${slug}` : `${BASE_SITE_URL}/article/${slug}`;
+  const currentUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/article/${encodedSlug}`
+      : `${BASE_SITE_URL}/article/${encodedSlug}`;
 
   const formatBanglaDate = (dateStr?: string) => {
     if (!dateStr) return '';

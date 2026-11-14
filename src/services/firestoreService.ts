@@ -652,6 +652,37 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
   let examDocsMap = new Map<string, Exam>();
   let capitalDocsMap = new Map<string, Exam>();
   let legacyDocsMap = new Map<string, Exam>();
+  let examUpdatedAtMap = new Map<string, number>();
+  let capitalUpdatedAtMap = new Map<string, number>();
+  let legacyUpdatedAtMap = new Map<string, number>();
+
+  const extractUpdatedAtMs = (data: any): number => {
+    const ts = data?.updatedAt;
+    if (!ts) return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (typeof ts.seconds === 'number') return ts.seconds * 1000;
+    const parsed = Date.parse(String(ts));
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const pickFreshestQuestions = (examId: string): Question[] => {
+    const candidates: Array<{ questions: Question[]; ts: number; priority: number }> = [];
+    const cap = capitalDocsMap.get(examId);
+    if (cap?.questions && cap.questions.length > 0) {
+      candidates.push({ questions: cap.questions, ts: capitalUpdatedAtMap.get(examId) || 0, priority: 3 });
+    }
+    const ex = examDocsMap.get(examId);
+    if (ex?.questions && ex.questions.length > 0) {
+      candidates.push({ questions: ex.questions, ts: examUpdatedAtMap.get(examId) || 0, priority: 2 });
+    }
+    const leg = legacyDocsMap.get(examId);
+    if (leg?.questions && leg.questions.length > 0) {
+      candidates.push({ questions: leg.questions, ts: legacyUpdatedAtMap.get(examId) || 0, priority: 1 });
+    }
+    if (candidates.length === 0) return [];
+    candidates.sort((a, b) => (b.ts !== a.ts ? b.ts - a.ts : b.priority - a.priority));
+    return candidates[0].questions;
+  };
 
   const deletedExamSet = new Set<string>(KNOWN_PURGED_EXAM_IDS.map(id => id.toLowerCase()));
   try {
@@ -665,16 +696,16 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
 
   const emitMergedList = () => {
     const combinedMap = new Map<string, Exam>();
-    // First apply legacy /exams
+    // 1. First apply legacy /exams
     legacyDocsMap.forEach((v, k) => combinedMap.set(k, v));
 
-    // Then merge /exam (dedicated upcoming/scheduled collection)
-    examDocsMap.forEach((v, k) => {
+    // 2. Merge /Exam (primary exam content container)
+    capitalDocsMap.forEach((v, k) => {
       const existing = combinedMap.get(k);
       combinedMap.set(k, {
         ...(existing || {}),
         ...v,
-        questions: (existing?.questions && existing.questions.length > 0) ? existing.questions : (v.questions || []),
+        questions: pickFreshestQuestions(k),
         description: v.description || existing?.description,
         isPinned: v.isPinned ?? existing?.isPinned ?? false,
         liveOrder: v.liveOrder ?? existing?.liveOrder,
@@ -683,7 +714,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
       });
     });
 
-    // Finally merge /exam (dedicated upcoming/scheduled collection)
+    // 3. Finally merge /exam (dedicated upcoming/scheduled collection)
     // CRITICAL: Upcoming status in /exam MUST be preserved so exams aren't prematurely marked live
     examDocsMap.forEach((v, k) => {
       const existing = combinedMap.get(k);
@@ -691,7 +722,7 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
         ...(existing || {}),
         ...v,
         status: v.status === 'upcoming' ? 'upcoming' : (existing?.status || v.status),
-        questions: (existing?.questions && existing.questions.length > 0) ? existing.questions : (v.questions || []),
+        questions: pickFreshestQuestions(k),
         description: v.description || existing?.description,
         isPinned: v.isPinned ?? existing?.isPinned ?? false,
         liveOrder: v.liveOrder ?? existing?.liveOrder,
@@ -749,9 +780,11 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
 
   const unsubExam = onSnapshot(examRef, (snapshot) => {
     examDocsMap.clear();
+    examUpdatedAtMap.clear();
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
       const examId = docSnap.id || data.examId || data.id;
+      examUpdatedAtMap.set(examId, extractUpdatedAtMs(data));
       const qList = Array.isArray(data.questions) ? data.questions : [];
       const totalQ = qList.length > 0 ? qList.length : (typeof data.totalQuestions === 'number' ? data.totalQuestions : Number(data.totalQuestions || 0));
       const totalM = typeof data.totalMarks === 'number' && data.totalMarks > 0 ? data.totalMarks : (totalQ > 0 ? totalQ : 0);
@@ -794,9 +827,11 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
 
   const unsubCapitalExam = onSnapshot(capitalExamRef, (snapshot) => {
     capitalDocsMap.clear();
+    capitalUpdatedAtMap.clear();
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
       const examId = docSnap.id || data.examId || data.id;
+      capitalUpdatedAtMap.set(examId, extractUpdatedAtMs(data));
       const qList = Array.isArray(data.questions) ? data.questions : [];
       const totalQ = qList.length > 0 ? qList.length : (typeof data.totalQuestions === 'number' ? data.totalQuestions : Number(data.totalQuestions || 0));
       const totalM = typeof data.totalMarks === 'number' && data.totalMarks > 0 ? data.totalMarks : (totalQ > 0 ? totalQ : 0);
@@ -841,9 +876,11 @@ export function subscribeToExams(callback: (exams: Exam[]) => void): Unsubscribe
 
   const unsubLegacy = onSnapshot(examsLegacyRef, (snapshot) => {
     legacyDocsMap.clear();
+    legacyUpdatedAtMap.clear();
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
       const examId = docSnap.id || data.id;
+      legacyUpdatedAtMap.set(examId, extractUpdatedAtMs(data));
       const qList = Array.isArray(data.questions) ? data.questions : [];
       const totalQ = qList.length > 0 ? qList.length : (typeof data.totalQuestions === 'number' ? data.totalQuestions : Number(data.totalQuestions || 0));
       const totalM = typeof data.totalMarks === 'number' && data.totalMarks > 0 ? data.totalMarks : (totalQ > 0 ? totalQ : 0);
@@ -1425,6 +1462,7 @@ export async function updateQuestionInFirestore(
     subject: string;
     category?: string;
     text?: string;
+    previousText?: string;
     options?: string[];
     correctAnswer?: number;
     explanation?: string;
@@ -1433,8 +1471,6 @@ export async function updateQuestionInFirestore(
   currentExams?: Exam[]
 ): Promise<{ updatedExam: Exam | null }> {
   try {
-    // 1. Update direct subcollection /Exam/{examId}/questions/{questionId}
-    const qDocRef = doc(db, 'Exam', examId, 'questions', questionId);
     const qPayload: any = {
       subject: updates.subject,
       category: updates.category || updates.subject,
@@ -1462,22 +1498,33 @@ export async function updateQuestionInFirestore(
       qPayload.questionNumber = updates.questionNumber;
     }
 
-    await setDoc(qDocRef, qPayload, { merge: true });
-
-    // 1.5 Scan subcollection in case doc ID differs from questionId (fallback)
+    // 1. Scan /Exam/{examId}/questions FIRST to update exact existing doc(s) without creating orphan duplicates
+    let matchedSubcollectionDocs = 0;
     try {
       const qSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
       for (const qDoc of qSnap.docs) {
         const d = qDoc.data();
-        if (
-          qDoc.id !== questionId &&
-          (d.questionId === questionId || d.id === questionId || (updates.text && (d.question === updates.text || d.questionText === updates.text)))
-        ) {
+        const docText = (d.questionText || d.question || d.text || '').trim();
+        const matchesId =
+          qDoc.id === questionId ||
+          d.questionId === questionId ||
+          d.id === questionId;
+        const matchesPrevText = Boolean(updates.previousText && docText && docText === updates.previousText.trim());
+        const matchesNewText = Boolean(updates.text && docText && docText === updates.text.trim());
+
+        if (matchesId || matchesPrevText || matchesNewText) {
           await setDoc(doc(db, 'Exam', examId, 'questions', qDoc.id), qPayload, { merge: true });
+          matchedSubcollectionDocs++;
         }
       }
     } catch (e) {
       console.warn("Subcollection scan fallback:", e);
+    }
+
+    // Only create/update at questionId if no existing subcollection document matched
+    if (matchedSubcollectionDocs === 0) {
+      const qDocRef = doc(db, 'Exam', examId, 'questions', questionId);
+      await setDoc(qDocRef, { ...qPayload, questionId, id: questionId }, { merge: true });
     }
 
     // 2. Also check if doc exists under legacy /questions/{questionId}
@@ -1498,7 +1545,12 @@ export async function updateQuestionInFirestore(
     if (targetExam && Array.isArray(targetExam.questions) && targetExam.questions.length > 0) {
       let found = false;
       updatedQuestionsList = targetExam.questions.map(q => {
-        if (q.id === questionId || (updates.text && q.text === updates.text)) {
+        const qTextTrim = (q.text || '').trim();
+        const isMatch =
+          q.id === questionId ||
+          Boolean(updates.previousText && qTextTrim === updates.previousText.trim()) ||
+          Boolean(updates.text && qTextTrim === updates.text.trim());
+        if (isMatch) {
           found = true;
           return {
             ...q,
@@ -1514,7 +1566,6 @@ export async function updateQuestionInFirestore(
       });
 
       if (!found) {
-        // Reload from subcollection
         const qSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
         const freshList: Question[] = [];
         qSnap.forEach(d => freshList.push(mapFirestoreDocToQuestion(d)));
@@ -1522,7 +1573,6 @@ export async function updateQuestionInFirestore(
         updatedQuestionsList = freshList;
       }
     } else {
-      // Reload from subcollection
       const qSnap = await getDocs(collection(db, 'Exam', examId, 'questions'));
       const freshList: Question[] = [];
       qSnap.forEach(d => freshList.push(mapFirestoreDocToQuestion(d)));
@@ -1530,11 +1580,13 @@ export async function updateQuestionInFirestore(
       updatedQuestionsList = freshList;
     }
 
-    // Sync to parent documents
+    const sanitizedParentQuestions = updatedQuestionsList.map(q => sanitizeQuestionForFirestore(q));
+
+    // Sync to parent documents with aligned updatedAt timestamp
     const parentUpdates = {
-      questions: updatedQuestionsList,
-      totalQuestions: updatedQuestionsList.length,
-      totalMarks: updatedQuestionsList.length,
+      questions: sanitizedParentQuestions,
+      totalQuestions: sanitizedParentQuestions.length,
+      totalMarks: sanitizedParentQuestions.length,
       updatedAt: serverTimestamp(),
     };
 

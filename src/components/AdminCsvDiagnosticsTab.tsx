@@ -289,17 +289,6 @@ export const AdminCsvDiagnosticsTab: React.FC<AdminCsvDiagnosticsTabProps> = ({
         const raw = d.rawDocData;
         const targetSubject = d.homePageCategory;
 
-        // 1. Update subcollection document
-        const qDocRef = doc(db, 'Exam', examId, 'questions', d.id);
-        await setDoc(
-          qDocRef,
-          {
-            subject: targetSubject,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
         let resolvedAns = 0;
         if (typeof raw.correctAnswerIndex === 'number' && !isNaN(raw.correctAnswerIndex)) {
           resolvedAns = raw.correctAnswerIndex;
@@ -312,6 +301,31 @@ export const AdminCsvDiagnosticsTab: React.FC<AdminCsvDiagnosticsTabProps> = ({
           else if (u === 'D' || u === '4' || u === 'ঘ') resolvedAns = 3;
           else resolvedAns = 0;
         }
+
+        const correctLetter = ['A', 'B', 'C', 'D'][resolvedAns] || 'A';
+
+        // 1. Update subcollection document with complete normalized fields
+        const qDocRef = doc(db, 'Exam', examId, 'questions', d.id);
+        await setDoc(
+          qDocRef,
+          {
+            questionId: d.id,
+            questionNumber: d.serial,
+            questionText: d.text,
+            question: d.text,
+            text: d.text,
+            options: d.options,
+            optionA: d.options[0] || '',
+            optionB: d.options[1] || '',
+            optionC: d.options[2] || '',
+            optionD: d.options[3] || '',
+            correctAnswer: correctLetter,
+            explanation: raw.explanation || '',
+            subject: targetSubject,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
 
         // Build normalized Question object
         repairedQuestions.push({

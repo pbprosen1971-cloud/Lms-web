@@ -273,11 +273,11 @@ export async function saveStudentsToFirestore(
         batch: stud.batch || stud.institution || 'ঢাকা কলেজ',
         institution: stud.batch || stud.institution || 'ঢাকা কলেজ',
         accountStatus: stud.accountStatus || 'active',
-        role: stud.role || (stud.email?.toLowerCase() === 'medha@admin.com' ? 'admin' : 'student'),
+        role: stud.role || (stud.email?.toLowerCase() === 'pbprosen1971@gmail.com' ? 'admin' : 'student'),
         createdAt: stud.createdAt || stud.registrationDate || new Date().toISOString(),
         registrationDate: stud.registrationDate || stud.createdAt || new Date().toISOString(),
         lastLogin: stud.lastLogin || new Date().toISOString(),
-        isPremium: stud.isPremium ?? (stud.email?.toLowerCase() === 'medha@admin.com'),
+        isPremium: stud.isPremium ?? (stud.email?.toLowerCase() === 'pbprosen1971@gmail.com'),
       }, { merge: true });
       successCount++;
     } catch (err: any) {

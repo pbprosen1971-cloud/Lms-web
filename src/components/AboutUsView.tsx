@@ -37,8 +37,8 @@ export default function AboutUsView({ setView }: AboutUsViewProps) {
         {/* Hero Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-10 shadow-xs relative overflow-hidden">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <MedhaLogo className="h-10 w-10" />
+            <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-md shadow-[#00a854]/25 flex items-center justify-center shrink-0">
+              <MedhaLogo className="w-full h-full" withBackground />
             </div>
             <div className="space-y-1">
               <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">

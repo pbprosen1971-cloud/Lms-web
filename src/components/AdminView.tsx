@@ -60,7 +60,8 @@ import {
   ExamQuestionDoc,
 } from '../types';
 import { onSnapshot, collection, doc, deleteDoc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { db, auth } from '../lib/firebase';
 import {
   safeTimestampToString,
   safeDateOnlyString,
@@ -137,7 +138,7 @@ interface AdminViewProps {
   exams: Exam[];
   results: ExamResult[];
   onCreateExam: (newExam: Exam) => void;
-  onUpdateExam?: (updatedExam: Exam) => void;
+  onUpdateExam?: (updatedExam: Exam, options?: { skipFirestoreSave?: boolean }) => void;
   onDeleteExam?: (examId: string, examTitle?: string) => void;
   ministryBanks?: MinistryQuestionBank[];
   onSaveMinistryBank?: (newBank: MinistryQuestionBank) => void;
@@ -179,6 +180,30 @@ export default function AdminView({
   onSaveUpcomingExamSettings,
 }: AdminViewProps) {
   const [activeTab, setActiveTab] = useState<'analytics' | 'students' | 'results' | 'create_exam' | 'questions' | 'question_management' | 'settings' | 'upcoming_exams' | 'live_archived_exams' | 'google_sheets' | 'referral_leaderboard' | 'study_materials' | 'payments' | 'notifications' | 'csv_diagnostics' | 'job_results' | 'articles'>('analytics');
+  const [firebaseAuthChecked, setFirebaseAuthChecked] = useState<boolean>(false);
+  const [hasActiveFirebaseAuth, setHasActiveFirebaseAuth] = useState<boolean>(Boolean(auth.currentUser));
+  const [reconnectingAuth, setReconnectingAuth] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (fbUser) => {
+      setHasActiveFirebaseAuth(Boolean(fbUser));
+      setFirebaseAuthChecked(true);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleReconnectFirebaseAuth = async () => {
+    try {
+      setReconnectingAuth(true);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      console.warn('Firebase re-auth error:', err);
+    } finally {
+      setReconnectingAuth(false);
+    }
+  };
 
   // Ministry Question Bank Admin Form State
   const [editingBankId, setEditingBankId] = useState<string | null>(null);
@@ -1013,7 +1038,7 @@ export default function AdminView({
         isPublished: newStatus,
         isPremium: !!item.isPremium,
         examId: examId,
-        updatedBy: currentUser?.email || 'medha@admin.com',
+        updatedBy: currentUser?.email || 'pbprosen1971@gmail.com',
       };
       await saveUpcomingExamSettings(updatedItem, currentUser?.uid || 'admin');
       if (onSaveUpcomingExamSettings) {
@@ -1195,7 +1220,7 @@ export default function AdminView({
         isPublished: settingIsPublished,
         isPremium: settingIsPremium,
         examId: targetExamId,
-        updatedBy: currentUser?.email || 'medha@admin.com',
+        updatedBy: currentUser?.email || 'pbprosen1971@gmail.com',
       };
 
       await saveUpcomingExamSettings(payload, currentUser?.uid || 'admin');
@@ -1238,7 +1263,7 @@ export default function AdminView({
       isPublished: true,
       isPremium: !!exam.isPremium,
       examId: exam.id,
-      updatedBy: currentUser?.email || 'medha@admin.com',
+      updatedBy: currentUser?.email || 'pbprosen1971@gmail.com',
     };
 
     setSettingSaving(true);
@@ -2017,7 +2042,7 @@ export default function AdminView({
     try {
       for (const stud of firestoreStudents) {
         const email = (stud.email || '').toLowerCase().trim();
-        const isFounder = email === 'pbprosen1971@gmail.com' || email === 'prosenjit@medha.com';
+        const isFounder = email === 'pbprosen1971@gmail.com';
         if ((stud.name === 'Prosenjit Biswas' || stud.fullName === 'Prosenjit Biswas') && !isFounder) {
           const correctName = (stud.displayName && stud.displayName !== 'Prosenjit Biswas') 
             ? stud.displayName 
@@ -2150,6 +2175,29 @@ export default function AdminView({
           শিক্ষার্থী পোর্টালে যান <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Firebase Auth Session Disconnect Alert */}
+      {firebaseAuthChecked && !hasActiveFirebaseAuth && (
+        <div className="mt-5 p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+            <div className="text-xs sm:text-sm text-rose-800 dark:text-rose-200">
+              <p className="font-bold">ফায়ারবেজ অথেনটিকেশন (Firebase Auth) সেশন সক্রিয় নেই!</p>
+              <p className="mt-0.5 text-rose-700 dark:text-rose-300">
+                আপনার ব্রাউজারে Firebase Auth লগইন না থাকার কারণে প্রশ্ন বা ডেটা আপলোড করলে <code className="font-mono font-bold">Missing or insufficient permissions</code> ত্রুটি দেখাচ্ছে। অনুগ্রহ করে এডমিন একাউন্ট দিয়ে পুনরায় Google লগইন করুন।
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={reconnectingAuth}
+            onClick={handleReconnectFirebaseAuth}
+            className="shrink-0 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-60"
+          >
+            {reconnectingAuth ? 'সংযুক্ত হচ্ছে...' : 'Google দিয়ে Firebase সংযুক্ত করুন'}
+          </button>
+        </div>
+      )}
 
       {/* Admin Sidebar Navigation tabs */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 mt-8 items-start">

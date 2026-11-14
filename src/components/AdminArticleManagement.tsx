@@ -35,6 +35,10 @@ import {
   BookOpen,
   Code,
   Minus,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
 } from 'lucide-react';
 import { Article, UserProfile } from '../types';
 import {
@@ -451,6 +455,44 @@ export default function AdminArticleManagement({
           replacement = `${lead}${options.tableMarkdown}\n`;
           selStartOffset = 0;
           selEndOffset = replacement.length;
+        }
+        break;
+      }
+      case 'align-left':
+      case 'align-center':
+      case 'align-right':
+      case 'align-justify': {
+        const align = formatType.replace('align-', '') as 'left' | 'center' | 'right' | 'justify';
+        const placeholders: Record<'left' | 'center' | 'right' | 'justify', string> = {
+          left: 'বাম পাশের লেখা',
+          center: 'মাঝখানের লেখা',
+          right: 'ডান পাশের লেখা',
+          justify: 'দুই পাশ সমান লেখা',
+        };
+        if (hasSelection) {
+          const existingMatch = selectedText.match(/^\[(left|center|right|justify)\]([\s\S]*?)\[\/\1\]$/i);
+          if (existingMatch) {
+            const existingAlign = existingMatch[1].toLowerCase();
+            const inner = existingMatch[2];
+            if (existingAlign === align) {
+              replacement = inner.replace(/^\n|\n$/g, '');
+            } else {
+              replacement = `[${align}]${inner}[/${align}]`;
+            }
+          } else if (selectedText.includes('\n')) {
+            const needsLead = start > 0 && text[start - 1] !== '\n';
+            const lead = needsLead ? '\n' : '';
+            replacement = `${lead}[${align}]\n${selectedText}\n[/${align}]\n`;
+          } else {
+            replacement = `[${align}]${selectedText}[/${align}]`;
+          }
+          selStartOffset = 0;
+          selEndOffset = replacement.length;
+        } else {
+          const sample = placeholders[align];
+          replacement = `[${align}]${sample}[/${align}]`;
+          selStartOffset = align.length + 2;
+          selEndOffset = selStartOffset + sample.length;
         }
         break;
       }
@@ -1354,6 +1396,48 @@ export default function AdminArticleManagement({
                       )}
                       <span className="text-[11px]">ছবি যুক্ত করুন</span>
                     </button>
+
+                    <div className="w-px h-4 bg-slate-300 dark:bg-slate-700 mx-1" />
+
+                    {/* Text Alignment Tools */}
+                    <div className="flex items-center gap-0.5" role="group" aria-label="টেক্সট অ্যালাইনমেন্ট">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => applyFormatting('align-left')}
+                        title="বাম দিকে সাজান (Align Left)"
+                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md text-slate-700 dark:text-slate-200 cursor-pointer"
+                      >
+                        <AlignLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => applyFormatting('align-center')}
+                        title="মাঝখানে সাজান (Align Center)"
+                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md text-slate-700 dark:text-slate-200 cursor-pointer"
+                      >
+                        <AlignCenter className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => applyFormatting('align-right')}
+                        title="ডান দিকে সাজান (Align Right)"
+                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md text-slate-700 dark:text-slate-200 cursor-pointer"
+                      >
+                        <AlignRight className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => applyFormatting('align-justify')}
+                        title="দুই পাশ সমান (Justify)"
+                        className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md text-slate-700 dark:text-slate-200 cursor-pointer"
+                      >
+                        <AlignJustify className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1371,7 +1455,7 @@ export default function AdminArticleManagement({
                     className="w-full p-4 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono leading-relaxed"
                   />
                 ) : (
-                  <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 min-h-[280px]">
+                  <div className="p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 min-h-[280px] overflow-x-hidden">
                     <ArticleContentRenderer content={formContent} />
                   </div>
                 )}

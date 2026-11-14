@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Article } from '../types';
 import { subscribeToPublishedArticles } from '../services/articleService';
-import { applySEO } from '../utils/seo';
+import { applySEO, extractFirstArticleImage } from '../utils/seo';
 
 interface ArticlesViewProps {
   onSelectArticle: (slug: string) => void;
@@ -358,13 +358,15 @@ export default function ArticlesView({ onSelectArticle, setView }: ArticlesViewP
                         </button>
 
                         {/* Quick Share Menu Popup */}
-                        {activeShareSlug === art.slug && (
+                        {activeShareSlug === art.slug && (() => {
+                          const sharePreviewImg = extractFirstArticleImage(art);
+                          return (
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="absolute bottom-full left-0 mb-2 z-30 w-52 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-2 space-y-1 animate-in fade-in zoom-in-95 duration-150"
+                            className="absolute bottom-full left-0 mb-2 z-30 w-60 max-w-[calc(100vw-3rem)] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-2 space-y-1 animate-in fade-in zoom-in-95 duration-150"
                           >
                             <div className="px-2 py-1 text-[11px] font-bold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-700/60 mb-1 flex items-center justify-between">
-                              <span>শেয়ার করুন</span>
+                              <span>শেয়ার প্রিভিউ</span>
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -375,6 +377,24 @@ export default function ArticlesView({ onSelectArticle, setView }: ArticlesViewP
                               >
                                 <X className="h-3.5 w-3.5" />
                               </button>
+                            </div>
+
+                            {/* Compact Social Link Preview Card */}
+                            <div className="mx-1 mb-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-900/70 overflow-hidden">
+                              {sharePreviewImg && (
+                                <div className="w-full h-20 overflow-hidden bg-slate-200 dark:bg-slate-800">
+                                  <img
+                                    src={sharePreviewImg}
+                                    alt={art.title}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              )}
+                              <div className="px-2 py-1.5">
+                                <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100 line-clamp-2 leading-tight">
+                                  {art.title}
+                                </p>
+                              </div>
                             </div>
 
                             {/* Copy link */}
@@ -442,13 +462,21 @@ export default function ArticlesView({ onSelectArticle, setView }: ArticlesViewP
                               </button>
                             )}
                           </div>
-                        )}
+                          );
+                        })()}
                       </div>
 
-                      <span className="inline-flex items-center gap-1 font-bold text-primary group-hover:translate-x-1 transition-transform">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectArticle(art.slug);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-sm shadow-emerald-600/25 hover:shadow-md hover:shadow-emerald-600/35 active:scale-95 transition-all duration-200 cursor-pointer"
+                      >
                         <span>বিস্তারিত পড়ুন</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </span>
+                        <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                      </button>
                     </div>
                   </div>
                 </article>

@@ -16,7 +16,7 @@ import {
   orderBy,
   writeBatch,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { MinistryQuestionBank, MinistryBankQuestion } from '../types';
 import { recordDeletedMinistryBankInRegistry } from './firestoreService';
 
@@ -426,23 +426,48 @@ export async function batchAddQuestionBankItems(
       const newDocRef = doc(colRef);
       const norm = normalizeCorrectAnswer(item.correctAnswer);
 
-      batch.set(newDocRef, {
-        ...item,
-        id: newDocRef.id,
+      const optA = (item.optionA || '').trim();
+      const optB = (item.optionB || '').trim();
+      const optC = (item.optionC || '').trim();
+      const optD = (item.optionD || '').trim();
+
+      const docPayload: Record<string, any> = {
+        ministry: (item.ministry || '').trim(),
+        subject: (item.subject || '').trim(),
+        question: (item.question || '').trim(),
+        optionA: optA,
+        optionB: optB,
+        optionC: optC,
+        optionD: optD,
+        options: Array.isArray(item.options) && item.options.length === 4 ? item.options : [optA, optB, optC, optD],
         correctAnswer: item.correctAnswer || norm.letter,
         correctAnswerLetter: norm.letter,
-        options: [item.optionA, item.optionB, item.optionC, item.optionD],
+        explanation: (item.explanation || '').trim(),
+        source: (item.source || '').trim(),
+        year: (item.year || '').trim(),
+        examHeldDate: (item.examHeldDate || '').trim(),
+        questionType: item.questionType || 'MCQ',
+        status: item.status || 'active',
         createdAt: now,
         updatedAt: now,
-      });
+        createdBy: item.createdBy || auth.currentUser?.email || 'admin',
+        id: newDocRef.id,
+      };
+
+      batch.set(newDocRef, docPayload);
     });
 
     try {
       await batch.commit();
       successCount += chunk.length;
-    } catch (err) {
-      console.error('Batch commit failed for chunk:', err);
+    } catch (err: any) {
+      console.error('Batch commit failed for chunk:', err, {
+        authUid: auth.currentUser?.uid,
+        authEmail: auth.currentUser?.email,
+        chunkSize: chunk.length,
+      });
       failedCount += chunk.length;
+      handleFirestoreError(err, OperationType.WRITE, COLLECTION_NAME);
     }
 
     if (onProgress) {
@@ -1241,7 +1266,10 @@ export async function saveMinistryQuestionBankBundle(
   });
 
   // Batch insert into /QuestionBank
-  await batchAddQuestionBankItems(standaloneItems, onProgress);
+  const batchResult = await batchAddQuestionBankItems(standaloneItems, onProgress);
+  if (batchResult.failed > 0 && batchResult.success === 0) {
+    throw new Error(`ফায়ারস্টোরে প্রশ্নব্যাংকের প্রশ্নসমূহ আপলোড করতে ব্যর্থ হয়েছে (${batchResult.failed}টি প্রশ্ন ব্যর্থ)। দয়া করে এডমিন হিসেবে লগইন নিশ্চিত করে পুনরায় চেষ্টা করুন।`);
+  }
 
   // 2. Prepare MinistryQuestionBank document for Homepage
   const formattedQuestions: MinistryBankQuestion[] = questions.map((q, idx) => {

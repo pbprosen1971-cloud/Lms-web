@@ -4,23 +4,262 @@
  */
 
 import React from 'react';
-import { ExternalLink, Quote } from 'lucide-react';
+import { ExternalLink, Quote, AlertTriangle } from 'lucide-react';
 
 interface ArticleContentRendererProps {
   content: string;
   className?: string;
+  depth?: number;
+}
+
+interface ParsedIframeEmbed {
+  isValid: boolean;
+  safeSrc?: string;
+  externalUrl?: string;
+  hostname?: string;
+  provider: 'youtube' | 'facebook' | 'vimeo' | 'google' | 'unknown';
+  isFacebookPostOrPage: boolean;
+  width?: number;
+  height?: number;
+  title?: string;
+  allow?: string;
+  allowFullScreen: boolean;
+  scrolling?: 'yes' | 'no' | 'auto';
+}
+
+const TRUSTED_YOUTUBE_HOSTS = new Set([
+  'www.youtube.com',
+  'youtube.com',
+  'm.youtube.com',
+  'youtu.be',
+  'www.youtube-nocookie.com',
+  'youtube-nocookie.com',
+]);
+
+const TRUSTED_FACEBOOK_HOSTS = new Set([
+  'www.facebook.com',
+  'facebook.com',
+  'web.facebook.com',
+  'm.facebook.com',
+]);
+
+const TRUSTED_VIMEO_HOSTS = new Set(['player.vimeo.com']);
+const TRUSTED_GOOGLE_HOSTS = new Set(['drive.google.com', 'docs.google.com']);
+
+function parseIframeAttributes(tagHtml: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const openTagMatch = tagHtml.match(/<iframe\b([\s\S]*?)>/i);
+  if (!openTagMatch) return attrs;
+
+  const attrString = openTagMatch[1];
+  const attrRegex = /([a-zA-Z0-9_-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = attrRegex.exec(attrString)) !== null) {
+    const key = match[1].toLowerCase();
+    const val = match[2] ?? match[3] ?? match[4] ?? 'true';
+    attrs[key] = val;
+  }
+
+  return attrs;
+}
+
+function validateAndNormalizeEmbed(rawIframeHtml: string): ParsedIframeEmbed {
+  const attrs = parseIframeAttributes(rawIframeHtml);
+  const rawSrc = (attrs.src || '').replace(/&amp;/g, '&').trim();
+
+  const parsedWidth = attrs.width ? parseInt(attrs.width, 10) : undefined;
+  const parsedHeight = attrs.height ? parseInt(attrs.height, 10) : undefined;
+  const width = parsedWidth && !Number.isNaN(parsedWidth) && parsedWidth > 0 ? parsedWidth : undefined;
+  const height = parsedHeight && !Number.isNaN(parsedHeight) && parsedHeight > 0 ? parsedHeight : undefined;
+
+  if (!rawSrc) {
+    return {
+      isValid: false,
+      provider: 'unknown',
+      isFacebookPostOrPage: false,
+      allowFullScreen: true,
+    };
+  }
+
+  let url: URL;
+  try {
+    url = new URL(rawSrc);
+  } catch {
+    return {
+      isValid: false,
+      provider: 'unknown',
+      isFacebookPostOrPage: false,
+      allowFullScreen: true,
+    };
+  }
+
+  if (url.protocol !== 'https:') {
+    return {
+      isValid: false,
+      hostname: url.hostname,
+      provider: 'unknown',
+      isFacebookPostOrPage: false,
+      allowFullScreen: true,
+    };
+  }
+
+  const host = url.hostname.toLowerCase();
+
+  // YouTube
+  if (TRUSTED_YOUTUBE_HOSTS.has(host)) {
+    let embedUrl = url.toString();
+    if (host === 'youtu.be') {
+      const videoId = url.pathname.replace(/^\//, '').split('/')[0];
+      if (videoId) {
+        embedUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
+    } else if (url.pathname === '/watch') {
+      const videoId = url.searchParams.get('v');
+      if (videoId) {
+        embedUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
+    } else if (url.pathname.startsWith('/shorts/')) {
+      const videoId = url.pathname.replace('/shorts/', '').split('/')[0];
+      if (videoId) {
+        embedUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
+    }
+
+    const normalizedUrl = new URL(embedUrl);
+    if (!normalizedUrl.pathname.startsWith('/embed/')) {
+      return {
+        isValid: false,
+        hostname: host,
+        provider: 'youtube',
+        isFacebookPostOrPage: false,
+        allowFullScreen: true,
+      };
+    }
+
+    const ytVideoId = normalizedUrl.pathname.replace('/embed/', '').split('/')[0];
+    const ytExternalUrl = ytVideoId ? `https://www.youtube.com/watch?v=${ytVideoId}` : undefined;
+
+    return {
+      isValid: true,
+      safeSrc: normalizedUrl.toString(),
+      externalUrl: ytExternalUrl,
+      hostname: host,
+      provider: 'youtube',
+      isFacebookPostOrPage: false,
+      width,
+      height,
+      title: attrs.title || 'YouTube Video',
+      allow:
+        attrs.allow ||
+        'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share',
+      allowFullScreen: attrs.allowfullscreen !== 'false',
+    };
+  }
+
+  // Facebook Plugins (post.php, video.php, page.php, etc.)
+  if (TRUSTED_FACEBOOK_HOSTS.has(host)) {
+    if (!url.pathname.startsWith('/plugins/')) {
+      return {
+        isValid: false,
+        hostname: host,
+        provider: 'facebook',
+        isFacebookPostOrPage: false,
+        allowFullScreen: true,
+      };
+    }
+
+    const isVideoPlugin = url.pathname.startsWith('/plugins/video.php');
+    const isPortraitOrTall = Boolean(width && height && height >= width * 0.75);
+    const rawHref = url.searchParams.get('href');
+    let fbExternalUrl: string | undefined;
+    if (rawHref) {
+      try {
+        const parsedHref = new URL(rawHref);
+        if (parsedHref.protocol === 'https:') {
+          fbExternalUrl = parsedHref.toString();
+        }
+      } catch {
+        // Ignore invalid href param
+      }
+    }
+
+    return {
+      isValid: true,
+      safeSrc: url.toString(),
+      externalUrl: fbExternalUrl,
+      hostname: host,
+      provider: 'facebook',
+      isFacebookPostOrPage: !isVideoPlugin || isPortraitOrTall,
+      width,
+      height,
+      title: attrs.title || (isVideoPlugin ? 'Facebook Video' : 'Facebook Post'),
+      allow:
+        attrs.allow ||
+        'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share',
+      allowFullScreen: attrs.allowfullscreen !== 'false',
+      scrolling: attrs.scrolling === 'yes' ? 'yes' : attrs.scrolling === 'auto' ? 'auto' : 'no',
+    };
+  }
+
+  // Vimeo
+  if (TRUSTED_VIMEO_HOSTS.has(host) && url.pathname.startsWith('/video/')) {
+    const vimeoId = url.pathname.replace('/video/', '').split('/')[0];
+    return {
+      isValid: true,
+      safeSrc: url.toString(),
+      externalUrl: vimeoId ? `https://vimeo.com/${vimeoId}` : undefined,
+      hostname: host,
+      provider: 'vimeo',
+      isFacebookPostOrPage: false,
+      width,
+      height,
+      title: attrs.title || 'Vimeo Video',
+      allow: attrs.allow || 'autoplay; fullscreen; picture-in-picture',
+      allowFullScreen: attrs.allowfullscreen !== 'false',
+    };
+  }
+
+  // Google Drive / Docs Preview
+  if (TRUSTED_GOOGLE_HOSTS.has(host)) {
+    return {
+      isValid: true,
+      safeSrc: url.toString(),
+      hostname: host,
+      provider: 'google',
+      isFacebookPostOrPage: true,
+      width,
+      height,
+      title: attrs.title || 'Embedded Document',
+      allow: attrs.allow || 'autoplay',
+      allowFullScreen: attrs.allowfullscreen !== 'false',
+    };
+  }
+
+  return {
+    isValid: false,
+    hostname: host,
+    provider: 'unknown',
+    isFacebookPostOrPage: false,
+    allowFullScreen: true,
+  };
 }
 
 /**
  * Lightweight, secure, semantic Markdown & Rich Text parser for Medha Exam Articles.
- * Handles headings, tables, blockquotes, lists, links, images, and formatting with Tailwind styling.
+ * Handles headings, tables, blockquotes, lists, links, images, trusted iframe embeds (YouTube/Facebook), and formatting.
  */
-export default function ArticleContentRenderer({ content, className = '' }: ArticleContentRendererProps) {
+export default function ArticleContentRenderer({
+  content,
+  className = '',
+  depth = 0,
+}: ArticleContentRendererProps) {
   if (!content) {
+    if (depth > 0) return null;
     return <div className="text-slate-400 italic py-4">কোনো কনটেন্ট যোগ করা হয়নি।</div>;
   }
 
-  // Split content into blocks (paragraphs, headings, lists, tables, quotes, images)
+  // Split content into blocks (paragraphs, headings, lists, tables, quotes, images, embeds)
   const blocks: React.ReactNode[] = [];
   const lines = content.split('\n');
   let i = 0;
@@ -29,13 +268,6 @@ export default function ArticleContentRenderer({ content, className = '' }: Arti
   const parseInline = (text: string): React.ReactNode => {
     if (!text) return null;
 
-    // Pattern for markdown links: [label](url)
-    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    // Pattern for inline code: `code`
-    // Pattern for bold: **bold**
-    // Pattern for italic: *italic* or _italic_
-
-    // Replace links first with tokens or tokenize
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;
@@ -112,6 +344,307 @@ export default function ArticleContentRenderer({ content, className = '' }: Arti
     if (!trimmed) {
       i++;
       continue;
+    }
+
+    // 1a. Text Alignment Blocks ([left], [center], [right], [justify])
+    if (depth < 4) {
+      const alignClassMap: Record<'left' | 'center' | 'right' | 'justify', string> = {
+        left: 'text-left [&_h2]:justify-start [&_h3]:justify-start',
+        center: 'text-center [&_h2]:justify-center [&_h3]:justify-center [&_li]:justify-center',
+        right: 'text-right [&_h2]:justify-end [&_h3]:justify-end [&_li]:justify-end',
+        justify: 'text-justify',
+      };
+
+      const singleAlignMatch = trimmed.match(/^\[(left|center|right|justify)\]([\s\S]*?)\[\/\1\]$/i);
+      if (singleAlignMatch) {
+        const align = singleAlignMatch[1].toLowerCase() as 'left' | 'center' | 'right' | 'justify';
+        const inner = singleAlignMatch[2].trim();
+        blocks.push(
+          <div key={`align-${i}`} className={alignClassMap[align]}>
+            <ArticleContentRenderer content={inner} depth={depth + 1} className="space-y-1" />
+          </div>
+        );
+        i++;
+        continue;
+      }
+
+      const openAlignMatch = trimmed.match(/^\[(left|center|right|justify)\]$/i);
+      if (openAlignMatch) {
+        const align = openAlignMatch[1].toLowerCase() as 'left' | 'center' | 'right' | 'justify';
+        const closeTagRegex = new RegExp(`^\\[\\/${align}\\]$`, 'i');
+        let endIdx = i + 1;
+        const innerLines: string[] = [];
+        let foundClose = false;
+
+        while (endIdx < lines.length) {
+          if (closeTagRegex.test(lines[endIdx].trim())) {
+            foundClose = true;
+            break;
+          }
+          innerLines.push(lines[endIdx]);
+          endIdx++;
+        }
+
+        if (foundClose) {
+          blocks.push(
+            <div key={`align-${i}`} className={alignClassMap[align]}>
+              <ArticleContentRenderer
+                content={innerLines.join('\n')}
+                depth={depth + 1}
+                className="space-y-1"
+              />
+            </div>
+          );
+          i = endIdx + 1;
+          continue;
+        }
+      }
+    }
+
+    // 1b. Trusted Iframe Embed (<iframe ...></iframe> single-line or multi-line)
+    if (/^<iframe\b/i.test(trimmed)) {
+      const embedLines: string[] = [rawLine];
+      let endIdx = i;
+      let combinedEmbed = rawLine;
+      const maxLookahead = Math.min(lines.length, i + 30);
+
+      while (
+        !(/<\/iframe>/i.test(combinedEmbed) || /\/>\s*$/.test(combinedEmbed.trim())) &&
+        endIdx + 1 < maxLookahead
+      ) {
+        endIdx++;
+        embedLines.push(lines[endIdx]);
+        combinedEmbed = embedLines.join('\n');
+      }
+
+      const isClosed = /<\/iframe>/i.test(combinedEmbed) || /\/>\s*$/.test(combinedEmbed.trim());
+      if (isClosed) {
+        const parsed = validateAndNormalizeEmbed(combinedEmbed);
+
+        if (parsed.isValid && parsed.safeSrc) {
+          if (parsed.provider === 'facebook') {
+            const targetWidth = parsed.width ? Math.min(parsed.width, 640) : 500;
+            const isLandscapeVideo =
+              !parsed.isFacebookPostOrPage && parsed.width && parsed.height && parsed.width > parsed.height;
+            const frameMaxWidth = isLandscapeVideo ? Math.min(parsed.width || 640, 720) : targetWidth;
+
+            blocks.push(
+              <div key={`embed-${i}`} className="my-8 flex justify-center w-full">
+                <div
+                  className="w-full rounded-[22px] overflow-hidden border-2 border-[#1877F2]/80 border-b-[6px] border-b-[#1256B8] ring-1 ring-[#1877F2]/25 bg-white dark:bg-slate-900 shadow-[0_22px_45px_-12px_rgba(24,119,242,0.38),0_10px_22px_-8px_rgba(15,23,42,0.18)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_52px_-12px_rgba(24,119,242,0.46),0_12px_24px_-8px_rgba(15,23,42,0.2)]"
+                  style={{ maxWidth: `${frameMaxWidth}px` }}
+                >
+                  {/* Facebook Brand Top Accent Bar & Header */}
+                  <div className="px-4 py-2.5 bg-gradient-to-r from-[#EBF3FF] via-[#F7FAFF] to-[#EBF3FF] dark:from-[#0C1D38] dark:via-[#112648] dark:to-[#0C1D38] border-b border-[#1877F2]/20 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-xl bg-gradient-to-br from-[#1877F2] to-[#0A58CA] text-white shadow-[0_4px_10px_rgba(24,119,242,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] shrink-0">
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M22.675 0h-21.35C.597 0 0 .597 0 1.326v21.348C0 23.403.597 24 1.326 24h11.495v-9.294H9.691v-3.622h3.13V8.413c0-3.1 1.893-4.788 4.659-4.788 1.325 0 2.463.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.313h3.587l-.467 3.622h-3.12V24h6.116C23.403 24 24 23.403 24 22.674V1.326C24 .597 23.403 0 22.675 0z" />
+                        </svg>
+                      </span>
+                      <div className="flex flex-col leading-tight truncate">
+                        <span className="text-xs font-extrabold text-[#1877F2] dark:text-[#60A5FA] tracking-tight truncate">
+                          {parsed.title === 'Facebook Video' ? 'Facebook Video' : 'Facebook Post'}
+                        </span>
+                        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                          এম্বেড প্রিভিউ
+                        </span>
+                      </div>
+                    </div>
+
+                    {parsed.externalUrl && (
+                      <a
+                        href={parsed.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1877F2]/10 hover:bg-[#1877F2] text-[#1877F2] hover:text-white dark:bg-[#1877F2]/20 dark:text-[#60A5FA] dark:hover:bg-[#1877F2] dark:hover:text-white border border-[#1877F2]/30 text-[11px] font-bold transition-colors shrink-0"
+                      >
+                        <span>ফেসবুকে দেখুন</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Facebook Iframe Surface */}
+                  {isLandscapeVideo ? (
+                    <div
+                      className="w-full bg-black"
+                      style={{
+                        aspectRatio: `${parsed.width} / ${parsed.height}`,
+                      }}
+                    >
+                      <iframe
+                        src={parsed.safeSrc}
+                        title={parsed.title}
+                        className="w-full h-full border-0"
+                        scrolling={parsed.scrolling || 'no'}
+                        allow={parsed.allow}
+                        allowFullScreen={parsed.allowFullScreen}
+                        loading="lazy"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full bg-white">
+                      <iframe
+                        src={parsed.safeSrc}
+                        title={parsed.title}
+                        style={{
+                          width: '100%',
+                          height: parsed.height ? `${parsed.height}px` : '580px',
+                          border: 'none',
+                          overflow: 'hidden',
+                          display: 'block',
+                        }}
+                        scrolling={parsed.scrolling || 'no'}
+                        allow={parsed.allow}
+                        allowFullScreen={parsed.allowFullScreen}
+                        loading="lazy"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          } else if (parsed.provider === 'google') {
+            blocks.push(
+              <div key={`embed-${i}`} className="my-8 flex justify-center w-full">
+                <div className="w-full max-w-3xl overflow-hidden rounded-[22px] border-2 border-[#0F9D58]/75 border-b-[6px] border-b-[#0B7340] ring-1 ring-[#0F9D58]/20 bg-white dark:bg-slate-900 shadow-[0_22px_45px_-12px_rgba(15,157,88,0.30),0_10px_22px_-8px_rgba(15,23,42,0.16)] transition-all duration-300 hover:-translate-y-0.5">
+                  <div className="px-4 py-2.5 bg-gradient-to-r from-[#ECFDF5] via-[#F6FEFA] to-[#ECFDF5] dark:from-[#062619] dark:via-[#0A2E1F] dark:to-[#062619] border-b border-[#0F9D58]/20 flex items-center justify-between gap-2">
+                    <span className="text-xs font-extrabold text-[#0F9D58] dark:text-emerald-400">
+                      Google Document / Drive Preview
+                    </span>
+                  </div>
+                  <iframe
+                    src={parsed.safeSrc}
+                    title={parsed.title}
+                    style={{
+                      width: '100%',
+                      height: parsed.height ? `${Math.min(parsed.height, 800)}px` : '480px',
+                      border: 'none',
+                      display: 'block',
+                    }}
+                    allow={parsed.allow}
+                    allowFullScreen={parsed.allowFullScreen}
+                    loading="lazy"
+                  />
+                </div>
+              </div>
+            );
+          } else if (parsed.provider === 'youtube') {
+            const isVertical = Boolean(parsed.width && parsed.height && parsed.height > parsed.width);
+            blocks.push(
+              <div key={`embed-${i}`} className="my-8 flex justify-center w-full">
+                <div
+                  className={`w-full rounded-[22px] overflow-hidden border-2 border-[#FF0000]/80 border-b-[6px] border-b-[#B91C1C] ring-1 ring-[#FF0000]/25 bg-white dark:bg-slate-900 shadow-[0_22px_45px_-12px_rgba(255,0,0,0.34),0_10px_22px_-8px_rgba(15,23,42,0.2)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_28px_52px_-12px_rgba(255,0,0,0.42),0_12px_24px_-8px_rgba(15,23,42,0.24)] ${
+                    isVertical ? 'max-w-sm' : 'max-w-3xl'
+                  }`}
+                >
+                  {/* YouTube Brand Header */}
+                  <div className="px-4 py-2.5 bg-gradient-to-r from-[#FFF0F1] via-[#FFF8F8] to-[#FFF0F1] dark:from-[#2B090C] dark:via-[#1C0A0D] dark:to-[#2B090C] border-b border-[#FF0000]/20 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-xl bg-gradient-to-br from-[#FF0000] to-[#C80000] text-white shadow-[0_4px_10px_rgba(255,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.35)] shrink-0">
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                        </svg>
+                      </span>
+                      <div className="flex flex-col leading-tight truncate">
+                        <span className="text-xs font-extrabold text-[#DC2626] dark:text-[#FF4D4D] tracking-tight truncate">
+                          {isVertical ? 'YouTube Shorts' : 'YouTube Video'}
+                        </span>
+                        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                          ভিডিও প্রিভিউ
+                        </span>
+                      </div>
+                    </div>
+
+                    {parsed.externalUrl && (
+                      <a
+                        href={parsed.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FF0000]/10 hover:bg-[#FF0000] text-[#DC2626] hover:text-white dark:bg-[#FF0000]/20 dark:text-[#FF6B6B] dark:hover:bg-[#FF0000] dark:hover:text-white border border-[#FF0000]/30 text-[11px] font-bold transition-colors shrink-0"
+                      >
+                        <span>YouTube-এ দেখুন</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+
+                  {/* YouTube Video Frame */}
+                  <div className={`w-full bg-black ${isVertical ? 'aspect-[9/16]' : 'aspect-video'}`}>
+                    <iframe
+                      src={parsed.safeSrc}
+                      title={parsed.title}
+                      className="w-full h-full border-0"
+                      allow={parsed.allow}
+                      allowFullScreen={parsed.allowFullScreen}
+                      loading="lazy"
+                      referrerPolicy="strict-origin-when-cross-origin"
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          } else {
+            // Vimeo responsive embed with Vimeo cyan-blue 3D brand frame
+            const isVertical = Boolean(parsed.width && parsed.height && parsed.height > parsed.width);
+            blocks.push(
+              <div key={`embed-${i}`} className="my-8 flex justify-center w-full">
+                <div
+                  className={`w-full rounded-[22px] overflow-hidden border-2 border-[#1AB7EA]/80 border-b-[6px] border-b-[#0E8BB5] ring-1 ring-[#1AB7EA]/25 bg-white dark:bg-slate-900 shadow-[0_22px_45px_-12px_rgba(26,183,234,0.34),0_10px_22px_-8px_rgba(15,23,42,0.18)] transition-all duration-300 hover:-translate-y-0.5 ${
+                    isVertical ? 'max-w-sm' : 'max-w-3xl'
+                  }`}
+                >
+                  <div className="px-4 py-2.5 bg-gradient-to-r from-[#ECFAFF] via-[#F7FDFF] to-[#ECFAFF] dark:from-[#082530] dark:via-[#0B2D3A] dark:to-[#082530] border-b border-[#1AB7EA]/20 flex items-center justify-between gap-2">
+                    <span className="text-xs font-extrabold text-[#0284C7] dark:text-[#38BDF8]">
+                      Vimeo Video
+                    </span>
+                    {parsed.externalUrl && (
+                      <a
+                        href={parsed.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1AB7EA]/10 hover:bg-[#1AB7EA] text-[#0284C7] hover:text-white border border-[#1AB7EA]/30 text-[11px] font-bold transition-colors shrink-0"
+                      >
+                        <span>দেখুন</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                  <div className={`w-full bg-black ${isVertical ? 'aspect-[9/16]' : 'aspect-video'}`}>
+                    <iframe
+                      src={parsed.safeSrc}
+                      title={parsed.title}
+                      className="w-full h-full border-0"
+                      allow={parsed.allow}
+                      allowFullScreen={parsed.allowFullScreen}
+                      loading="lazy"
+                      referrerPolicy="strict-origin-when-cross-origin"
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          }
+        } else {
+          blocks.push(
+            <div
+              key={`embed-blocked-${i}`}
+              className="my-5 p-4 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/80 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200 text-xs sm:text-sm flex items-center gap-2.5"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+              <span>
+                নিরাপত্তাজনিত কারণে এই এম্বেড কোডটি প্রিভিউ করা হয়নি ({parsed.hostname || 'অজ্ঞাত উৎস'})। শুধুমাত্র অনুমোদিত HTTPS YouTube, Facebook, Vimeo বা Google Drive এম্বেড সমর্থিত।
+              </span>
+            </div>
+          );
+        }
+
+        i = endIdx + 1;
+        continue;
+      }
     }
 
     // 2. Headings (# H1, ## H2, ### H3, #### H4)
@@ -316,7 +849,7 @@ export default function ArticleContentRenderer({ content, className = '' }: Arti
     blocks.push(
       <p
         key={`p-${i}`}
-        className="text-base sm:text-lg text-slate-700 dark:text-slate-300 leading-relaxed my-3 font-normal"
+        className="text-base sm:text-lg text-slate-700 dark:text-slate-300 leading-relaxed my-3 font-normal break-words"
       >
         {parseInline(trimmed)}
       </p>

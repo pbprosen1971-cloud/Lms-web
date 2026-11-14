@@ -59,39 +59,9 @@ async function generate() {
   fs.writeFileSync(path.join(publicDir, 'favicon.ico'), ico48Buffer);
   console.log('Generated favicon.ico');
 
-  // 8. og-image.png (1200x630 banner with green/blue gradient and logo centered)
-  // Create a stunning 1200x630 branded card for Google, WhatsApp, Facebook, Twitter
-  const logo240Buffer = await sharp(svgBuffer).resize(240, 240).png().toBuffer();
-  
-  const ogSvg = `
-    <svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#0f172a" />
-          <stop offset="50%" stop-color="#042f2e" />
-          <stop offset="100%" stop-color="#022c22" />
-        </linearGradient>
-      </defs>
-      <rect width="1200" height="630" fill="url(#bg)" />
-      <circle cx="340" cy="315" r="160" fill="#059669" opacity="0.15" filter="blur(40px)" />
-      <circle cx="860" cy="315" r="180" fill="#2563eb" opacity="0.15" filter="blur(40px)" />
-      <text x="560" y="270" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="800" fill="#ffffff">Medha Exam</text>
-      <text x="560" y="330" font-family="system-ui, -apple-system, sans-serif" font-size="32" font-weight="600" fill="#34d399">মেধা এক্সাম — Job Exam Portal</text>
-      <text x="560" y="380" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="400" fill="#94a3b8">বিসিএস, ব্যাংক ও সরকারি চাকরি পরীক্ষার লাইভ প্রস্তুতি</text>
-    </svg>
-  `;
-
-  await sharp(Buffer.from(ogSvg))
-    .composite([
-      {
-        input: logo240Buffer,
-        top: 195,
-        left: 260
-      }
-    ])
-    .png()
-    .toFile(path.join(publicDir, 'og-image.png'));
-  console.log('Generated og-image.png');
+  // 8. og-image.png (1200x630 banner with logo and portal branding)
+  const { generateOG } = await import('./generate-og-image.mjs');
+  await generateOG();
 }
 
 generate().catch(err => {

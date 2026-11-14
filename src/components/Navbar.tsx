@@ -97,10 +97,7 @@ export default function Navbar({
   }, []);
 
   const isAdminUser =
-    user?.role === 'admin' ||
-    ['medha@admin.com', 'admin@medha.com', 'pbprosen1971@gmail.com', 'prosenjit@medha.com'].includes(
-      (user?.email || '').toLowerCase().trim()
-    );
+    (user?.email || '').toLowerCase().trim() === 'pbprosen1971@gmail.com';
 
   interface NavItem {
     label: string;

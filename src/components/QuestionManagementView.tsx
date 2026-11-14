@@ -43,7 +43,7 @@ export interface QuestionItemWithMeta extends Question {
 
 interface QuestionManagementViewProps {
   exams: Exam[];
-  onUpdateExam?: (updatedExam: Exam) => void;
+  onUpdateExam?: (updatedExam: Exam, options?: { skipFirestoreSave?: boolean }) => void;
   onRefreshExams?: () => void;
   currentUser?: UserProfile | null;
 }
@@ -446,6 +446,7 @@ export const QuestionManagementView: React.FC<QuestionManagementViewProps> = ({
           subject: resolvedSubject,
           category: resolvedCategory,
           text: editText.trim(),
+          previousText: editingQuestion.text,
           options: optionsArray,
           correctAnswer: editCorrectAnswer,
           explanation: editExplanation.trim(),
@@ -454,15 +455,18 @@ export const QuestionManagementView: React.FC<QuestionManagementViewProps> = ({
         exams
       );
 
-      // 2. Propagate to parent React application state (HomeView & Exam views)
+      // 2. Propagate to parent React application state (already persisted to Firestore above)
       if (result.updatedExam && onUpdateExam) {
-        onUpdateExam(result.updatedExam);
+        onUpdateExam(result.updatedExam, { skipFirestoreSave: true });
       }
 
       // 3. Update directDbQuestions state if cached
       setDirectDbQuestions((prev) =>
         prev.map((q) => {
-          if (q.id === editingQuestion.id && q.examId === editingQuestion.examId) {
+          if (
+            q.examId === editingQuestion.examId &&
+            (q.id === editingQuestion.id || (q.text || '').trim() === (editingQuestion.text || '').trim())
+          ) {
             return {
               ...q,
               subject: resolvedSubject,

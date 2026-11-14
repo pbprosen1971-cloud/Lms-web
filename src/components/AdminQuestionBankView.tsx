@@ -71,6 +71,7 @@ import {
   COMMON_SUBJECTS,
 } from '../services/questionBankService';
 import { toBengaliDigits, formatBengaliDateTimeSafe } from '../lib/dateUtils';
+import { auth } from '../lib/firebase';
 import { UserProfile, MinistryQuestionBank, MinistryBankQuestion } from '../types';
 import QuestionBankPdfModal from './QuestionBankPdfModal';
 
@@ -626,6 +627,10 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
       setErrorMsg('৪টি অপশনই (Option A, B, C, D) সঠিকভাবে পূরণ করতে হবে।');
       return;
     }
+    if (!auth.currentUser) {
+      setErrorMsg('ফায়ারবেজ অথেনটিকেশন (Firebase Auth) সংযুক্ত নেই! দয়া করে উপরের "Google দিয়ে Firebase সংযুক্ত করুন" বাটনে ক্লিক করে অথবা লগআউট করে পুনরায় Google দিয়ে লগইন করুন।');
+      return;
+    }
 
     try {
       setSavingManual(true);
@@ -908,6 +913,10 @@ export const AdminQuestionBankView: React.FC<AdminQuestionBankViewProps> = ({
   // Import all valid rows to /QuestionBank and /ministryQuestionBanks (immediately visible on Homepage)
   const handleImportAllCsvRows = async () => {
     if (!csvParseResult || csvParseResult.invalidCount > 0 || csvParseResult.rows.length === 0) {
+      return;
+    }
+    if (!auth.currentUser) {
+      setErrorMsg('ফায়ারবেজ অথেনটিকেশন (Firebase Auth) সংযুক্ত নেই! তাই ডেটাবেজে আপলোড করা যাচ্ছে না। অনুগ্রহ করে উপরের "Google দিয়ে Firebase সংযুক্ত করুন" বাটনে ক্লিক করে অথবা লগইন পেজ থেকে Google দিয়ে লগইন করুন।');
       return;
     }
 

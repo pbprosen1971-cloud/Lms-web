@@ -374,8 +374,7 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
     try {
       const lowerEmail = email.toLowerCase().trim();
       const isAdminEmail =
-        lowerEmail === 'pbprosen1971@gmail.com' ||
-        lowerEmail === 'prosenjit@medha.com';
+        lowerEmail === 'pbprosen1971@gmail.com';
 
       if (isRegistering) {
         const trimmedName = name.trim();
@@ -385,32 +384,22 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
           return;
         }
 
-        let uid = '';
-        let firebaseUser: any = null;
+        // 1. Create User in Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const firebaseUser = userCredential.user;
+        const uid = firebaseUser.uid;
+
+        // 2. Set Firebase Auth displayName to user's real signup name
         try {
-          // 1. Create User in Firebase Auth
-          const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-          firebaseUser = userCredential.user;
-          uid = firebaseUser.uid;
-
-          // 2. Set Firebase Auth displayName to user's real signup name
-          try {
-            await updateProfile(firebaseUser, { displayName: trimmedName });
-          } catch (profErr) {
-            console.warn("Failed to set auth displayName:", profErr);
-          }
-
-          // 3. Send Email Verification using Firebase Auth
-          try {
-            await sendEmailVerification(firebaseUser);
-          } catch (e) {}
-        } catch (authErr: any) {
-          if (authErr?.code === 'auth/operation-not-allowed' || authErr?.message?.includes('operation-not-allowed')) {
-            uid = 'user_' + btoa(email.toLowerCase().trim()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
-          } else {
-            throw authErr;
-          }
+          await updateProfile(firebaseUser, { displayName: trimmedName });
+        } catch (profErr) {
+          console.warn("Failed to set auth displayName:", profErr);
         }
+
+        // 3. Send Email Verification using Firebase Auth
+        try {
+          await sendEmailVerification(firebaseUser);
+        } catch (e) {}
 
         // 4. Prepare Profile Shape conforming to users/{uid} collection schema
         const nowIso = new Date().toISOString();
@@ -488,8 +477,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         const firebaseUser = userCredential.user;
         const nowIso = new Date().toISOString();
 
-        // 2. If email is not verified (and NOT admin), block access and show verification screen
-        if (firebaseUser && !firebaseUser.emailVerified && !isAdminEmail) {
+        // 2. If email is not verified, block access and show verification screen
+        if (firebaseUser && !firebaseUser.emailVerified) {
           try {
             await sendEmailVerification(firebaseUser);
           } catch (resendErr) {
@@ -587,46 +576,10 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
     } catch (err: any) {
       console.warn('Firebase Auth Login notice:', err?.code || err?.message);
       if (err?.code === 'auth/operation-not-allowed' || err?.message?.includes('operation-not-allowed')) {
-        const lowerEmail = email.toLowerCase().trim();
-        const isAdmin =
-          lowerEmail === 'pbprosen1971@gmail.com' ||
-          lowerEmail === 'prosenjit@medha.com';
-        const nowIso = new Date().toISOString();
-        const fallbackUid = 'user_' + btoa(lowerEmail).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
-        const fallbackProfile: UserProfile = {
-          id: fallbackUid,
-          uid: fallbackUid,
-          studentId: fallbackUid,
-          name: isAdmin ? 'Admin' : (name || lowerEmail.split('@')[0]),
-          fullName: isAdmin ? 'Admin' : (name || lowerEmail.split('@')[0]),
-          email: lowerEmail,
-          phone: '',
-          photoURL: '',
-          avatar: '',
-          role: isAdmin ? 'admin' : 'student',
-          accountStatus: 'active',
-          createdAt: nowIso,
-          registrationDate: nowIso,
-          lastLogin: nowIso,
-          institution: '',
-          batch: '',
-          joinedDate: new Date().toLocaleDateString('bn-BD'),
-          earnedCertificates: [],
-          isPremium: isAdmin ? true : false,
-          isPremiumDate: isAdmin ? nowIso : '',
-          isPremiumExpiryDate: isAdmin ? '2099-12-31' : '',
-          inPremiumDate: isAdmin ? nowIso : '',
-          inPremiumExpiryDate: isAdmin ? '2099-12-31' : '',
-        };
-        try {
-          await setDoc(doc(db, 'users', fallbackUid), fallbackProfile, { merge: true });
-        } catch (e) {}
-        localStorage.setItem('active_user_session', JSON.stringify(fallbackProfile));
-        onLoginSuccess(fallbackProfile);
-        setView(isAdmin ? 'admin' : 'home');
-        return;
+        setError('Firebase Console-এ Email/Password লগইন চালু করা নেই। অনুগ্রহ করে নিচের "Google দিয়ে লগইন করুন" বাটনে ক্লিক করে লগইন করুন অথবা Firebase Console থেকে Email/Password Provider চালু করুন।');
+      } else {
+        setError(getBengaliErrorMessage(err));
       }
-      setError(getBengaliErrorMessage(err));
       if (widgetIdRef.current !== null && window.grecaptcha) {
         try {
           window.grecaptcha.reset(widgetIdRef.current);
@@ -653,8 +606,8 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
       const uid = result.user.uid;
       const nowIso = new Date().toISOString();
       const userEmail = result.user.email?.toLowerCase() || '';
-      const isUserAdmin = userEmail === 'medha@admin.com' || userEmail === 'admin@medha.com' || userEmail === 'pbprosen1971@gmail.com' || userEmail === 'prosenjit@medha.com';
-      const isFounderProsenjit = userEmail === 'pbprosen1971@gmail.com' || userEmail === 'prosenjit@medha.com';
+      const isUserAdmin = userEmail === 'pbprosen1971@gmail.com';
+      const isFounderProsenjit = userEmail === 'pbprosen1971@gmail.com';
       const googleDisplayName = result.user.displayName || (result.user.email ? result.user.email.split('@')[0] : 'User');
 
       // Check if profile exists in Firestore
@@ -733,6 +686,9 @@ export default function LoginView({ onLoginSuccess, setView, initialIsRegisterin
         if (isUserAdmin) {
           profile.role = 'admin';
           updates.role = 'admin';
+        } else if (profile.role === 'admin') {
+          profile.role = 'student';
+          updates.role = 'student';
         }
 
         // Ensure user has a referral code

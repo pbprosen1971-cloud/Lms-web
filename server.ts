@@ -6,7 +6,34 @@ import { createServer as createViteServer } from "vite";
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+
+  // Parse CLI flags and environment variables
+  const args = process.argv.slice(2);
+  const parseCliArg = (names: string[]): string | null => {
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      for (const name of names) {
+        if (arg === name && args[i + 1]) return args[i + 1];
+        if (arg.startsWith(`${name}=`)) return arg.slice(name.length + 1);
+      }
+    }
+    return null;
+  };
+
+  const cliPortRaw = parseCliArg(["--port", "-p"]);
+  const cliPort = cliPortRaw ? Number(cliPortRaw) : null;
+  const envPort = Number(process.env.PORT);
+  const isNginxCollision = Boolean(
+    process.env.NGINX_PORT && envPort && String(envPort) === String(process.env.NGINX_PORT)
+  );
+  const PORT =
+    (cliPort && !Number.isNaN(cliPort) ? cliPort : null) ||
+    (process.env.NODE_ENV !== "production" || isNginxCollision
+      ? Number(process.env.DEFAULT_APP_PORT) || 3000
+      : envPort || 3000);
+
+  const cliHost = parseCliArg(["--host", "-h"]);
+  const HOST = cliHost || process.env.HOST || "0.0.0.0";
 
   app.use(express.json());
 
@@ -1323,6 +1350,336 @@ async function startServer() {
     }
   });
 
+  // ==========================================
+  // DYNAMIC OPENGRAPH / LINK PREVIEW FOR ARTICLES (/article/:slug)
+  // ==========================================
+  interface ServerArticleMeta {
+    id: string;
+    title: string;
+    slug: string;
+    shortDescription: string;
+    bannerImage: string;
+    content: string;
+    category: string;
+    authorName: string;
+    publishedAt: string;
+    updatedAt: string;
+    status: string;
+  }
+
+  let cachedFirebaseConfig: { projectId: string; apiKey: string; databaseId: string } | null = null;
+  function getFirebasePublicConfig() {
+    if (cachedFirebaseConfig) return cachedFirebaseConfig;
+    let fileCfg: any = {};
+    try {
+      const cfgPath = path.join(process.cwd(), "firebase-applet-config.json");
+      if (fs.existsSync(cfgPath)) {
+        fileCfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+      }
+    } catch {
+      // ignore config read errors
+    }
+    cachedFirebaseConfig = {
+      projectId: process.env.VITE_FIREBASE_PROJECT_ID || fileCfg.projectId || "medha-exam",
+      apiKey: process.env.VITE_FIREBASE_API_KEY || fileCfg.apiKey || "",
+      databaseId: fileCfg.firestoreDatabaseId || "(default)",
+    };
+    return cachedFirebaseConfig;
+  }
+
+  const articleMetaCache = new Map<string, { data: ServerArticleMeta | null; expiresAt: number }>();
+  const ARTICLE_META_CACHE_TTL_MS = 45 * 1000;
+
+  function decodeFirestoreArticleDoc(docObj: any, fallbackSlug: string): ServerArticleMeta | null {
+    if (!docObj || !docObj.fields) return null;
+    const f = docObj.fields;
+    const status = f.status?.stringValue || "published";
+    if (status === "draft") return null;
+
+    const docNameParts = typeof docObj.name === "string" ? docObj.name.split("/") : [];
+    const docId = docNameParts[docNameParts.length - 1] || fallbackSlug;
+
+    return {
+      id: docId,
+      title: f.title?.stringValue || "আর্টিকেল — Medha Exam",
+      slug: f.slug?.stringValue || docId,
+      shortDescription: f.shortDescription?.stringValue || "",
+      bannerImage: f.bannerImage?.stringValue || "",
+      content: f.content?.stringValue || "",
+      category: f.category?.stringValue || "",
+      authorName: f.authorName?.stringValue || "মেধা এক্সাম টিম",
+      publishedAt: f.publishedAt?.stringValue || f.createdAt?.stringValue || "",
+      updatedAt: f.updatedAt?.stringValue || f.publishedAt?.stringValue || "",
+      status,
+    };
+  }
+
+  async function queryArticleCollectionBySlug(
+    collectionId: string,
+    slug: string,
+    projectId: string,
+    databaseId: string,
+    apiKey: string
+  ): Promise<ServerArticleMeta | null> {
+    const keyQuery = apiKey ? `?key=${encodeURIComponent(apiKey)}` : "";
+    const baseDocUrl = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/${encodeURIComponent(databaseId)}/documents`;
+
+    // 1. Query by 'slug' field
+    try {
+      const queryRes = await fetch(`${baseDocUrl}:runQuery${keyQuery}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId }],
+            where: {
+              fieldFilter: {
+                field: { fieldPath: "slug" },
+                op: "EQUAL",
+                value: { stringValue: slug },
+              },
+            },
+            limit: 1,
+          },
+        }),
+        signal: AbortSignal.timeout(2500),
+      });
+
+      if (queryRes.ok) {
+        const rows = await queryRes.json();
+        if (Array.isArray(rows)) {
+          for (const row of rows) {
+            if (row?.document) {
+              const decoded = decodeFirestoreArticleDoc(row.document, slug);
+              if (decoded) return decoded;
+            }
+          }
+        }
+      }
+    } catch {
+      // continue to direct document fallback
+    }
+
+    // 2. Fallback: direct lookup by document ID
+    try {
+      const docRes = await fetch(
+        `${baseDocUrl}/${encodeURIComponent(collectionId)}/${encodeURIComponent(slug)}${keyQuery}`,
+        { signal: AbortSignal.timeout(2500) }
+      );
+      if (docRes.ok) {
+        const docJson = await docRes.json();
+        const decoded = decodeFirestoreArticleDoc(docJson, slug);
+        if (decoded) return decoded;
+      }
+    } catch {
+      // ignore fallback errors
+    }
+
+    return null;
+  }
+
+  async function fetchPublishedArticleForMeta(rawSlug: string): Promise<ServerArticleMeta | null> {
+    let cleanSlug = rawSlug;
+    try {
+      cleanSlug = decodeURIComponent(rawSlug);
+    } catch {
+      // keep rawSlug if malformed URI
+    }
+    cleanSlug = cleanSlug.trim().replace(/\/+$/, "");
+    if (!cleanSlug) return null;
+
+    const now = Date.now();
+    const cached = articleMetaCache.get(cleanSlug);
+    if (cached && cached.expiresAt > now) {
+      return cached.data;
+    }
+
+    const { projectId, apiKey, databaseId } = getFirebasePublicConfig();
+    if (!projectId) return null;
+
+    let article = await queryArticleCollectionBySlug("articles", cleanSlug, projectId, databaseId, apiKey);
+    if (!article) {
+      article = await queryArticleCollectionBySlug("Articles", cleanSlug, projectId, databaseId, apiKey);
+    }
+
+    if (articleMetaCache.size > 200) {
+      articleMetaCache.clear();
+    }
+    articleMetaCache.set(cleanSlug, {
+      data: article,
+      expiresAt: now + ARTICLE_META_CACHE_TTL_MS,
+    });
+
+    return article;
+  }
+
+  function resolveServerOrigin(req: express.Request): string {
+    const rawHost = String(req.headers["x-forwarded-host"] || req.get("host") || "").split(",")[0].trim();
+    if (!rawHost || rawHost.includes("localhost") || rawHost.startsWith("127.0.0.1")) {
+      return "https://medhaexam.site";
+    }
+    const rawProto = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim();
+    const proto = rawProto === "http" ? "https" : rawProto || "https";
+    return `${proto}://${rawHost}`;
+  }
+
+  function resolveArticleOgImageUrl(article: ServerArticleMeta, publicOrigin: string): {
+    url: string;
+    isDefault: boolean;
+    mimeType: string | null;
+  } {
+    const normalizeImg = (raw?: string): string | null => {
+      const trimmed = (raw || "").trim();
+      if (!trimmed || trimmed.startsWith("data:")) return null;
+      if (trimmed.startsWith("http://res.cloudinary.com/")) {
+        return trimmed.replace(/^http:\/\//i, "https://");
+      }
+      if (trimmed.startsWith("/")) {
+        return `${publicOrigin}${trimmed}`;
+      }
+      if (/^https?:\/\//i.test(trimmed)) {
+        return trimmed;
+      }
+      return null;
+    };
+
+    let foundUrl = normalizeImg(article.bannerImage);
+
+    if (!foundUrl && article.content) {
+      const mdMatch = article.content.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/i);
+      if (mdMatch?.[1]) {
+        foundUrl = normalizeImg(mdMatch[1]);
+      }
+    }
+
+    if (!foundUrl && article.content) {
+      const htmlMatch = article.content.match(/<img[^>]+src=["'](https?:\/\/[^"']+|\/[^"']+)["']/i);
+      if (htmlMatch?.[1]) {
+        foundUrl = normalizeImg(htmlMatch[1]);
+      }
+    }
+
+    if (!foundUrl) {
+      return {
+        url: `${publicOrigin}/og-image.png`,
+        isDefault: true,
+        mimeType: "image/png",
+      };
+    }
+
+    const cleanPath = foundUrl.split("?")[0].toLowerCase();
+    let mimeType: string | null = null;
+    if (cleanPath.endsWith(".png")) mimeType = "image/png";
+    else if (cleanPath.endsWith(".jpg") || cleanPath.endsWith(".jpeg")) mimeType = "image/jpeg";
+    else if (cleanPath.endsWith(".webp")) mimeType = "image/webp";
+    else if (cleanPath.endsWith(".gif")) mimeType = "image/gif";
+
+    return {
+      url: foundUrl,
+      isDefault: false,
+      mimeType,
+    };
+  }
+
+  function escapeHtmlAttr(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function buildPlainExcerpt(shortDesc: string, content: string, fallbackTitle: string): string {
+    const cleanedShort = (shortDesc || "").replace(/\s+/g, " ").trim();
+    if (cleanedShort) return cleanedShort.slice(0, 220);
+
+    const stripped = (content || "")
+      .replace(/<iframe[\s\S]*?<\/iframe>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\[(?:left|center|right|justify)\]|\[\/(?:left|center|right|justify)\]/gi, " ")
+      .replace(/[#>*_`~|-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (stripped) {
+      return stripped.length > 160 ? `${stripped.slice(0, 157)}...` : stripped;
+    }
+    return fallbackTitle;
+  }
+
+  function injectArticleMetaTags(
+    html: string,
+    article: ServerArticleMeta,
+    publicOrigin: string
+  ): string {
+    const encodedSlug = encodeURIComponent(article.slug);
+    const articleUrl = `${publicOrigin}/article/${encodedSlug}`;
+    const pageTitle = `${article.title} — Medha Exam`;
+    const description = buildPlainExcerpt(article.shortDescription, article.content, article.title);
+    const imageInfo = resolveArticleOgImageUrl(article, publicOrigin);
+    const secureImageUrl = imageInfo.url.replace(/^http:\/\//i, "https://");
+
+    const escTitle = escapeHtmlAttr(pageTitle);
+    const escPlainTitle = escapeHtmlAttr(article.title);
+    const escDesc = escapeHtmlAttr(description);
+    const escUrl = escapeHtmlAttr(articleUrl);
+    const escImg = escapeHtmlAttr(imageInfo.url);
+    const escSecureImg = escapeHtmlAttr(secureImageUrl);
+
+    let out = html;
+
+    // Replace <title>
+    out = out.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escTitle}</title>`);
+
+    // Strip existing dynamic meta/canonical/og/twitter tags so we inject one clean authoritative set
+    out = out
+      .replace(/<meta\s+name=["']description["'][^>]*>\s*/gi, "")
+      .replace(/<link\s+rel=["']canonical["'][^>]*>\s*/gi, "")
+      .replace(/<meta\s+property=["']og:[^"']+["'][^>]*>\s*/gi, "")
+      .replace(/<meta\s+name=["']twitter:[^"']+["'][^>]*>\s*/gi, "")
+      .replace(/<meta\s+property=["']article:[^"']+["'][^>]*>\s*/gi, "");
+
+    const metaLines = [
+      `    <meta name="description" content="${escDesc}" />`,
+      `    <link rel="canonical" href="${escUrl}" />`,
+      `    <meta property="og:type" content="article" />`,
+      `    <meta property="og:site_name" content="Medha Exam" />`,
+      `    <meta property="og:title" content="${escTitle}" />`,
+      `    <meta property="og:description" content="${escDesc}" />`,
+      `    <meta property="og:url" content="${escUrl}" />`,
+      `    <meta property="og:image" content="${escImg}" />`,
+      `    <meta property="og:image:secure_url" content="${escSecureImg}" />`,
+      ...(imageInfo.mimeType ? [`    <meta property="og:image:type" content="${escapeHtmlAttr(imageInfo.mimeType)}" />`] : []),
+      ...(imageInfo.isDefault
+        ? [
+            `    <meta property="og:image:width" content="1200" />`,
+            `    <meta property="og:image:height" content="630" />`,
+          ]
+        : []),
+      `    <meta property="og:image:alt" content="${escPlainTitle}" />`,
+      `    <meta property="og:locale" content="bn_BD" />`,
+      ...(article.publishedAt
+        ? [`    <meta property="article:published_time" content="${escapeHtmlAttr(article.publishedAt)}" />`]
+        : []),
+      ...(article.category
+        ? [`    <meta property="article:section" content="${escapeHtmlAttr(article.category)}" />`]
+        : []),
+      `    <meta name="twitter:card" content="summary_large_image" />`,
+      `    <meta name="twitter:site" content="@medhaexam" />`,
+      `    <meta name="twitter:title" content="${escTitle}" />`,
+      `    <meta name="twitter:description" content="${escDesc}" />`,
+      `    <meta name="twitter:image" content="${escImg}" />`,
+      `    <meta name="twitter:image:alt" content="${escPlainTitle}" />`,
+    ].join("\n");
+
+    // Inject right before </head>
+    out = out.replace(/<\/head>/i, `${metaLines}\n  </head>`);
+    return out;
+  }
+
   // Explicit XML and TXT handlers for Search Engine Crawlers
   app.get("/sitemap.xml", (_req, res) => {
     const sitemapPath = path.join(process.cwd(), "public", "sitemap.xml");
@@ -1361,8 +1718,62 @@ async function startServer() {
       server: { middlewareMode: true },
       appType: "spa",
     });
+
+    // Inject article-specific OG/Twitter meta tags in dev SSR before vite.middlewares
+    app.get(["/article/:slug", "/article/:slug/"], async (req, res, next) => {
+      try {
+        const slugParam = req.params.slug || "";
+        if (/\.(js|mjs|ts|tsx|css|png|jpg|jpeg|webp|gif|svg|ico|json|map|woff2?)$/i.test(slugParam)) {
+          return next();
+        }
+        const article = await fetchPublishedArticleForMeta(slugParam);
+        const templatePath = path.join(process.cwd(), "index.html");
+        let html = fs.readFileSync(templatePath, "utf-8");
+        if (article) {
+          const publicOrigin = resolveServerOrigin(req);
+          html = injectArticleMetaTags(html, article, publicOrigin);
+        }
+        const transformedHtml = await vite.transformIndexHtml(req.originalUrl, html);
+        res.status(200).setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.end(transformedHtml);
+      } catch (err) {
+        console.warn("Dev article meta injection fallback:", err);
+        return next();
+      }
+    });
+
     app.use(vite.middlewares);
   } else {
+    // Server-rendered OG/Twitter meta tags for shared article URLs in production
+    app.get(["/article/:slug", "/article/:slug/"], async (req, res, next) => {
+      try {
+        const slugParam = req.params.slug || "";
+        if (/\.(js|mjs|ts|tsx|css|png|jpg|jpeg|webp|gif|svg|ico|json|map|woff2?)$/i.test(slugParam)) {
+          return next();
+        }
+        const indexPath = path.join(distPath, "index.html");
+        if (!fs.existsSync(indexPath)) return next();
+
+        const article = await fetchPublishedArticleForMeta(slugParam);
+        const publicOrigin = resolveServerOrigin(req);
+        const rawHtml = fs.readFileSync(indexPath, "utf-8");
+
+        if (article) {
+          const canonicalUrl = `${publicOrigin}/article/${encodeURIComponent(article.slug)}`;
+          res.setHeader("Link", `<${canonicalUrl}>; rel="canonical"`);
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
+          return res.status(200).send(injectArticleMetaTags(rawHtml, article, publicOrigin));
+        }
+
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.status(200).send(rawHtml);
+      } catch (err) {
+        console.warn("Prod article meta injection fallback:", err);
+        return next();
+      }
+    });
+
     // Explicit route check for pre-rendered static HTML with self-declared canonical header
     SEO_STATIC_ROUTES.forEach((r) => {
       app.get([r, `${r}/`], (_req, res, next) => {
@@ -1386,8 +1797,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`Server running on http://${HOST}:${PORT}`);
   });
 }
 

@@ -325,22 +325,40 @@ export default function Footer({ setView, setSelectedExam, exams }: FooterProps)
             <h3 className="text-white font-semibold text-sm tracking-wider uppercase mb-4">আমাদের তথ্য</h3>
             <ul className="space-y-2.5 text-sm">
               <li>
-                <a href="/about-us" onClick={(e) => { e.preventDefault(); setView('about-us'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">About Us</a>
+                <a href="/about-us" onClick={(e) => { e.preventDefault(); setView('about-us'); }} className="hover:text-primary transition-colors duration-200 inline-flex items-center gap-2 text-slate-300 group">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.65)] group-hover:scale-125 transition-transform shrink-0" aria-hidden="true" />
+                  <span>About Us</span>
+                </a>
               </li>
               <li>
-                <a href="/contact-us" onClick={(e) => { e.preventDefault(); setView('contact-us'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">Contact Us</a>
+                <a href="/contact-us" onClick={(e) => { e.preventDefault(); setView('contact-us'); }} className="hover:text-primary transition-colors duration-200 inline-flex items-center gap-2 text-slate-300 group">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.65)] group-hover:scale-125 transition-transform shrink-0" aria-hidden="true" />
+                  <span>Contact Us</span>
+                </a>
               </li>
               <li>
-                <a href="/faq" onClick={(e) => { e.preventDefault(); setView('faq'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">সাধারণ প্রশ্নোত্তর (FAQ)</a>
+                <a href="/faq" onClick={(e) => { e.preventDefault(); setView('faq'); }} className="hover:text-primary transition-colors duration-200 inline-flex items-center gap-2 text-slate-300 group">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.65)] group-hover:scale-125 transition-transform shrink-0" aria-hidden="true" />
+                  <span>সাধারণ প্রশ্নোত্তর (FAQ)</span>
+                </a>
               </li>
               <li>
-                <a href="/privacy-policy" onClick={(e) => { e.preventDefault(); setView('privacy-policy'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">Privacy Policy</a>
+                <a href="/privacy-policy" onClick={(e) => { e.preventDefault(); setView('privacy-policy'); }} className="hover:text-primary transition-colors duration-200 inline-flex items-center gap-2 text-slate-300 group">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.65)] group-hover:scale-125 transition-transform shrink-0" aria-hidden="true" />
+                  <span>Privacy Policy</span>
+                </a>
               </li>
               <li>
-                <a href="/terms-and-conditions" onClick={(e) => { e.preventDefault(); setView('terms-and-conditions'); }} className="hover:text-primary transition-colors duration-200 block text-slate-300">Terms &amp; Conditions</a>
+                <a href="/terms-and-conditions" onClick={(e) => { e.preventDefault(); setView('terms-and-conditions'); }} className="hover:text-primary transition-colors duration-200 inline-flex items-center gap-2 text-slate-300 group">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.65)] group-hover:scale-125 transition-transform shrink-0" aria-hidden="true" />
+                  <span>Terms &amp; Conditions</span>
+                </a>
               </li>
               <li>
-                <a href="/delete-account" onClick={(e) => { e.preventDefault(); setView('delete-account'); }} className="hover:text-rose-400 transition-colors duration-200 block text-slate-300">Delete Account</a>
+                <a href="/delete-account" onClick={(e) => { e.preventDefault(); setView('delete-account'); }} className="hover:text-rose-400 transition-colors duration-200 inline-flex items-center gap-2 text-slate-300 group">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.65)] group-hover:scale-125 transition-transform shrink-0" aria-hidden="true" />
+                  <span>Delete Account</span>
+                </a>
               </li>
             </ul>
           </div>

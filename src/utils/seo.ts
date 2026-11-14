@@ -371,6 +371,55 @@ export function getSEOConfig(viewOrPath: string): PageSEOConfig {
   return SEO_PAGE_CONFIGS[key] || SEO_PAGE_CONFIGS.home;
 }
 
+export function extractFirstArticleImage(article?: {
+  bannerImage?: string;
+  content?: string;
+} | null): string | undefined {
+  if (!article) return undefined;
+
+  const normalizeImg = (raw?: string): string | undefined => {
+    const trimmed = (raw || '').trim();
+    if (!trimmed || trimmed.startsWith('data:')) return undefined;
+    if (trimmed.startsWith('http://res.cloudinary.com/')) {
+      return trimmed.replace(/^http:\/\//i, 'https://');
+    }
+    if (trimmed.startsWith('/')) {
+      return `${BASE_SITE_URL}${trimmed}`;
+    }
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed;
+    }
+    return undefined;
+  };
+
+  const banner = normalizeImg(article.bannerImage);
+  if (banner) return banner;
+
+  const content = article.content || '';
+  const mdMatch = content.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/i);
+  if (mdMatch?.[1]) {
+    const found = normalizeImg(mdMatch[1]);
+    if (found) return found;
+  }
+
+  const htmlMatch = content.match(/<img[^>]+src=["'](https?:\/\/[^"']+|\/[^"']+)["']/i);
+  if (htmlMatch?.[1]) {
+    const found = normalizeImg(htmlMatch[1]);
+    if (found) return found;
+  }
+
+  return undefined;
+}
+
+function inferImageMimeType(url: string): string | null {
+  const cleanUrl = url.split('?')[0].toLowerCase();
+  if (cleanUrl.endsWith('.png')) return 'image/png';
+  if (cleanUrl.endsWith('.jpg') || cleanUrl.endsWith('.jpeg')) return 'image/jpeg';
+  if (cleanUrl.endsWith('.webp')) return 'image/webp';
+  if (cleanUrl.endsWith('.gif')) return 'image/gif';
+  return null;
+}
+
 /**
  * Updates document title, meta tags, OpenGraph, Twitter, and Schema.org JSON-LD dynamically.
  * Works seamlessly in client-side React SPA environments upon route/view transitions.
@@ -388,6 +437,7 @@ export function applySEO(viewOrPath: string, overrides?: Partial<PageSEOConfig>)
 
   const canonicalUrl = `${BASE_SITE_URL}${config.canonicalPath}`;
   const ogImg = config.ogImage || DEFAULT_OG_IMAGE;
+  const isDefaultOg = ogImg === DEFAULT_OG_IMAGE;
 
   // 1. Update Document Title
   if (config.title) {
@@ -406,6 +456,11 @@ export function applySEO(viewOrPath: string, overrides?: Partial<PageSEOConfig>)
     el.setAttribute('content', content);
   };
 
+  const removeMeta = (attrName: string, attrVal: string) => {
+    const el = document.querySelector(`meta[${attrName}="${attrVal}"]`);
+    if (el) el.remove();
+  };
+
   // 2. Standard Meta Tags
   setMeta('name', 'description', config.description);
   if (config.keywords) {
@@ -418,13 +473,42 @@ export function applySEO(viewOrPath: string, overrides?: Partial<PageSEOConfig>)
   setMeta('property', 'og:url', canonicalUrl);
   setMeta('property', 'og:type', config.ogType || 'website');
   setMeta('property', 'og:image', ogImg);
+  setMeta('property', 'og:image:secure_url', ogImg.replace(/^http:\/\//i, 'https://'));
+
+  if (isDefaultOg) {
+    setMeta('property', 'og:image:type', 'image/png');
+    setMeta('property', 'og:image:width', '1200');
+    setMeta('property', 'og:image:height', '630');
+  } else {
+    const inferredMime = inferImageMimeType(ogImg);
+    if (inferredMime) {
+      setMeta('property', 'og:image:type', inferredMime);
+    } else {
+      removeMeta('property', 'og:image:type');
+    }
+    removeMeta('property', 'og:image:width');
+    removeMeta('property', 'og:image:height');
+  }
+
+  setMeta(
+    'property',
+    'og:image:alt',
+    isDefaultOg ? `${config.title} — Medha Exam Official Logo & Social Banner` : config.title
+  );
   setMeta('property', 'og:site_name', 'Medha Exam');
+  setMeta('property', 'og:locale', 'bn_BD');
 
   // 4. Twitter / X Card Tags
   setMeta('name', 'twitter:card', 'summary_large_image');
+  setMeta('name', 'twitter:site', '@medhaexam');
   setMeta('name', 'twitter:title', config.title);
   setMeta('name', 'twitter:description', config.description);
   setMeta('name', 'twitter:image', ogImg);
+  setMeta(
+    'name',
+    'twitter:image:alt',
+    isDefaultOg ? `${config.title} — Medha Exam Official Logo & Social Banner` : config.title
+  );
 
   // 5. Canonical Link
   let canonicalEl = document.querySelector('link[rel="canonical"]');

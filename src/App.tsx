@@ -30,6 +30,7 @@ import ArticlesView from './components/ArticlesView';
 import ArticleDetailView from './components/ArticleDetailView';
 import NotificationPromptBanner from './components/NotificationPromptBanner';
 import FaqSection from './components/FaqSection';
+import BreadcrumbNav, { BreadcrumbItem } from './components/BreadcrumbNav';
 import { applySEO } from './utils/seo';
 import { 
   syncCurrentDeviceToken, 
@@ -78,16 +79,17 @@ import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 // Verify Connection to Firestore gracefully
 async function testConnection() {
   try {
-    const snap = await getDoc(doc(db, 'siteSettings', 'upcomingExam'));
+    await getDocFromServer(doc(db, 'siteSettings', 'upcomingExam'));
   } catch (error) {
-    // Gracefully handle initial offline/sync state without throwing false alarms
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration.");
+    }
   }
 }
 testConnection();
 
 const ADMIN_EMAILS = [
   'pbprosen1971@gmail.com',
-  'prosenjit@medha.com',
 ];
 
 const isAdminEmailAddress = (email?: string | null): boolean => {
@@ -275,9 +277,9 @@ export default function App() {
       if (firebaseUser) {
         const isAdminEmail = isAdminEmailAddress(firebaseUser.email);
 
-        // Enforce Firebase Auth Email Verification (except for admin accounts)
+        // Enforce Firebase Auth Email Verification for all password accounts
         const isPasswordProvider = firebaseUser.providerData.some(p => p.providerId === 'password');
-        if (isPasswordProvider && !firebaseUser.emailVerified && !isAdminEmail) {
+        if (isPasswordProvider && !firebaseUser.emailVerified) {
           await signOut(auth);
           setUser(null);
           localStorage.removeItem('active_user_session');
@@ -318,7 +320,7 @@ export default function App() {
               }
 
               const userEmail = (firebaseUser.email || '').toLowerCase().trim();
-              const isFounderProsenjit = userEmail === 'pbprosen1971@gmail.com' || userEmail === 'prosenjit@medha.com';
+              const isFounderProsenjit = userEmail === 'pbprosen1971@gmail.com';
               const providerDisplayName = firebaseUser.providerData?.find(p => p.displayName)?.displayName || '';
               const authDisplayName = firebaseUser.displayName || providerDisplayName;
               
@@ -367,7 +369,7 @@ export default function App() {
                 phone: String(data.phone || ''),
                 photoURL: String(data.photoURL || data.avatar || firebaseUser.photoURL || ''),
                 avatar: String(data.avatar || data.photoURL || firebaseUser.photoURL || ''),
-                role: isAdminEmail ? 'admin' : ((data.role === 'admin' ? 'admin' : 'student') as 'admin' | 'student'),
+                role: isAdminEmail ? 'admin' : 'student',
                 accountStatus: (data.accountStatus === 'blocked' ? 'blocked' : 'active') as 'active' | 'blocked',
                 createdAt: safeTimestampToString(data.createdAt, nowIso),
                 lastLogin: nowIso,
@@ -454,17 +456,6 @@ export default function App() {
           console.error("Error in onAuthStateChanged flow:", error);
         }
       } else {
-        const saved = localStorage.getItem('active_user_session');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (parsed && (isAdminEmailAddress(parsed.email) || parsed.role === 'admin')) {
-              parsed.role = 'admin';
-              setUser(parsed);
-              return;
-            }
-          } catch (e) {}
-        }
         setUser(null);
         localStorage.removeItem('active_user_session');
       }
@@ -892,8 +883,11 @@ export default function App() {
     } catch (e) {}
   };
 
-  const handleUpdateExam = async (updatedExam: Exam) => {
+  const handleUpdateExam = async (updatedExam: Exam, options?: { skipFirestoreSave?: boolean }) => {
     setExams(prev => prev.map(e => e.id === updatedExam.id ? updatedExam : e));
+    if (options?.skipFirestoreSave) {
+      return;
+    }
     try {
       await saveExamToFirestore(updatedExam, user?.uid || user?.id || 'admin');
     } catch (err) {
@@ -1106,12 +1100,12 @@ export default function App() {
       return;
     }
 
-    // Protected Route: /admin requires admin privileges
+    // Protected Route: /admin requires admin privileges & active Firebase Auth session
     if (matchedView === 'admin') {
       const isAdmin = isUserAdminAccount(user);
       if (!isAdmin) {
-        setCurrentView('home');
-        navigate('/', { replace: true });
+        setCurrentView(user ? 'home' : 'login');
+        navigate(user ? '/' : '/login', { replace: true });
         return;
       }
     }
@@ -1475,6 +1469,52 @@ export default function App() {
     }
   };
 
+  const getBreadcrumbItems = (): BreadcrumbItem[] => {
+    switch (currentView) {
+      case 'dashboard':
+        return user ? [{ label: 'ড্যাশবোর্ড' }] : [];
+      case 'daily-practice':
+        return user ? [{ label: 'ডেইলি প্র্যাকটিস' }] : [];
+      case 'wrong-questions':
+        return user ? [{ label: 'ভুল প্রশ্নের সংগ্রহশালা' }] : [];
+      case 'study-materials':
+        return [{ label: 'স্টাডি ম্যাটেরিয়ালস' }];
+      case 'age-calculator':
+        return [{ label: 'চাকরির বয়স ক্যালকুলেটর' }];
+      case 'job-result':
+        return [{ label: 'চাকরির পরীক্ষার ফলাফল' }];
+      case 'result':
+        return selectedResult
+          ? [
+              ...(user ? [{ label: 'ড্যাশবোর্ড', view: 'dashboard' }] : []),
+              { label: selectedResult.examTitle || 'ফলাফল ও সমাধান' },
+            ]
+          : [];
+      case 'profile':
+        return user ? [{ label: 'আমার প্রোফাইল' }] : [];
+      case 'referral':
+        return [{ label: 'রেফারেল ও রিওয়ার্ড' }];
+      case 'admin':
+        return isUserAdminAccount(user) ? [{ label: 'এডমিন প্যানেল' }] : [];
+      case 'privacy-policy':
+        return [{ label: 'গোপনীয়তা নীতি (Privacy Policy)' }];
+      case 'terms-and-conditions':
+        return [{ label: 'শর্তাবলি (Terms & Conditions)' }];
+      case 'delete-account':
+        return [{ label: 'অ্যাকাউন্ট ডিলিট' }];
+      case 'about-us':
+        return [{ label: 'আমাদের সম্পর্কে' }];
+      case 'contact-us':
+        return [{ label: 'যোগাযোগ' }];
+      case 'faq':
+        return [{ label: 'সাধারণ জিজ্ঞাসা (FAQ)' }];
+      default:
+        return [];
+    }
+  };
+
+  const breadcrumbItems = getBreadcrumbItems();
+
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 theme-transition flex flex-col justify-between">
       {/* Subtle Success Celebration Animation on Firestore Submit */}
@@ -1495,7 +1535,12 @@ export default function App() {
       />
 
       {/* Main Container Content */}
-      <main className="flex-grow">{renderView()}</main>
+      <main className="flex-grow">
+        {breadcrumbItems.length > 0 && (
+          <BreadcrumbNav items={breadcrumbItems} onNavigate={setView} />
+        )}
+        {renderView()}
+      </main>
 
       {/* Global Student Footer */}
       <Footer setView={setView} setSelectedExam={setSelectedExam} exams={exams} />
